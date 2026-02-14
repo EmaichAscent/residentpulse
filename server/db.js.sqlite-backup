@@ -1,0 +1,159 @@
+import initSqlJs from "sql.js";
+import { readFileSync, writeFileSync, existsSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DB_PATH = join(__dirname, "residentpulse.db");
+
+const SQL = await initSqlJs();
+
+let db;
+if (existsSync(DB_PATH)) {
+  const buffer = readFileSync(DB_PATH);
+  db = new SQL.Database(buffer);
+} else {
+  db = new SQL.Database();
+}
+
+// Save to disk after each write
+function save() {
+  const data = db.export();
+  writeFileSync(DB_PATH, Buffer.from(data));
+}
+
+db.run("PRAGMA foreign_keys = ON");
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    nps_score INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed BOOLEAN DEFAULT 0,
+    summary TEXT
+  )
+`);
+
+// Migrations: add columns if missing
+for (const col of [
+  "summary TEXT",
+  "community_name TEXT",
+  "management_company TEXT",
+  "user_id INTEGER",
+]) {
+  try {
+    db.run(`ALTER TABLE sessions ADD COLUMN ${col}`);
+    save();
+  } catch {
+    // Column already exists — ignore
+  }
+}
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL REFERENCES sessions(id),
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  )
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT,
+    last_name TEXT,
+    email TEXT NOT NULL UNIQUE,
+    community_name TEXT,
+    management_company TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+// Migrate existing session emails into users table (one-time)
+db.run(`
+  INSERT OR IGNORE INTO users (email, community_name, management_company)
+  SELECT LOWER(s.email), s.community_name, s.management_company
+  FROM sessions s
+  WHERE s.email IS NOT NULL
+  GROUP BY LOWER(s.email)
+`);
+// Set all users to CAM Ascent
+db.run("UPDATE users SET management_company = 'CAM Ascent' WHERE management_company IS NULL OR management_company = ''");
+db.run("UPDATE sessions SET management_company = 'CAM Ascent' WHERE management_company IS NULL OR management_company = ''");
+save();
+
+const DEFAULT_PROMPT = `You are a friendly, professional data scientist conducting an NPS (Net Promoter Score) survey for a residential management company. You are interviewing board of directors members of HOAs and condo associations.
+
+Guidelines:
+- Be warm, conversational, and concise (2-3 sentences max per response)
+- The NPS score has already been collected via the UI widget — do NOT ask for it again
+- You will receive the NPS score in the first user message. Acknowledge it briefly, then ask your first follow-up question
+- Ask 3-4 follow-up questions, one at a time, covering these areas:
+  1. Why they gave that score — what drove their rating
+  2. What the management company does well (communication, responsiveness, financial management, maintenance)
+  3. What specific improvements they'd like to see
+  4. Any urgent concerns or issues that need immediate attention
+- Ask follow-up questions one at a time. The resident can end the session whenever they want using a button in the UI, so do not rush or cut things short — keep the conversation going as long as they are engaged
+- If the resident seems done or says goodbye, thank them warmly and let them know their feedback is valuable
+- Keep a professional but approachable tone throughout
+- Do not use markdown formatting, bullet points, or numbered lists — just plain conversational text`;
+
+// Always update the system prompt to the latest default
+db.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ["system_prompt", DEFAULT_PROMPT]);
+save();
+
+// Helper: run a statement and return changes info (for INSERT/UPDATE/DELETE)
+function run(sql, params = []) {
+  const stmt = db.prepare(sql);
+  stmt.bind(params);
+  stmt.step();
+  stmt.free();
+  const result = db.exec("SELECT last_insert_rowid() as id");
+  const lastInsertRowid = result[0]?.values[0]?.[0];
+  save();
+  return { lastInsertRowid };
+}
+
+// Helper: get one row
+function get(sql, params = []) {
+  const stmt = db.prepare(sql);
+  stmt.bind(params);
+  let row = null;
+  if (stmt.step()) {
+    const cols = stmt.getColumnNames();
+    const vals = stmt.get();
+    row = {};
+    cols.forEach((col, i) => (row[col] = vals[i]));
+  }
+  stmt.free();
+  return row;
+}
+
+// Helper: get all rows
+function all(sql, params = []) {
+  const stmt = db.prepare(sql);
+  stmt.bind(params);
+  const rows = [];
+  while (stmt.step()) {
+    const cols = stmt.getColumnNames();
+    const vals = stmt.get();
+    const row = {};
+    cols.forEach((col, i) => (row[col] = vals[i]));
+    rows.push(row);
+  }
+  stmt.free();
+  return rows;
+}
+
+export { run, get, all };
+export default { run, get, all };

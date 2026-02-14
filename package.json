@@ -1,0 +1,20 @@
+{
+  "name": "residentpulse",
+  "version": "1.0.0",
+  "description": "Multi-tenant NPS survey platform for property management companies",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "install": "npm install --prefix client && npm install --prefix server",
+    "build": "npm run build --prefix client",
+    "start": "npm start --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "dev:server": "npm run dev --prefix server"
+  },
+  "keywords": ["nps", "survey", "property-management", "saas"],
+  "author": "Emaich Ascent",
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(echo:*)",
+      "Bash(cmd.exe /c \"where node\")",
+      "Bash(cmd.exe /c \"where node 2>&1 & where npm 2>&1\")",
+      "Bash(cmd.exe //c \"node --version\")",
+      "Bash(cmd.exe //c:*)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\":*)",
+      "Bash(node --version:*)",
+      "Bash(npm:*)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:/c/Users/mikeh/AppData/Local/Programs/Python/Python312:$PATH\")",
+      "Bash(timeout 5 node:*)",
+      "Bash(npx vite build:*)",
+      "Bash(node:*)",
+      "Bash(npx vite:*)",
+      "Bash(curl:*)",
+      "Bash(start cmd /c start.bat)",
+      "Bash(taskkill:*)",
+      "WebFetch(domain:www.camascent.com)",
+      "Bash(cmd.exe /c start.bat)",
+      "Bash(./start.bat)",
+      "Bash(cmd //c start.bat)",
+      "Bash(/c/Windows/System32/cmd.exe:*)",
+      "Bash(netstat:*)",
+      "Bash(start:*)",
+      "Bash(git init:*)",
+      "Bash(/c/Users/mikeh/residentpulse/server/index-new.js:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
