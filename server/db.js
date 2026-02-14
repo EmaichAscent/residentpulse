@@ -1,5 +1,10 @@
 import pg from "pg";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
 const { Pool } = pg;
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Database connection pool
 const pool = new Pool({
@@ -120,6 +125,17 @@ async function initializeSchema() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_client_id ON users(client_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_client_admins_client_id ON client_admins(client_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_settings_client_id ON settings(client_id)`);
+
+    // Run email invitations migration
+    try {
+      const migrationPath = join(__dirname, "migrations", "add-email-invitations.sql");
+      const migrationSQL = readFileSync(migrationPath, "utf-8");
+      await client.query(migrationSQL);
+      console.log("Email invitations migration applied successfully");
+    } catch (migrationErr) {
+      // Migration may have already been applied, or file may not exist yet
+      console.log("Email invitations migration skipped (already applied or file not found)");
+    }
 
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");

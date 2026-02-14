@@ -19,6 +19,50 @@ router.get("/:id", async (req, res) => {
   res.json({ session, messages });
 });
 
+// Validate invitation token and return user data (public endpoint)
+router.get("/validate-token/:token", async (req, res) => {
+  const { token } = req.params;
+
+  if (!token) {
+    return res.status(400).json({ error: "Token is required" });
+  }
+
+  try {
+    // Look up user by invitation token
+    const user = await db.get(
+      "SELECT id, email, first_name, last_name, community_name, management_company, client_id, invitation_token_expires FROM users WHERE invitation_token = ?",
+      [token]
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: "Invalid invitation token" });
+    }
+
+    // Check if token has expired
+    const expiryDate = new Date(user.invitation_token_expires);
+    const now = new Date();
+
+    if (expiryDate < now) {
+      return res.status(404).json({ error: "Invitation token has expired" });
+    }
+
+    // Return user data (without sensitive info)
+    res.json({
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      community_name: user.community_name,
+      management_company: user.management_company,
+      user_id: user.id,
+      client_id: user.client_id
+    });
+
+  } catch (err) {
+    console.error("Token validation error:", err);
+    res.status(500).json({ error: "Failed to validate token" });
+  }
+});
+
 // Check for incomplete session by email
 router.get("/incomplete/:email", async (req, res) => {
   const email = req.params.email.trim().toLowerCase();

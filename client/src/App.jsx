@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import IdentifyPage from "./pages/IdentifyPage";
 import ChatPage from "./pages/ChatPage";
+import TokenSurveyPage from "./pages/TokenSurveyPage";
 import AdminPage from "./pages/AdminPage";
 import SuperAdminPage from "./pages/SuperAdminPage";
 import SuperAdminLoginPage from "./pages/SuperAdminLoginPage";
@@ -14,6 +15,7 @@ export default function App() {
         {/* Public routes */}
         <Route path="/" element={<IdentifyPage />} />
         <Route path="/chat" element={<ChatPage />} />
+        <Route path="/survey" element={<TokenSurveyPage />} />
 
         {/* SuperAdmin routes */}
         <Route path="/superadmin/login" element={<SuperAdminLoginPage />} />

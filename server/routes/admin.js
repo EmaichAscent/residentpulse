@@ -1,7 +1,9 @@
 import { Router } from "express";
+import crypto from "crypto";
 import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
 import { hashPassword, generatePassword } from "../utils/password.js";
+import { sendInvitation } from "../utils/emailService.js";
 
 const router = Router();
 
@@ -234,6 +236,101 @@ router.post("/board-members/import", async (req, res) => {
       errors: errors.length > 0 ? errors : undefined
     });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send survey invitations to selected board members
+router.post("/board-members/invite", async (req, res) => {
+  try {
+    const { user_ids } = req.body;
+
+    if (!user_ids || !Array.isArray(user_ids) || user_ids.length === 0) {
+      return res.status(400).json({ error: "user_ids array is required" });
+    }
+
+    // Calculate token expiry
+    const expiryHours = parseInt(process.env.INVITATION_TOKEN_EXPIRY_HOURS) || 48;
+    const expiryDate = new Date();
+    expiryDate.setHours(expiryDate.getHours() + expiryHours);
+
+    const results = [];
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const userId of user_ids) {
+      try {
+        // Verify user belongs to this client
+        const user = await db.get(
+          "SELECT id, email, first_name, last_name, community_name, management_company FROM users WHERE id = ? AND client_id = ?",
+          [userId, req.clientId]
+        );
+
+        if (!user) {
+          results.push({
+            user_id: userId,
+            status: "failed",
+            error: "User not found or does not belong to this client"
+          });
+          failedCount++;
+          continue;
+        }
+
+        // Generate unique invitation token
+        const token = crypto.randomUUID();
+
+        // Update user with token and expiry
+        await db.run(
+          "UPDATE users SET invitation_token = ?, invitation_token_expires = ?, last_invited_at = CURRENT_TIMESTAMP WHERE id = ?",
+          [token, expiryDate.toISOString(), userId]
+        );
+
+        // Send email via Resend
+        await sendInvitation(user, token);
+
+        // Log invitation
+        await db.run(
+          "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status) VALUES (?, ?, ?, ?)",
+          [userId, req.clientId, req.userId, "sent"]
+        );
+
+        results.push({
+          user_id: userId,
+          email: user.email,
+          status: "sent"
+        });
+        sentCount++;
+
+      } catch (err) {
+        console.error(`Failed to send invitation to user ${userId}:`, err);
+
+        // Log failed invitation
+        try {
+          await db.run(
+            "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, error_message) VALUES (?, ?, ?, ?, ?)",
+            [userId, req.clientId, req.userId, "failed", err.message]
+          );
+        } catch (logErr) {
+          console.error("Failed to log invitation error:", logErr);
+        }
+
+        results.push({
+          user_id: userId,
+          status: "failed",
+          error: err.message
+        });
+        failedCount++;
+      }
+    }
+
+    res.json({
+      sent: sentCount,
+      failed: failedCount,
+      results
+    });
+
+  } catch (err) {
+    console.error("Invitation endpoint error:", err);
     res.status(500).json({ error: err.message });
   }
 });

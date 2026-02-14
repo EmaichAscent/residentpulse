@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import InvitationModal from "./InvitationModal";
 
 function TrendArrow({ sessions, email }) {
   const userSessions = useMemo(() => {
@@ -62,6 +63,8 @@ export default function UserManager({ sessions }) {
   const [editForm, setEditForm] = useState({});
   const [editError, setEditError] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState(new Set());
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   const fetchUsers = () => {
     fetch("/api/admin/board-members")
@@ -196,6 +199,29 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
     URL.revokeObjectURL(url);
   };
 
+  const toggleSelect = (userId) => {
+    const newSelected = new Set(selectedUsers);
+    if (newSelected.has(userId)) {
+      newSelected.delete(userId);
+    } else {
+      newSelected.add(userId);
+    }
+    setSelectedUsers(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedUsers.size === filtered.length) {
+      setSelectedUsers(new Set());
+    } else {
+      setSelectedUsers(new Set(filtered.map(u => u.id)));
+    }
+  };
+
+  const handleInvitationsSent = () => {
+    setSelectedUsers(new Set());
+    fetchUsers(); // Refresh to show updated last_invited_at
+  };
+
   const filtered = search.trim()
     ? users.filter((u) => {
         const q = search.toLowerCase();
@@ -238,6 +264,18 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
               <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
             </svg>
             Add User
+          </button>
+          <button
+            onClick={() => setShowInviteModal(true)}
+            disabled={selectedUsers.size === 0}
+            className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ backgroundColor: "var(--cam-blue)" }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+              <path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z" />
+              <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
+            </svg>
+            Send Invitations {selectedUsers.size > 0 && `(${selectedUsers.size})`}
           </button>
         </div>
         <p className="text-xs text-gray-500 mt-2">
@@ -350,6 +388,15 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                <th className="px-3 py-3 w-12">
+                  <input
+                    type="checkbox"
+                    checked={selectedUsers.size === filtered.length && filtered.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-gray-300"
+                    title="Select all"
+                  />
+                </th>
                 <th className="px-5 py-3 w-8">Trend</th>
                 <th className="px-5 py-3">Name</th>
                 <th className="px-5 py-3">Email</th>
@@ -362,6 +409,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
               {filtered.map((u) => (
                 editingId === u.id ? (
                   <tr key={u.id} className="bg-blue-50">
+                    <td className="px-3 py-3"></td>
                     <td className="px-5 py-3 text-center">
                       <TrendArrow sessions={sessions} email={u.email} />
                     </td>
@@ -429,6 +477,14 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                   </tr>
                 ) : (
                   <tr key={u.id} className="hover:bg-gray-50 transition">
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.has(u.id)}
+                        onChange={() => toggleSelect(u.id)}
+                        className="w-4 h-4 rounded border-gray-300"
+                      />
+                    </td>
                     <td className="px-5 py-3 text-center">
                       <TrendArrow sessions={sessions} email={u.email} />
                     </td>
@@ -472,6 +528,16 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
             {search.trim() && ` (${users.length} total)`}
           </div>
         </div>
+      )}
+
+      {/* Invitation Modal */}
+      {showInviteModal && (
+        <InvitationModal
+          selectedUsers={selectedUsers}
+          userList={users}
+          onClose={() => setShowInviteModal(false)}
+          onSent={handleInvitationsSent}
+        />
       )}
     </div>
   );
