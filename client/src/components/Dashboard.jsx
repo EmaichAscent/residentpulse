@@ -174,10 +174,15 @@ export default function Dashboard({ sessions }) {
         .filter((s) => s.completed === 1 && s.summary)
         .map((s) => s.id);
 
+      if (sessionIds.length === 0) {
+        throw new Error("No completed surveys with summaries found. Users need to complete full surveys before insights can be generated.");
+      }
+
       const res = await fetch("/api/admin/insights", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_ids: sessionIds }),
+        credentials: "include",
       });
 
       const data = await res.json();
