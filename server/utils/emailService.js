@@ -89,7 +89,8 @@ function buildInvitationEmail(user, surveyLink) {
  * @returns {Promise<Object>} Resend response with email ID
  */
 export async function sendInvitation(user, token) {
-  const surveyBaseUrl = process.env.SURVEY_BASE_URL || "http://localhost:5173";
+  // Remove trailing slash from base URL to prevent double slashes
+  const surveyBaseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
   const surveyLink = `${surveyBaseUrl}/survey?token=${token}`;
 
   const emailHtml = buildInvitationEmail(user, surveyLink);
