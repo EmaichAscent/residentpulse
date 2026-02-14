@@ -240,6 +240,9 @@ router.post("/board-members/import", async (req, res) => {
   }
 });
 
+// Helper function to add delay between email sends (rate limiting)
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 // Send survey invitations to selected board members
 router.post("/board-members/invite", async (req, res) => {
   try {
@@ -320,6 +323,12 @@ router.post("/board-members/invite", async (req, res) => {
           error: err.message
         });
         failedCount++;
+      }
+
+      // Add 500ms delay between emails to respect Resend's 2 requests/second rate limit
+      // (skip delay after last email)
+      if (userId !== user_ids[user_ids.length - 1]) {
+        await sleep(500);
       }
     }
 
