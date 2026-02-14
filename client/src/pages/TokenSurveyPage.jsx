@@ -55,6 +55,7 @@ export default function TokenSurveyPage() {
         state: {
           sessionId: session.id,
           email: userData.email,
+          firstName: userData.first_name,
           community: userData.community_name,
           company: userData.management_company
         }

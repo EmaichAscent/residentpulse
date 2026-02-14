@@ -8,7 +8,7 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 export default function ChatPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { sessionId, email, communityName, managementCompany } = location.state || {};
+  const { sessionId, email, firstName, community, company } = location.state || {};
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -180,9 +180,14 @@ export default function ChatPage() {
 
   if (!sessionId) return null;
 
+  // Build personalized welcome message
+  const userName = firstName || "there";
+  const companyText = company ? ` on behalf of ${company}` : "";
+  const roleText = community ? ` as a board member at ${community}` : " as a board member";
+
   const welcomeContent = SpeechRecognition
-    ? "Welcome! Thank you for taking the time to share your feedback about your management company. You can type your responses or click the microphone button to speak (your browser will ask for permission the first time). When you're finished, click \"End Chat\" at any time. Let's start with a quick rating."
-    : "Welcome! Thank you for taking the time to share your feedback about your management company. When you're finished, click \"End Chat\" at any time. Let's start with a quick rating.";
+    ? `Hi ${userName}! We're collecting feedback${companyText} about how well they serve you${roleText}. You can type your responses or click the microphone button to speak (your browser will ask for permission the first time). When you're finished, click "End Chat" at any time. Let's start with a quick rating.`
+    : `Hi ${userName}! We're collecting feedback${companyText} about how well they serve you${roleText}. When you're finished, click "End Chat" at any time. Let's start with a quick rating.`;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -195,8 +200,8 @@ export default function ChatPage() {
           </div>
           <div className="w-1/2 text-right">
             <p className="font-semibold text-gray-900">{email}</p>
-            {communityName && <p className="text-sm text-gray-500">{communityName}</p>}
-            {managementCompany && <p className="text-sm text-gray-500">{managementCompany}</p>}
+            {company && <p className="text-sm text-gray-500">{company}</p>}
+            {community && <p className="text-sm text-gray-500">{community}</p>}
           </div>
         </div>
 
