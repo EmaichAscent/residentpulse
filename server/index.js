@@ -17,6 +17,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust Railway's reverse proxy for rate limiting and session management
+app.set('trust proxy', 1);
+
 // Session configuration
 app.use(session({
   secret: process.env.SESSION_SECRET || "residentpulse-dev-secret-change-in-production",
@@ -30,8 +33,13 @@ app.use(session({
   }
 }));
 
+// CORS configuration - in production, client is served from same origin
+const corsOrigin = process.env.NODE_ENV === "production"
+  ? true // Allow same origin in production
+  : (process.env.CLIENT_URL || "http://localhost:5173");
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || "http://localhost:5173",
+  origin: corsOrigin,
   credentials: true
 }));
 app.use(express.json());
