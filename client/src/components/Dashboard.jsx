@@ -170,8 +170,9 @@ export default function Dashboard({ sessions }) {
 
     try {
       // Get session IDs from scored sessions - only completed ones with summaries
+      // (already filtered by community/company/date from dashboard filters)
       const sessionIds = scored
-        .filter((s) => s.completed === 1 && s.summary)
+        .filter((s) => s.completed && s.summary && s.summary.trim().length > 0)
         .map((s) => s.id);
 
       if (sessionIds.length === 0) {
