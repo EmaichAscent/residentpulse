@@ -1,6 +1,18 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy initialization - only create Resend instance when needed
+let resend = null;
+
+function getResendClient() {
+  if (!resend) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error("RESEND_API_KEY environment variable is not set");
+    }
+    resend = new Resend(apiKey);
+  }
+  return resend;
+}
 
 /**
  * Build HTML email template for survey invitation
@@ -83,7 +95,8 @@ export async function sendInvitation(user, token) {
   const emailHtml = buildInvitationEmail(user, surveyLink);
 
   try {
-    const { data, error } = await resend.emails.send({
+    const resendClient = getResendClient();
+    const { data, error } = await resendClient.emails.send({
       from: "ResidentPulse <residentpulse@camascent.com>",
       to: [user.email],
       subject: `We'd love your feedback, ${user.first_name || "Board Member"}`,
