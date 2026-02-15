@@ -36,12 +36,12 @@ function buildInvitationEmail(user, surveyLink) {
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 40px 20px;">
         <!-- Header -->
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #1B4F72; font-size: 28px; margin: 0 0 10px 0;">ResidentPulse</h1>
+          <h1 style="color: #3B9FE7; font-size: 28px; margin: 0 0 10px 0;">ResidentPulse</h1>
           <p style="color: #666666; font-size: 14px; margin: 0;">Powered by CAM Ascent</p>
         </div>
 
         <!-- Greeting -->
-        <h2 style="color: #1B4F72; font-size: 24px; margin: 0 0 20px 0;">Hi ${firstName},</h2>
+        <h2 style="color: #3B9FE7; font-size: 24px; margin: 0 0 20px 0;">Hi ${firstName},</h2>
 
         <!-- Body -->
         <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 15px 0;">
@@ -56,7 +56,7 @@ function buildInvitationEmail(user, surveyLink) {
         <div style="text-align: center; margin: 40px 0;">
           <a href="${surveyLink}"
              style="display: inline-block;
-                    background-color: #1B4F72;
+                    background-color: #3B9FE7;
                     color: #ffffff;
                     padding: 16px 32px;
                     text-decoration: none;
@@ -135,12 +135,12 @@ function buildPasswordResetEmail(resetLink) {
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 40px 20px;">
         <!-- Header -->
         <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #1B4F72; font-size: 28px; margin: 0 0 10px 0;">ResidentPulse</h1>
+          <h1 style="color: #3B9FE7; font-size: 28px; margin: 0 0 10px 0;">ResidentPulse</h1>
           <p style="color: #666666; font-size: 14px; margin: 0;">Powered by CAM Ascent</p>
         </div>
 
         <!-- Body -->
-        <h2 style="color: #1B4F72; font-size: 24px; margin: 0 0 20px 0;">Reset Your Password</h2>
+        <h2 style="color: #3B9FE7; font-size: 24px; margin: 0 0 20px 0;">Reset Your Password</h2>
 
         <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 15px 0;">
           We received a request to reset your password. Click the button below to choose a new password.
@@ -154,7 +154,7 @@ function buildPasswordResetEmail(resetLink) {
         <div style="text-align: center; margin: 40px 0;">
           <a href="${resetLink}"
              style="display: inline-block;
-                    background-color: #1B4F72;
+                    background-color: #3B9FE7;
                     color: #ffffff;
                     padding: 16px 32px;
                     text-decoration: none;
