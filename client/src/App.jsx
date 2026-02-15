@@ -6,6 +6,8 @@ import AdminPage from "./pages/AdminPage";
 import SuperAdminPage from "./pages/SuperAdminPage";
 import SuperAdminLoginPage from "./pages/SuperAdminLoginPage";
 import ClientAdminLoginPage from "./pages/ClientAdminLoginPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 export default function App() {
@@ -30,6 +32,8 @@ export default function App() {
 
         {/* Client Admin routes */}
         <Route path="/admin/login" element={<ClientAdminLoginPage />} />
+        <Route path="/admin/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/admin/reset-password" element={<ResetPasswordPage />} />
         <Route
           path="/admin"
           element={

@@ -1,7 +1,9 @@
 import { Router } from "express";
+import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import db from "../db.js";
-import { comparePassword } from "../utils/password.js";
+import { comparePassword, hashPassword } from "../utils/password.js";
+import { sendPasswordResetEmail } from "../utils/emailService.js";
 
 const router = Router();
 
@@ -97,6 +99,80 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
       company_name: admin.company_name
     }
   });
+});
+
+// Request password reset
+router.post("/admin/forgot-password", loginLimiter, async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+
+  try {
+    // Look up admin with active client
+    const admin = await db.get(
+      `SELECT ca.id, ca.email
+       FROM client_admins ca
+       JOIN clients c ON c.id = ca.client_id
+       WHERE ca.email = ? AND c.status = 'active'`,
+      [email.toLowerCase().trim()]
+    );
+
+    if (admin) {
+      const token = crypto.randomBytes(32).toString("hex");
+      const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await db.run(
+        "UPDATE client_admins SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?",
+        [token, expires.toISOString(), admin.id]
+      );
+
+      await sendPasswordResetEmail(admin.email, token);
+    }
+
+    // Always return success to avoid leaking whether email exists
+    res.json({ message: "If an account exists with that email, a password reset link has been sent." });
+  } catch (err) {
+    console.error("Password reset request error:", err);
+    res.json({ message: "If an account exists with that email, a password reset link has been sent." });
+  }
+});
+
+// Reset password with token
+router.post("/admin/reset-password", async (req, res) => {
+  const { token, password } = req.body;
+
+  if (!token || !password) {
+    return res.status(400).json({ error: "Token and password are required" });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ error: "Password must be at least 8 characters" });
+  }
+
+  try {
+    const admin = await db.get(
+      "SELECT id FROM client_admins WHERE password_reset_token = ? AND password_reset_expires > NOW()",
+      [token]
+    );
+
+    if (!admin) {
+      return res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." });
+    }
+
+    const passwordHash = await hashPassword(password);
+
+    await db.run(
+      "UPDATE client_admins SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?",
+      [passwordHash, admin.id]
+    );
+
+    res.json({ message: "Password has been reset successfully." });
+  } catch (err) {
+    console.error("Password reset error:", err);
+    res.status(500).json({ error: "An error occurred. Please try again." });
+  }
 });
 
 // Logout (works for both SuperAdmin and Client Admin)

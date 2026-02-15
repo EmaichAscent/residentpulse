@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function ClientAdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -89,6 +89,15 @@ export default function ClientAdminLoginPage() {
             >
               {loading ? "Logging in..." : "Login"}
             </button>
+
+            <div className="text-center mt-4">
+              <Link
+                to="/admin/forgot-password"
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Forgot your password?
+              </Link>
+            </div>
           </form>
         </div>
 
