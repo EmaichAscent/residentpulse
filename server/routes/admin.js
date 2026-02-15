@@ -80,22 +80,34 @@ router.get("/account", async (req, res) => {
     [req.clientId]
   );
 
-  // Survey rounds used this year (distinct dates invitations were sent)
-  const currentYear = new Date().getFullYear();
-  const surveyRounds = await db.get(
-    `SELECT COUNT(DISTINCT DATE(sent_at)) as count
-     FROM invitation_logs
-     WHERE client_id = ? AND email_status = 'sent'
-     AND EXTRACT(YEAR FROM sent_at) = ?`,
-    [req.clientId, currentYear]
+  // Survey rounds used: prefer survey_rounds table, fall back to legacy invitation_logs counting
+  const roundsFromTable = await db.get(
+    `SELECT COUNT(*) as count FROM survey_rounds
+     WHERE client_id = ? AND status IN ('in_progress', 'concluded')`,
+    [req.clientId]
   );
+
+  let surveyRoundsCount;
+  if (roundsFromTable && roundsFromTable.count > 0) {
+    surveyRoundsCount = roundsFromTable.count;
+  } else {
+    const currentYear = new Date().getFullYear();
+    const legacyRounds = await db.get(
+      `SELECT COUNT(DISTINCT DATE(sent_at)) as count
+       FROM invitation_logs
+       WHERE client_id = ? AND email_status = 'sent'
+       AND EXTRACT(YEAR FROM sent_at) = ?`,
+      [req.clientId, currentYear]
+    );
+    surveyRoundsCount = legacyRounds?.count || 0;
+  }
 
   res.json({
     ...client,
     subscription: subscription || null,
     usage: {
       member_count: memberCount?.count || 0,
-      survey_rounds_used: surveyRounds?.count || 0
+      survey_rounds_used: surveyRoundsCount
     }
   });
 });

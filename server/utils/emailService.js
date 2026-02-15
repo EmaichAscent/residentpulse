@@ -18,9 +18,10 @@ function getResendClient() {
  * Build HTML email template for survey invitation
  * @param {Object} user - User object with first_name, community_name
  * @param {string} surveyLink - Full survey URL with token
+ * @param {Object} [roundInfo] - Optional round info { closesAt, roundNumber }
  * @returns {string} HTML email template
  */
-function buildInvitationEmail(user, surveyLink) {
+function buildInvitationEmail(user, surveyLink, roundInfo) {
   const firstName = user.first_name || "Board Member";
   const communityName = user.community_name || "your community";
   const managementCompany = user.management_company || "your management company";
@@ -71,7 +72,9 @@ function buildInvitationEmail(user, surveyLink) {
         <!-- Footer -->
         <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eeeeee;">
           <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0 0 10px 0;">
-            This invitation expires in 48 hours.
+            ${roundInfo?.closesAt
+              ? `This survey is open until ${new Date(roundInfo.closesAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
+              : "This invitation expires in 48 hours."}
           </p>
           <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0;">
             Questions? Contact your property manager.
@@ -89,12 +92,12 @@ function buildInvitationEmail(user, surveyLink) {
  * @param {string} token - Invitation token
  * @returns {Promise<Object>} Resend response with email ID
  */
-export async function sendInvitation(user, token) {
+export async function sendInvitation(user, token, roundInfo) {
   // Remove trailing slash from base URL to prevent double slashes
   const surveyBaseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
   const surveyLink = `${surveyBaseUrl}/survey?token=${token}`;
 
-  const emailHtml = buildInvitationEmail(user, surveyLink);
+  const emailHtml = buildInvitationEmail(user, surveyLink, roundInfo);
 
   try {
     const resendClient = getResendClient();
@@ -312,4 +315,105 @@ export async function sendVerificationEmail(email, token) {
   }
 }
 
-export default { sendInvitation, sendPasswordResetEmail, sendVerificationEmail };
+/**
+ * Build HTML email template for survey reminder
+ * @param {Object} user - User object with first_name, community_name, management_company
+ * @param {string} surveyLink - Full survey URL with token
+ * @param {number} daysRemaining - Days left in the survey round
+ * @returns {string} HTML email template
+ */
+function buildReminderEmail(user, surveyLink, daysRemaining) {
+  const firstName = user.first_name || "Board Member";
+  const communityName = user.community_name || "your community";
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>We'd Still Love Your Feedback</title>
+    </head>
+    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 40px 20px;">
+        <!-- Header -->
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #3B9FE7; font-size: 28px; margin: 0 0 10px 0;">ResidentPulse</h1>
+          <p style="color: #666666; font-size: 14px; margin: 0;">Powered by CAM Ascent</p>
+        </div>
+
+        <!-- Greeting -->
+        <h2 style="color: #3B9FE7; font-size: 24px; margin: 0 0 20px 0;">Hi ${firstName},</h2>
+
+        <!-- Body -->
+        <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 15px 0;">
+          We'd still love to hear from you! Your feedback about <strong>${communityName}</strong> helps improve the management services for your community.
+        </p>
+
+        <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
+          The survey only takes 2-3 minutes and there ${daysRemaining === 1 ? "is <strong>1 day</strong>" : `are <strong>${daysRemaining} days</strong>`} remaining to share your thoughts.
+        </p>
+
+        <!-- CTA Button -->
+        <div style="text-align: center; margin: 40px 0;">
+          <a href="${surveyLink}"
+             style="display: inline-block;
+                    background-color: #1AB06E;
+                    color: #ffffff;
+                    padding: 16px 32px;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    font-weight: bold;
+                    font-size: 16px;">
+            Share Your Feedback
+          </a>
+        </div>
+
+        <!-- Footer -->
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+          <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0;">
+            Questions? Contact your property manager.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+/**
+ * Send survey reminder email via Resend
+ * @param {Object} user - User object with email, first_name, community_name
+ * @param {string} token - Existing invitation token
+ * @param {Object} options - { daysRemaining }
+ * @returns {Promise<Object>} Resend response with email ID
+ */
+export async function sendReminder(user, token, { daysRemaining }) {
+  const surveyBaseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
+  const surveyLink = `${surveyBaseUrl}/survey?token=${token}`;
+
+  const emailHtml = buildReminderEmail(user, surveyLink, daysRemaining);
+
+  try {
+    const resendClient = getResendClient();
+    const { data, error } = await resendClient.emails.send({
+      from: "ResidentPulse <residentpulse@camascent.com>",
+      to: [user.email],
+      subject: `Friendly reminder: we'd love your feedback, ${user.first_name || "Board Member"}`,
+      html: emailHtml,
+    });
+
+    if (error) {
+      console.error("Resend API error:", error);
+      throw new Error(error.message || "Failed to send email");
+    }
+
+    console.log(`Reminder sent to ${user.email}, email ID: ${data.id}`);
+    return data;
+  } catch (err) {
+    console.error(`Failed to send reminder to ${user.email}:`, err.message);
+    throw err;
+  }
+}
+
+export default { sendInvitation, sendPasswordResetEmail, sendVerificationEmail, sendReminder };

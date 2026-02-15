@@ -95,7 +95,7 @@ export default function TokenSurveyPage() {
 
           <p className="text-gray-600 mb-6">
             {error.includes("expired")
-              ? "Your invitation link has expired. Invitation links are valid for 48 hours."
+              ? "Your invitation link has expired. The survey round may have concluded."
               : "This invitation link is invalid or has already been used."}
           </p>
 

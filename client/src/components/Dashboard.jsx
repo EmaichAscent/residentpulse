@@ -3,6 +3,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
+import SurveySchedule from "./SurveySchedule";
 
 const COLORS = {
   promoter: "#1AB06E",
@@ -366,11 +367,12 @@ export default function Dashboard({ sessions, user, onNavigate }) {
                   2
                 </div>
                 <div className="flex-1 pt-1">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Send survey invitations</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Schedule your survey rounds</h3>
                   <p className="text-gray-500 mb-3">
-                    Once your board members are added, send them survey invitations with one click.
-                    Each member will receive a personalized link to share their feedback.
+                    Pick a launch date and we'll set up your survey schedule based on your cadence.
+                    When it's time, confirm the launch and all board members get invited automatically.
                   </p>
+                  <SurveySchedule />
                 </div>
               </div>
 
@@ -485,6 +487,9 @@ export default function Dashboard({ sessions, user, onNavigate }) {
 
   return (
     <div className="space-y-6">
+      {/* Survey Rounds Timeline */}
+      <SurveySchedule />
+
       {/* Filters */}
       <div className="grid grid-cols-3 gap-4">
         <select

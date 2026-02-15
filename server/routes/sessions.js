@@ -46,6 +46,22 @@ router.get("/validate-token/:token", async (req, res) => {
       return res.status(404).json({ error: "Invitation token has expired" });
     }
 
+    // Check if user's client has survey rounds and if one is still active
+    const hasRounds = await db.get(
+      "SELECT id FROM survey_rounds WHERE client_id = ? LIMIT 1",
+      [user.client_id]
+    );
+
+    if (hasRounds) {
+      const activeRound = await db.get(
+        "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'in_progress'",
+        [user.client_id]
+      );
+      if (!activeRound) {
+        return res.status(404).json({ error: "This survey round has concluded." });
+      }
+    }
+
     // Return user data (without sensitive info)
     res.json({
       email: user.email,
@@ -105,9 +121,15 @@ router.post("/", async (req, res) => {
     return res.status(400).json({ error: "User not found or not associated with a client" });
   }
 
+  // Look up active round for this client (if any)
+  const activeRound = await db.get(
+    "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'in_progress'",
+    [user.client_id]
+  );
+
   const result = await db.run(
-    "INSERT INTO sessions (email, user_id, community_name, management_company, client_id) VALUES (?, ?, ?, ?, ?)",
-    [cleanEmail, user_id || null, community_name?.trim() || null, management_company?.trim() || null, user.client_id]
+    "INSERT INTO sessions (email, user_id, community_name, management_company, client_id, round_id) VALUES (?, ?, ?, ?, ?, ?)",
+    [cleanEmail, user_id || null, community_name?.trim() || null, management_company?.trim() || null, user.client_id, activeRound?.id || null]
   );
   const session = await db.get("SELECT * FROM sessions WHERE id = ?", [result.lastInsertRowid]);
   res.json(session);

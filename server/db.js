@@ -151,6 +151,16 @@ async function initializeSchema() {
       console.log("Subscriptions and signup migration skipped (already applied or file not found)");
     }
 
+    // Run survey rounds migration
+    try {
+      const roundsMigrationPath = join(__dirname, "migrations", "add-survey-rounds.sql");
+      const roundsMigrationSQL = readFileSync(roundsMigrationPath, "utf-8");
+      await client.query(roundsMigrationSQL);
+      console.log("Survey rounds migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Survey rounds migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");
   } catch (err) {

@@ -340,14 +340,22 @@ export default function AccountSettings() {
                 <div className="flex gap-2">
                   <button
                     onClick={async () => {
+                      if ((client.subscription.survey_cadence || 2) !== 2) {
+                        if (!confirm("Changing your cadence will recalculate future planned rounds. Already launched rounds are not affected. Continue?")) return;
+                      }
                       const res = await fetch("/api/admin/account/cadence", {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ survey_cadence: 2 }),
                         credentials: "include"
                       });
-                      if (res.ok) loadData();
-                      else {
+                      if (res.ok) {
+                        await fetch("/api/admin/survey-rounds/recalculate", {
+                          method: "POST",
+                          credentials: "include"
+                        });
+                        loadData();
+                      } else {
                         const data = await res.json();
                         alert(data.error);
                       }
@@ -363,14 +371,22 @@ export default function AccountSettings() {
                   </button>
                   <button
                     onClick={async () => {
+                      if (client.subscription.survey_cadence !== 4) {
+                        if (!confirm("Changing your cadence will recalculate future planned rounds. Already launched rounds are not affected. Continue?")) return;
+                      }
                       const res = await fetch("/api/admin/account/cadence", {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ survey_cadence: 4 }),
                         credentials: "include"
                       });
-                      if (res.ok) loadData();
-                      else {
+                      if (res.ok) {
+                        await fetch("/api/admin/survey-rounds/recalculate", {
+                          method: "POST",
+                          credentials: "include"
+                        });
+                        loadData();
+                      } else {
                         const data = await res.json();
                         alert(data.error);
                       }
@@ -390,8 +406,11 @@ export default function AccountSettings() {
                   </button>
                 </div>
               </div>
+              <p className="text-xs text-gray-400 mt-2">
+                Changing cadence will recalculate future planned rounds. Already launched rounds are not affected.
+              </p>
               {client.subscription.survey_rounds_per_year < 4 && (
-                <p className="text-xs text-gray-400 mt-2">
+                <p className="text-xs text-gray-400 mt-1">
                   Quarterly surveys available on Starter plan and above.
                 </p>
               )}
