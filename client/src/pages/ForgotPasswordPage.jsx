@@ -34,14 +34,22 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4"
+         style={{ background: "linear-gradient(135deg, #3B9FE7 0%, #1AB06E 100%)" }}>
       <div className="max-w-md w-full">
+        {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">ResidentPulse</h1>
-          <p className="text-gray-500 mt-2">Reset Your Password</p>
+          <img
+            src="/camascent-icon.png"
+            alt="CAM Ascent"
+            className="h-32 mx-auto mb-6 object-contain drop-shadow-lg"
+          />
+          <h1 className="text-2xl font-bold text-white tracking-wide">ResidentPulse</h1>
+          <p className="text-white/70 mt-1 text-sm">Reset Your Password</p>
         </div>
 
-        <div className="bg-white shadow-md rounded-lg p-8">
+        {/* Card */}
+        <div className="bg-white shadow-2xl rounded-2xl p-8">
           {submitted ? (
             <div>
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
@@ -51,7 +59,8 @@ export default function ForgotPasswordPage() {
               </div>
               <Link
                 to="/admin/login"
-                className="block text-center text-sm text-blue-600 hover:text-blue-800"
+                className="block text-center text-sm hover:underline"
+                style={{ color: "var(--cam-blue)" }}
               >
                 Back to login
               </Link>
@@ -94,7 +103,8 @@ export default function ForgotPasswordPage() {
 
               <Link
                 to="/admin/login"
-                className="block text-center text-sm text-blue-600 hover:text-blue-800 mt-4"
+                className="block text-center text-sm hover:underline mt-4"
+                style={{ color: "var(--cam-blue)" }}
               >
                 Back to login
               </Link>

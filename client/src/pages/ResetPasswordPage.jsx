@@ -13,18 +13,25 @@ export default function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4"
+           style={{ background: "linear-gradient(135deg, #3B9FE7 0%, #1AB06E 100%)" }}>
         <div className="max-w-md w-full">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">ResidentPulse</h1>
+            <img
+              src="/camascent-icon.png"
+              alt="CAM Ascent"
+              className="h-32 mx-auto mb-6 object-contain drop-shadow-lg"
+            />
+            <h1 className="text-2xl font-bold text-white tracking-wide">ResidentPulse</h1>
           </div>
-          <div className="bg-white shadow-md rounded-lg p-8">
+          <div className="bg-white shadow-2xl rounded-2xl p-8">
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
               <p className="text-sm text-red-600">Invalid reset link. No token provided.</p>
             </div>
             <Link
               to="/admin/forgot-password"
-              className="block text-center text-sm text-blue-600 hover:text-blue-800"
+              className="block text-center text-sm hover:underline"
+              style={{ color: "var(--cam-blue)" }}
             >
               Request a new reset link
             </Link>
@@ -73,14 +80,22 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4"
+         style={{ background: "linear-gradient(135deg, #3B9FE7 0%, #1AB06E 100%)" }}>
       <div className="max-w-md w-full">
+        {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">ResidentPulse</h1>
-          <p className="text-gray-500 mt-2">Set New Password</p>
+          <img
+            src="/camascent-icon.png"
+            alt="CAM Ascent"
+            className="h-32 mx-auto mb-6 object-contain drop-shadow-lg"
+          />
+          <h1 className="text-2xl font-bold text-white tracking-wide">ResidentPulse</h1>
+          <p className="text-white/70 mt-1 text-sm">Set New Password</p>
         </div>
 
-        <div className="bg-white shadow-md rounded-lg p-8">
+        {/* Card */}
+        <div className="bg-white shadow-2xl rounded-2xl p-8">
           {success ? (
             <div>
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
@@ -137,7 +152,8 @@ export default function ResetPasswordPage() {
                   {error.includes("expired") && (
                     <Link
                       to="/admin/forgot-password"
-                      className="text-sm text-blue-600 hover:text-blue-800 mt-1 block"
+                      className="text-sm hover:underline mt-1 block"
+                      style={{ color: "var(--cam-blue)" }}
                     >
                       Request a new reset link
                     </Link>

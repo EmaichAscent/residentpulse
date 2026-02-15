@@ -36,14 +36,22 @@ export default function ClientAdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4"
+         style={{ background: "linear-gradient(135deg, #3B9FE7 0%, #1AB06E 100%)" }}>
       <div className="max-w-md w-full">
+        {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">ResidentPulse</h1>
-          <p className="text-gray-500 mt-2">Client Admin Login</p>
+          <img
+            src="/camascent-icon.png"
+            alt="CAM Ascent"
+            className="h-32 mx-auto mb-6 object-contain drop-shadow-lg"
+          />
+          <h1 className="text-2xl font-bold text-white tracking-wide">ResidentPulse</h1>
+          <p className="text-white/70 mt-1 text-sm">Client Admin Portal</p>
         </div>
 
-        <div className="bg-white shadow-md rounded-lg p-8">
+        {/* Login Card */}
+        <div className="bg-white shadow-2xl rounded-2xl p-8">
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -93,7 +101,8 @@ export default function ClientAdminLoginPage() {
             <div className="text-center mt-4">
               <Link
                 to="/admin/forgot-password"
-                className="text-sm text-blue-600 hover:text-blue-800"
+                className="text-sm hover:underline"
+                style={{ color: "var(--cam-blue)" }}
               >
                 Forgot your password?
               </Link>
@@ -101,7 +110,7 @@ export default function ClientAdminLoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-sm text-gray-500 mt-6">
+        <p className="text-center text-sm text-white/60 mt-6">
           Need help? Contact your administrator
         </p>
       </div>
