@@ -326,7 +326,24 @@ export default function Dashboard({ sessions, user, onNavigate }) {
                   <h3 className="text-lg font-semibold text-gray-900 mb-1">Add your board members</h3>
                   <p className="text-gray-500 mb-3">
                     Head over to the Board Members tab and add the people you'd like to survey.
-                    You can add them one at a time or import a CSV list.
+                    You can add them one at a time or import a CSV list —{" "}
+                    <button
+                      onClick={() => {
+                        const csv = `email,first_name,last_name,community_name,management_company\nresident1@example.com,John,Doe,Sunset Gardens,ABC Property Management\nresident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
+                        const blob = new Blob([csv], { type: "text/csv" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = "sample-users.csv";
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="font-semibold underline hover:no-underline"
+                      style={{ color: "var(--cam-blue)" }}
+                    >
+                      download a sample CSV template
+                    </button>{" "}
+                    to get started quickly.
                   </p>
                   {onNavigate && (
                     <button
@@ -414,6 +431,48 @@ export default function Dashboard({ sessions, user, onNavigate }) {
               <h4 className="text-sm font-semibold text-gray-900 mb-1">Actionable Insights</h4>
               <p className="text-xs text-gray-500">AI-generated recommendations you can act on immediately to improve board satisfaction.</p>
             </div>
+          </div>
+        </div>
+
+        {/* Survey Cadence Best Practices */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-8">
+          <p className="text-xs font-semibold uppercase tracking-wide mb-4" style={{ color: "var(--cam-blue)" }}>Best Practices</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">
+            How often should you survey?
+          </h3>
+          <p className="text-gray-500 leading-relaxed mb-5">
+            ResidentPulse is designed for consistent, thoughtful engagement — not survey fatigue.
+            We recommend surveying your board members <strong className="text-gray-700">2 to 4 times per year</strong>,
+            depending on your community's needs. Here's what works best:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+            <div className="border border-gray-200 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl font-bold" style={{ color: "var(--cam-blue)" }}>2x</span>
+                <span className="text-sm font-medium text-gray-500">per year</span>
+              </div>
+              <p className="text-sm text-gray-500">
+                Great for smaller boards or communities just getting started. Survey in the spring and fall
+                to capture seasonal shifts in sentiment and track year-over-year progress.
+              </p>
+            </div>
+            <div className="border border-gray-200 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl font-bold" style={{ color: "var(--cam-green)" }}>4x</span>
+                <span className="text-sm font-medium text-gray-500">per year</span>
+              </div>
+              <p className="text-sm text-gray-500">
+                Ideal for active boards that want tighter feedback loops. Quarterly surveys let you
+                spot trends early and show board members that their voice drives real change.
+              </p>
+            </div>
+          </div>
+          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+            <p className="text-sm text-blue-800">
+              <strong>Consistency is key.</strong> Pick a cadence and stick with it — regular surveys build trust
+              with your board members and give you reliable trend data over time. You can set your preferred
+              cadence in the <button onClick={() => onNavigate && onNavigate("account")} className="font-semibold underline hover:no-underline" style={{ color: "var(--cam-blue)" }}>Account</button> tab.
+            </p>
           </div>
         </div>
       </div>
