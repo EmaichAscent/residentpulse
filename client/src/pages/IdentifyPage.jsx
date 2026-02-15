@@ -113,42 +113,45 @@ export default function IdentifyPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-6">
+    <div className="flex items-center justify-center min-h-screen px-6"
+         style={{ background: "linear-gradient(135deg, #3B9FE7 0%, #1AB06E 100%)" }}>
       <div className="w-full max-w-md">
-        <div className="text-center mb-10">
-          <img src="/CAMAscent.png" alt="CAM Ascent" className="w-80 mx-auto mb-4 object-contain" />
-          <h1 className="text-3xl font-bold text-gray-900 mb-3">ResidentPulse</h1>
-          <p className="text-lg text-gray-600">
+        <div className="text-center mb-8">
+          <img src="/CAMAscent.png" alt="CAM Ascent" className="w-80 mx-auto mb-4 object-contain drop-shadow-lg" />
+          <h1 className="text-2xl font-bold text-white tracking-wide mb-2">ResidentPulse</h1>
+          <p className="text-white/80">
             Help us improve your community experience. Share your feedback in a quick conversation.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-lg font-medium text-gray-700 mb-2">
-              Your Email Address
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="board.member@example.com"
-              className="input-field"
-              autoFocus
-            />
-          </div>
+        <div className="bg-white shadow-2xl rounded-2xl p-8">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="email" className="block text-lg font-medium text-gray-700 mb-2">
+                Your Email Address
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="board.member@example.com"
+                className="input-field"
+                autoFocus
+              />
+            </div>
 
-          {error && <p className="text-red-600 text-base font-medium">{error}</p>}
+            {error && <p className="text-red-600 text-base font-medium">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary mt-2"
-          >
-            {loading ? "Verifying..." : "Start Feedback Session"}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary mt-2"
+            >
+              {loading ? "Verifying..." : "Start Feedback Session"}
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* Resume Session Modal */}
