@@ -15,7 +15,7 @@ const COLORS = {
 // Extract YYYY-MM-DD from datetime strings (handles both "T" and space separators)
 const toDateKey = (dt) => (dt || "").split(/[T ]/)[0];
 
-export default function Dashboard({ sessions }) {
+export default function Dashboard({ sessions, user, onNavigate }) {
   const [community, setCommunity] = useState("");
   const [company, setCompany] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
@@ -300,7 +300,124 @@ export default function Dashboard({ sessions }) {
   const npsColor = nps.score >= 50 ? COLORS.promoter : nps.score >= 0 ? COLORS.blue : COLORS.detractor;
 
   if (sessions.length === 0) {
-    return <p className="text-gray-500 text-center py-10 text-lg">No response data available yet.</p>;
+    return (
+      <div className="space-y-6">
+        {/* Welcome Hero */}
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <div className="bg-brand-gradient px-8 py-10 text-center">
+            <h2 className="text-3xl font-bold text-white mb-2">
+              Welcome{user?.company_name ? `, ${user.company_name}` : ""}!
+            </h2>
+            <p className="text-white/80 text-lg max-w-xl mx-auto">
+              You're all set up and ready to start collecting feedback from your board members.
+              Here's how to get your first NPS insights in just a few steps.
+            </p>
+          </div>
+
+          <div className="px-8 py-8">
+            {/* Getting Started Steps */}
+            <div className="space-y-6">
+              {/* Step 1 */}
+              <div className="flex gap-5 items-start">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: "var(--cam-blue)" }}>
+                  1
+                </div>
+                <div className="flex-1 pt-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Add your board members</h3>
+                  <p className="text-gray-500 mb-3">
+                    Head over to the Board Members tab and add the people you'd like to survey.
+                    You can add them one at a time or import a CSV list.
+                  </p>
+                  {onNavigate && (
+                    <button
+                      onClick={() => onNavigate("users")}
+                      className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-lg transition hover:opacity-90 text-white"
+                      style={{ backgroundColor: "var(--cam-blue)" }}
+                    >
+                      Go to Board Members
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="flex gap-5 items-start">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: "var(--cam-blue)" }}>
+                  2
+                </div>
+                <div className="flex-1 pt-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Send survey invitations</h3>
+                  <p className="text-gray-500 mb-3">
+                    Once your board members are added, send them survey invitations with one click.
+                    Each member will receive a personalized link to share their feedback.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex gap-5 items-start">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: "var(--cam-green)" }}>
+                  3
+                </div>
+                <div className="flex-1 pt-1">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Watch your dashboard come alive</h3>
+                  <p className="text-gray-500">
+                    As responses roll in, this dashboard will fill up with your NPS score, trends over time,
+                    and AI-powered insights to help you take action. It's all automatic!
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Built for Community Associations */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-8">
+          <p className="text-xs font-semibold uppercase tracking-wide mb-4" style={{ color: "var(--cam-green)" }}>Built for Community Associations</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">
+            AI-powered engagement designed for condos, HOAs, and co-ops
+          </h3>
+          <p className="text-gray-500 leading-relaxed mb-4">
+            ResidentPulse isn't a generic survey tool — it's purpose-built for the community association
+            industry. Our AI-driven conversations go beyond simple questionnaires, engaging board members
+            in natural dialogue about the topics that matter most to your community: management performance,
+            communication, financial transparency, and overall satisfaction.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: "var(--cam-blue)", opacity: 0.1 }}>
+                <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-1">AI Conversations</h4>
+              <p className="text-xs text-gray-500">Natural, guided dialogue — not boring forms — so board members actually engage.</p>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: "var(--cam-blue)", opacity: 0.1 }}>
+                <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-1">Industry-Specific NPS</h4>
+              <p className="text-xs text-gray-500">Benchmarks and insights tailored to community management, not generic business metrics.</p>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: "var(--cam-blue)", opacity: 0.1 }}>
+                <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-1">Actionable Insights</h4>
+              <p className="text-xs text-gray-500">AI-generated recommendations you can act on immediately to improve board satisfaction.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const pPct = nps.total > 0 ? Math.round((nps.promoters / nps.total) * 100) : 0;

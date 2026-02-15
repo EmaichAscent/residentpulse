@@ -152,7 +152,7 @@ export default function AdminPage() {
         loading ? (
           <p className="text-gray-400 text-center py-10">Loading data...</p>
         ) : (
-          <Dashboard sessions={sessions} />
+          <Dashboard sessions={sessions} user={user} onNavigate={setTab} />
         )
       )}
       {tab === "responses" && (
