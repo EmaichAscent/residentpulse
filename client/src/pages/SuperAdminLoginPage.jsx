@@ -42,9 +42,9 @@ export default function SuperAdminLoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <img
-            src="/camascent-icon.png"
+            src="/CAMAscent.png"
             alt="CAM Ascent"
-            className="h-32 mx-auto mb-6 object-contain drop-shadow-lg"
+            className="w-80 mx-auto mb-6 object-contain drop-shadow-lg"
           />
           <h1 className="text-2xl font-bold text-white tracking-wide">ResidentPulse</h1>
           <p className="text-white/70 mt-1 text-sm">SuperAdmin Portal</p>
