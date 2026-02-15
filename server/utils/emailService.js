@@ -22,7 +22,8 @@ function getResendClient() {
  */
 function buildInvitationEmail(user, surveyLink) {
   const firstName = user.first_name || "Board Member";
-  const communityText = user.community_name ? ` of ${user.community_name}` : "";
+  const communityName = user.community_name || "your community";
+  const managementCompany = user.management_company || "your management company";
 
   return `
     <!DOCTYPE html>
@@ -45,11 +46,11 @@ function buildInvitationEmail(user, surveyLink) {
 
         <!-- Body -->
         <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 15px 0;">
-          We value your perspective as a board member${communityText}.
+          CAM Ascent is reaching out on behalf of <strong>${managementCompany}</strong> to gather feedback about your experience at <strong>${communityName}</strong>.
         </p>
 
         <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
-          We'd love to hear your feedback about our management services. This quick survey takes just 2-3 minutes and helps us serve you better.
+          As a board member, your perspective is invaluable. This quick survey takes just 2-3 minutes and helps improve the management services for your community.
         </p>
 
         <!-- CTA Button -->
