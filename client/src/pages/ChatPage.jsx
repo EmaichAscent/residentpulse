@@ -196,7 +196,7 @@ export default function ChatPage() {
         <div className="bg-white border-b px-5 py-4 flex-shrink-0 flex items-center">
           <div className="w-1/2">
             <h1 className="text-xl font-bold text-gray-900">ResidentPulse</h1>
-            <img src="/camascent-icon.png" alt="CAM Ascent" className="h-8 object-contain mt-1" />
+            <img src="/CAMAscent.png" alt="CAM Ascent" className="h-10 object-contain mt-1" />
           </div>
           <div className="w-1/2 text-right">
             <p className="font-semibold text-gray-900">{email}</p>

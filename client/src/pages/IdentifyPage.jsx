@@ -116,7 +116,7 @@ export default function IdentifyPage() {
     <div className="flex items-center justify-center min-h-screen px-6">
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
-          <img src="/camascent-icon.png" alt="CAM Ascent" className="h-64 mx-auto mb-4 object-contain" />
+          <img src="/CAMAscent.png" alt="CAM Ascent" className="w-80 mx-auto mb-4 object-contain" />
           <h1 className="text-3xl font-bold text-gray-900 mb-3">ResidentPulse</h1>
           <p className="text-lg text-gray-600">
             Help us improve your community experience. Share your feedback in a quick conversation.

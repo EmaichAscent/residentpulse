@@ -18,7 +18,7 @@ export default function ResetPasswordPage() {
         <div className="max-w-md w-full">
           <div className="text-center mb-8">
             <img
-              src="/camascent-icon.png"
+              src="/CAMAscent.png"
               alt="CAM Ascent"
               className="h-32 mx-auto mb-6 object-contain drop-shadow-lg"
             />
