@@ -56,7 +56,7 @@ router.delete("/responses/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
-// Get client account information
+// Get client account information (with subscription and usage)
 router.get("/account", async (req, res) => {
   const client = await db.get("SELECT * FROM clients WHERE id = ?", [req.clientId]);
 
@@ -64,7 +64,40 @@ router.get("/account", async (req, res) => {
     return res.status(404).json({ error: "Client not found" });
   }
 
-  res.json(client);
+  // Fetch subscription info
+  const subscription = await db.get(
+    `SELECT cs.*, sp.name as plan_name, sp.display_name as plan_display_name,
+            sp.member_limit, sp.survey_rounds_per_year, sp.price_cents
+     FROM client_subscriptions cs
+     JOIN subscription_plans sp ON sp.id = cs.plan_id
+     WHERE cs.client_id = ?`,
+    [req.clientId]
+  );
+
+  // Current member count
+  const memberCount = await db.get(
+    "SELECT COUNT(*) as count FROM users WHERE client_id = ?",
+    [req.clientId]
+  );
+
+  // Survey rounds used this year (distinct dates invitations were sent)
+  const currentYear = new Date().getFullYear();
+  const surveyRounds = await db.get(
+    `SELECT COUNT(DISTINCT DATE(sent_at)) as count
+     FROM invitation_logs
+     WHERE client_id = ? AND email_status = 'sent'
+     AND EXTRACT(YEAR FROM sent_at) = ?`,
+    [req.clientId, currentYear]
+  );
+
+  res.json({
+    ...client,
+    subscription: subscription || null,
+    usage: {
+      member_count: memberCount?.count || 0,
+      survey_rounds_used: surveyRounds?.count || 0
+    }
+  });
 });
 
 // Update client account information
@@ -78,6 +111,37 @@ router.put("/account", async (req, res) => {
   await db.run(
     "UPDATE clients SET company_name = ?, address_line1 = ?, address_line2 = ?, city = ?, state = ?, zip = ?, phone_number = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     [company_name, address_line1 || null, address_line2 || null, city || null, state || null, zip || null, phone_number || null, req.clientId]
+  );
+
+  res.json({ ok: true });
+});
+
+// Update survey cadence
+router.patch("/account/cadence", async (req, res) => {
+  const { survey_cadence } = req.body;
+
+  if (![2, 4].includes(survey_cadence)) {
+    return res.status(400).json({ error: "Survey cadence must be 2 or 4" });
+  }
+
+  // Check plan allows this cadence (free tier limited to 2)
+  const subscription = await db.get(
+    `SELECT sp.survey_rounds_per_year
+     FROM client_subscriptions cs
+     JOIN subscription_plans sp ON sp.id = cs.plan_id
+     WHERE cs.client_id = ? AND cs.status = 'active'`,
+    [req.clientId]
+  );
+
+  if (subscription && survey_cadence > subscription.survey_rounds_per_year) {
+    return res.status(403).json({
+      error: "Your plan only supports up to " + subscription.survey_rounds_per_year + " survey rounds per year. Please upgrade to increase cadence."
+    });
+  }
+
+  await db.run(
+    "UPDATE client_subscriptions SET survey_cadence = ? WHERE client_id = ?",
+    [survey_cadence, req.clientId]
   );
 
   res.json({ ok: true });
@@ -250,6 +314,42 @@ router.post("/board-members/invite", async (req, res) => {
 
     if (!user_ids || !Array.isArray(user_ids) || user_ids.length === 0) {
       return res.status(400).json({ error: "user_ids array is required" });
+    }
+
+    // Check survey round limit (enforce against client's chosen cadence)
+    const subscription = await db.get(
+      `SELECT cs.survey_cadence, sp.survey_rounds_per_year
+       FROM client_subscriptions cs
+       JOIN subscription_plans sp ON sp.id = cs.plan_id
+       WHERE cs.client_id = ? AND cs.status = 'active'`,
+      [req.clientId]
+    );
+
+    if (subscription) {
+      const limit = subscription.survey_cadence || subscription.survey_rounds_per_year;
+      const currentYear = new Date().getFullYear();
+      const roundsUsed = await db.get(
+        `SELECT COUNT(DISTINCT DATE(sent_at)) as count
+         FROM invitation_logs
+         WHERE client_id = ? AND email_status = 'sent'
+         AND EXTRACT(YEAR FROM sent_at) = ?`,
+        [req.clientId, currentYear]
+      );
+
+      const todayStr = new Date().toISOString().split("T")[0];
+      const todayCounted = await db.get(
+        `SELECT COUNT(*) as count FROM invitation_logs
+         WHERE client_id = ? AND email_status = 'sent' AND DATE(sent_at) = ?`,
+        [req.clientId, todayStr]
+      );
+
+      const effectiveRounds = (roundsUsed?.count || 0) + (todayCounted?.count > 0 ? 0 : 1);
+
+      if (effectiveRounds > limit) {
+        return res.status(403).json({
+          error: `Survey round limit reached (${limit} rounds/year). ${limit < subscription.survey_rounds_per_year ? "You can increase your cadence in Account settings." : "Please upgrade your plan."}`
+        });
+      }
     }
 
     // Calculate token expiry

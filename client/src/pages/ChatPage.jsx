@@ -190,7 +190,7 @@ export default function ChatPage() {
     : `Hi ${userName}! We're collecting feedback${companyText} about how well they serve you${roleText}. When you're finished, click "End Chat" at any time. Let's start with a quick rating.`;
 
   return (
-    <div className="flex flex-col h-screen" style={{ background: "linear-gradient(135deg, #3B9FE7 0%, #1AB06E 100%)" }}>
+    <div className="flex flex-col h-screen bg-brand-gradient">
       <div className="flex flex-col h-full max-w-2xl mx-auto w-full shadow-xl">
         {/* Header */}
         <div className="bg-white border-b px-5 py-4 flex-shrink-0 flex items-center">

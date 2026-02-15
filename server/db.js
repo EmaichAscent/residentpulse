@@ -141,6 +141,16 @@ async function initializeSchema() {
       console.log("Email invitations migration skipped (already applied or file not found)");
     }
 
+    // Run subscriptions and signup migration
+    try {
+      const subMigrationPath = join(__dirname, "migrations", "add-subscriptions-and-signup.sql");
+      const subMigrationSQL = readFileSync(subMigrationPath, "utf-8");
+      await client.query(subMigrationSQL);
+      console.log("Subscriptions and signup migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Subscriptions and signup migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");
   } catch (err) {

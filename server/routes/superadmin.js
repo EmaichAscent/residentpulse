@@ -28,10 +28,13 @@ router.use(requireSuperAdmin);
 // Get all clients
 router.get("/clients", async (req, res) => {
   const clients = await db.all(
-    `SELECT c.*, COUNT(ca.id) as admin_count
+    `SELECT c.*, COUNT(ca.id) as admin_count,
+            sp.display_name as plan_name, sp.name as plan_key
      FROM clients c
      LEFT JOIN client_admins ca ON ca.client_id = c.id
-     GROUP BY c.id
+     LEFT JOIN client_subscriptions cs ON cs.client_id = c.id
+     LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
+     GROUP BY c.id, sp.display_name, sp.name
      ORDER BY c.created_at DESC`
   );
   res.json(clients);
@@ -75,6 +78,15 @@ router.post("/clients", async (req, res) => {
       await db.run(
         "INSERT INTO settings (key, value, client_id) VALUES ('system_prompt', ?, ?)",
         [globalPrompt.value, clientId]
+      );
+    }
+
+    // Assign default free plan
+    const freePlan = await db.get("SELECT id FROM subscription_plans WHERE name = 'free'");
+    if (freePlan) {
+      await db.run(
+        "INSERT INTO client_subscriptions (client_id, plan_id, status) VALUES (?, ?, 'active')",
+        [clientId, freePlan.id]
       );
     }
 
@@ -184,6 +196,58 @@ router.put("/prompt", async (req, res) => {
     "INSERT OR REPLACE INTO settings (key, value, client_id) VALUES ('system_prompt', ?, NULL)",
     [prompt]
   );
+
+  res.json({ ok: true });
+});
+
+// Get all subscription plans
+router.get("/plans", async (req, res) => {
+  const plans = await db.all("SELECT * FROM subscription_plans ORDER BY sort_order");
+  res.json(plans);
+});
+
+// Get subscription for a specific client
+router.get("/clients/:id/subscription", async (req, res) => {
+  const subscription = await db.get(
+    `SELECT cs.*, sp.name as plan_name, sp.display_name as plan_display_name,
+            sp.member_limit, sp.survey_rounds_per_year
+     FROM client_subscriptions cs
+     JOIN subscription_plans sp ON sp.id = cs.plan_id
+     WHERE cs.client_id = ?`,
+    [req.params.id]
+  );
+  res.json(subscription || null);
+});
+
+// Update subscription plan for a client
+router.patch("/clients/:id/subscription", async (req, res) => {
+  const { plan_id } = req.body;
+  const clientId = req.params.id;
+
+  if (!plan_id) {
+    return res.status(400).json({ error: "plan_id is required" });
+  }
+
+  // Verify plan exists
+  const plan = await db.get("SELECT id FROM subscription_plans WHERE id = ?", [plan_id]);
+  if (!plan) {
+    return res.status(400).json({ error: "Invalid plan" });
+  }
+
+  // Check if subscription exists
+  const existing = await db.get("SELECT id FROM client_subscriptions WHERE client_id = ?", [clientId]);
+
+  if (existing) {
+    await db.run(
+      "UPDATE client_subscriptions SET plan_id = ? WHERE client_id = ?",
+      [plan_id, clientId]
+    );
+  } else {
+    await db.run(
+      "INSERT INTO client_subscriptions (client_id, plan_id, status) VALUES (?, ?, 'active')",
+      [clientId, plan_id]
+    );
+  }
 
   res.json({ ok: true });
 });

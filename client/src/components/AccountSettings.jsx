@@ -262,15 +262,162 @@ export default function AccountSettings() {
         <AdminUserList users={adminUsers} onRemove={handleRemoveUser} />
       </div>
 
-      {/* Subscription (Placeholder) */}
+      {/* Subscription */}
       <div className="bg-white shadow-md rounded-lg p-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Subscription</h2>
-        <p className="text-gray-500 mb-4">
-          Subscription management coming soon. Contact support for billing inquiries.
-        </p>
-        <div className="inline-block px-4 py-2 bg-gray-100 text-gray-600 rounded-md">
-          Billing Portal - Coming Soon
-        </div>
+
+        {client?.subscription ? (
+          <div className="space-y-4">
+            {/* Current Plan */}
+            <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div>
+                <p className="text-lg font-semibold text-gray-900">
+                  {client.subscription.plan_display_name} Plan
+                </p>
+                <p className="text-sm text-gray-600">
+                  {client.subscription.member_limit.toLocaleString()} board members
+                  {" | "}
+                  {client.subscription.survey_rounds_per_year} survey rounds/year
+                </p>
+              </div>
+              <span className="inline-flex px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 capitalize">
+                {client.subscription.status}
+              </span>
+            </div>
+
+            {/* Usage */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 border border-gray-200 rounded-lg">
+                <p className="text-sm text-gray-500">Board Members</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {client.usage?.member_count || 0}
+                  <span className="text-sm font-normal text-gray-500">
+                    {" / "}{client.subscription.member_limit}
+                  </span>
+                </p>
+                <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(100, ((client.usage?.member_count || 0) / client.subscription.member_limit) * 100)}%`,
+                      backgroundColor: ((client.usage?.member_count || 0) / client.subscription.member_limit) > 0.9
+                        ? "#EF4444" : "var(--cam-blue)"
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 border border-gray-200 rounded-lg">
+                <p className="text-sm text-gray-500">Survey Rounds This Year</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {client.usage?.survey_rounds_used || 0}
+                  <span className="text-sm font-normal text-gray-500">
+                    {" / "}{client.subscription.survey_cadence || client.subscription.survey_rounds_per_year}
+                  </span>
+                </p>
+                <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(100, ((client.usage?.survey_rounds_used || 0) / (client.subscription.survey_cadence || client.subscription.survey_rounds_per_year)) * 100)}%`,
+                      backgroundColor: ((client.usage?.survey_rounds_used || 0) / (client.subscription.survey_cadence || client.subscription.survey_rounds_per_year)) > 0.9
+                        ? "#EF4444" : "var(--cam-blue)"
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Survey Cadence */}
+            <div className="p-4 border border-gray-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Survey Cadence</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    How many times per year you survey your board members
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      const res = await fetch("/api/admin/account/cadence", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ survey_cadence: 2 }),
+                        credentials: "include"
+                      });
+                      if (res.ok) loadData();
+                      else {
+                        const data = await res.json();
+                        alert(data.error);
+                      }
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                      (client.subscription.survey_cadence || 2) === 2
+                        ? "text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                    style={(client.subscription.survey_cadence || 2) === 2 ? { backgroundColor: "var(--cam-blue)" } : {}}
+                  >
+                    2x / year
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const res = await fetch("/api/admin/account/cadence", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ survey_cadence: 4 }),
+                        credentials: "include"
+                      });
+                      if (res.ok) loadData();
+                      else {
+                        const data = await res.json();
+                        alert(data.error);
+                      }
+                    }}
+                    disabled={client.subscription.survey_rounds_per_year < 4}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                      client.subscription.survey_cadence === 4
+                        ? "text-white"
+                        : client.subscription.survey_rounds_per_year < 4
+                        ? "bg-gray-50 text-gray-300 cursor-not-allowed"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                    style={client.subscription.survey_cadence === 4 ? { backgroundColor: "var(--cam-blue)" } : {}}
+                    title={client.subscription.survey_rounds_per_year < 4 ? "Upgrade your plan to enable quarterly surveys" : ""}
+                  >
+                    4x / year
+                  </button>
+                </div>
+              </div>
+              {client.subscription.survey_rounds_per_year < 4 && (
+                <p className="text-xs text-gray-400 mt-2">
+                  Quarterly surveys available on Starter plan and above.
+                </p>
+              )}
+            </div>
+
+            {/* Upgrade prompt for free tier */}
+            {client.subscription.plan_name === "free" && (
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-sm text-gray-700">
+                  Need more capacity? Contact us to upgrade your plan.
+                </p>
+                <a
+                  href="mailto:support@camascent.com"
+                  className="text-sm font-semibold hover:underline"
+                  style={{ color: "var(--cam-blue)" }}
+                >
+                  Contact Sales
+                </a>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-gray-500">
+            No subscription information available. Contact support for assistance.
+          </p>
+        )}
       </div>
 
       <AddAdminUserModal

@@ -13,8 +13,7 @@ export default function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4"
-           style={{ background: "linear-gradient(135deg, #3B9FE7 0%, #1AB06E 100%)" }}>
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-brand-gradient">
         <div className="max-w-md w-full">
           <div className="text-center mb-8">
             <img
@@ -81,7 +80,7 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4"
-         style={{ background: "linear-gradient(135deg, #3B9FE7 0%, #1AB06E 100%)" }}>
+>
       <div className="max-w-md w-full">
         {/* Logo */}
         <div className="text-center mb-8">

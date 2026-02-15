@@ -113,8 +113,7 @@ export default function IdentifyPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-6"
-         style={{ background: "linear-gradient(135deg, #3B9FE7 0%, #1AB06E 100%)" }}>
+    <div className="flex items-center justify-center min-h-screen px-6 bg-brand-gradient">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img src="/CAMAscent.png" alt="CAM Ascent" className="w-80 mx-auto mb-4 object-contain drop-shadow-lg" />

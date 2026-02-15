@@ -45,6 +45,16 @@ router.post("/import", requireClientAdmin, upload.single("file"), async (req, re
 
   if (emailIdx === -1) return res.status(400).json({ error: "CSV must have an 'email' column" });
 
+  // Check member limit before import
+  const subscription = await db.get(
+    `SELECT sp.member_limit FROM client_subscriptions cs
+     JOIN subscription_plans sp ON sp.id = cs.plan_id
+     WHERE cs.client_id = ? AND cs.status = 'active'`,
+    [req.clientId]
+  );
+  const currentCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ?", [req.clientId]);
+  let remainingSlots = subscription ? subscription.member_limit - (currentCount?.count || 0) : Infinity;
+
   let created = 0;
   let updated = 0;
   const errors = [];
@@ -70,11 +80,16 @@ router.post("/import", requireClientAdmin, upload.single("file"), async (req, re
       );
       updated++;
     } else {
+      if (remainingSlots <= 0) {
+        errors.push(`Row ${i + 1}: board member limit reached, skipped`);
+        continue;
+      }
       await db.run(
         "INSERT INTO users (first_name, last_name, email, community_name, management_company, client_id) VALUES (?, ?, ?, ?, ?, ?)",
         [firstName, lastName, email, community, company, req.clientId]
       );
       created++;
+      remainingSlots--;
     }
   }
 
@@ -87,6 +102,22 @@ router.post("/", requireClientAdmin, async (req, res) => {
   const trimmedEmail = (email || "").trim().toLowerCase();
   if (!trimmedEmail || !trimmedEmail.includes("@")) {
     return res.status(400).json({ error: "Valid email is required" });
+  }
+
+  // Check member limit
+  const subscription = await db.get(
+    `SELECT sp.member_limit FROM client_subscriptions cs
+     JOIN subscription_plans sp ON sp.id = cs.plan_id
+     WHERE cs.client_id = ? AND cs.status = 'active'`,
+    [req.clientId]
+  );
+  if (subscription) {
+    const currentCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ?", [req.clientId]);
+    if ((currentCount?.count || 0) >= subscription.member_limit) {
+      return res.status(403).json({
+        error: `Board member limit reached (${subscription.member_limit}). Please upgrade your plan to add more members.`
+      });
+    }
   }
 
   const existing = await db.get("SELECT id FROM users WHERE LOWER(email) = ? AND client_id = ?", [trimmedEmail, req.clientId]);

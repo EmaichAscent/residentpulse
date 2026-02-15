@@ -36,8 +36,7 @@ export default function ClientAdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4"
-         style={{ background: "linear-gradient(135deg, #3B9FE7 0%, #1AB06E 100%)" }}>
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-brand-gradient">
       <div className="max-w-md w-full">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -107,11 +106,24 @@ export default function ClientAdminLoginPage() {
                 Forgot your password?
               </Link>
             </div>
+
+            <div className="text-center mt-3">
+              <Link
+                to="/admin/signup"
+                className="text-sm font-semibold hover:underline"
+                style={{ color: "var(--cam-green)" }}
+              >
+                Don't have an account? Sign up free
+              </Link>
+            </div>
           </form>
         </div>
 
         <p className="text-center text-sm text-white/60 mt-6">
-          Need help? Contact your administrator
+          New to ResidentPulse?{" "}
+          <Link to="/admin/signup" className="text-white/80 hover:underline">
+            Create a free account
+          </Link>
         </p>
       </div>
     </div>

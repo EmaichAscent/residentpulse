@@ -70,6 +70,14 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
     return res.status(401).json({ error: "Invalid email or password" });
   }
 
+  // Check if client is pending email verification
+  if (admin.client_status === "pending") {
+    return res.status(403).json({
+      error: "Please verify your email before logging in. Check your inbox for the verification link.",
+      pending_verification: true
+    });
+  }
+
   // Check if client is active
   if (admin.client_status !== "active") {
     return res.status(403).json({ error: "Your account has been deactivated. Please contact support." });

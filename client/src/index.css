@@ -53,6 +53,10 @@
   .nps-ring {
     --tw-ring-color: var(--cam-blue);
   }
+
+  .bg-brand-gradient {
+    background: linear-gradient(135deg, var(--cam-blue) 0%, var(--cam-green) 100%);
+  }
 }
 
 body {

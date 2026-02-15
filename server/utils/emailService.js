@@ -215,4 +215,101 @@ export async function sendPasswordResetEmail(email, resetToken) {
   }
 }
 
-export default { sendInvitation, sendPasswordResetEmail };
+/**
+ * Build HTML email template for email verification
+ * @param {string} verifyLink - Full verification URL with token
+ * @returns {string} HTML email template
+ */
+function buildVerificationEmail(verifyLink) {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Verify Your Email</title>
+    </head>
+    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 40px 20px;">
+        <!-- Header -->
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #3B9FE7; font-size: 28px; margin: 0 0 10px 0;">ResidentPulse</h1>
+          <p style="color: #666666; font-size: 14px; margin: 0;">Powered by CAM Ascent</p>
+        </div>
+
+        <!-- Body -->
+        <h2 style="color: #3B9FE7; font-size: 24px; margin: 0 0 20px 0;">Verify Your Email</h2>
+
+        <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 15px 0;">
+          Thanks for signing up for ResidentPulse! Please click the button below to verify your email and activate your account.
+        </p>
+
+        <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
+          Once verified, you can log in and start collecting feedback from your board members.
+        </p>
+
+        <!-- CTA Button -->
+        <div style="text-align: center; margin: 40px 0;">
+          <a href="${verifyLink}"
+             style="display: inline-block;
+                    background-color: #3B9FE7;
+                    color: #ffffff;
+                    padding: 16px 32px;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    font-weight: bold;
+                    font-size: 16px;">
+            Verify Email
+          </a>
+        </div>
+
+        <!-- Footer -->
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+          <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0 0 10px 0;">
+            This link expires in 24 hours.
+          </p>
+          <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0;">
+            Questions? Contact support at support@camascent.com.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+/**
+ * Send email verification email via Resend
+ * @param {string} email - Recipient email address
+ * @param {string} token - Email verification token
+ * @returns {Promise<Object>} Resend response with email ID
+ */
+export async function sendVerificationEmail(email, token) {
+  const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
+  const verifyLink = `${baseUrl}/admin/verify-email?token=${token}`;
+
+  const emailHtml = buildVerificationEmail(verifyLink);
+
+  try {
+    const resendClient = getResendClient();
+    const { data, error } = await resendClient.emails.send({
+      from: "ResidentPulse <residentpulse@camascent.com>",
+      to: [email],
+      subject: "Verify your email - ResidentPulse",
+      html: emailHtml,
+    });
+
+    if (error) {
+      console.error("Resend API error:", error);
+      throw new Error(error.message || "Failed to send email");
+    }
+
+    console.log(`Verification email sent to ${email}, email ID: ${data.id}`);
+    return data;
+  } catch (err) {
+    console.error(`Failed to send verification email to ${email}:`, err.message);
+    throw err;
+  }
+}
+
+export default { sendInvitation, sendPasswordResetEmail, sendVerificationEmail };

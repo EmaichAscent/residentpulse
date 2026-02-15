@@ -47,6 +47,9 @@ export default function ClientList({ clients, onEdit, onToggleStatus, onImperson
                 Address
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Plan
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -63,7 +66,7 @@ export default function ClientList({ clients, onEdit, onToggleStatus, onImperson
           <tbody className="bg-white divide-y divide-gray-200">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan="6" className="px-6 py-8 text-center text-gray-400">
+                <td colSpan="7" className="px-6 py-8 text-center text-gray-400">
                   No clients found
                 </td>
               </tr>
@@ -78,11 +81,16 @@ export default function ClientList({ clients, onEdit, onToggleStatus, onImperson
                       {formatAddress(client)}
                     </div>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {client.plan_name || "—"}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
                       className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         client.status === "active"
                           ? "bg-green-100 text-green-800"
+                          : client.status === "pending"
+                          ? "bg-yellow-100 text-yellow-800"
                           : "bg-red-100 text-red-800"
                       }`}
                     >

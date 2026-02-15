@@ -11,6 +11,7 @@ import adminRoutes from "./routes/admin.js";
 import userRoutes from "./routes/users.js";
 import insightsRoutes from "./routes/insights.js";
 import authRoutes from "./routes/auth.js";
+import signupRoutes from "./routes/signup.js";
 import superadminRoutes from "./routes/superadmin.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -47,6 +48,9 @@ app.use(fileUpload());
 
 // Auth routes (login/logout)
 app.use("/api/auth", authRoutes);
+
+// Public signup routes
+app.use("/api/signup", signupRoutes);
 
 // SuperAdmin routes
 app.use("/api/superadmin", superadminRoutes);

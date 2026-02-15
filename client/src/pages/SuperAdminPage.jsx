@@ -10,12 +10,22 @@ export default function SuperAdminPage() {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
+  const [plans, setPlans] = useState([]);
+  const [editPlanId, setEditPlanId] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     checkAuth();
     loadClients();
+    loadPlans();
   }, []);
+
+  const loadPlans = async () => {
+    try {
+      const res = await fetch("/api/superadmin/plans", { credentials: "include" });
+      if (res.ok) setPlans(await res.json());
+    } catch {}
+  };
 
   const checkAuth = async () => {
     try {
@@ -96,8 +106,18 @@ export default function SuperAdminPage() {
     }
   };
 
-  const handleEditClient = (client) => {
+  const handleEditClient = async (client) => {
     setEditingClient(client);
+    // Load current subscription for this client
+    try {
+      const res = await fetch(`/api/superadmin/clients/${client.id}/subscription`, { credentials: "include" });
+      if (res.ok) {
+        const sub = await res.json();
+        setEditPlanId(sub?.plan_id || null);
+      }
+    } catch {
+      setEditPlanId(null);
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -121,7 +141,18 @@ export default function SuperAdminPage() {
 
       if (!response.ok) throw new Error("Failed to update client");
 
+      // Save subscription plan if changed
+      if (editPlanId) {
+        await fetch(`/api/superadmin/clients/${editingClient.id}/subscription`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan_id: editPlanId }),
+          credentials: "include"
+        });
+      }
+
       setEditingClient(null);
+      setEditPlanId(null);
       loadClients();
     } catch (err) {
       alert("Failed to update client: " + err.message);
@@ -293,9 +324,27 @@ export default function SuperAdminPage() {
               />
             </div>
 
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Subscription Plan
+              </label>
+              <select
+                value={editPlanId || ""}
+                onChange={(e) => setEditPlanId(Number(e.target.value))}
+                className="input-field"
+              >
+                <option value="">No plan assigned</option>
+                {plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.display_name} ({plan.member_limit.toLocaleString()} members, {plan.survey_rounds_per_year} rounds/yr)
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex gap-3">
               <button
-                onClick={() => setEditingClient(null)}
+                onClick={() => { setEditingClient(null); setEditPlanId(null); }}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
               >
                 Cancel
