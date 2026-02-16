@@ -114,10 +114,14 @@ async function initializeSchema() {
         email TEXT NOT NULL,
         community_name TEXT,
         management_company TEXT,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(email, client_id)
       )
     `);
+
+    // Add active column to existing users tables
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`);
 
     // Add password reset columns to client_admins
     await client.query(`ALTER TABLE client_admins ADD COLUMN IF NOT EXISTS password_reset_token TEXT`);

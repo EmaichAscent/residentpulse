@@ -403,14 +403,14 @@ router.post("/:id/launch", async (req, res) => {
       return res.status(400).json({ error: "Another survey round is already in progress. Wait for it to conclude before launching a new one." });
     }
 
-    // Get all board members
+    // Get active board members only
     const members = await db.all(
-      "SELECT id, email, first_name, last_name, community_name, management_company FROM users WHERE client_id = ?",
+      "SELECT id, email, first_name, last_name, community_name, management_company FROM users WHERE client_id = ? AND active = TRUE",
       [req.clientId]
     );
 
     if (members.length === 0) {
-      return res.status(400).json({ error: "No board members found. Add board members before launching a survey round." });
+      return res.status(400).json({ error: "No active board members found. Add board members before launching a survey round." });
     }
 
     // Calculate close date (30 days from now)

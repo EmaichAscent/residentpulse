@@ -33,7 +33,7 @@ router.get("/dashboard", async (req, res) => {
     const activeClients = await db.get("SELECT COUNT(*) as count FROM clients WHERE status = 'active'");
     const activeRounds = await db.get("SELECT COUNT(*) as count FROM survey_rounds WHERE status = 'in_progress'");
     const totalResponses = await db.get("SELECT COUNT(*) as count FROM sessions WHERE completed = TRUE");
-    const totalMembers = await db.get("SELECT COUNT(*) as count FROM users");
+    const totalMembers = await db.get("SELECT COUNT(*) as count FROM users WHERE active = TRUE");
 
     // Engagement warnings: clients with no admin login in 30+ days (or never)
     const warnings = await db.all(
@@ -346,7 +346,7 @@ router.get("/clients/:id/diagnostics", async (req, res) => {
 
     // 2. All board members (users) for this client
     const users = await db.all(
-      "SELECT id, email, first_name, last_name, client_id, invitation_token, invitation_token_expires, last_invited_at FROM users WHERE client_id = ?",
+      "SELECT id, email, first_name, last_name, client_id, active, invitation_token, invitation_token_expires, last_invited_at FROM users WHERE client_id = ?",
       [clientId]
     );
 
@@ -462,9 +462,9 @@ router.get("/clients/:id/detail", async (req, res) => {
     );
 
     // Member + community counts
-    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ?", [clientId]);
+    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE", [clientId]);
     const communityCount = await db.get(
-      "SELECT COUNT(DISTINCT community_name) as count FROM users WHERE client_id = ? AND community_name IS NOT NULL",
+      "SELECT COUNT(DISTINCT community_name) as count FROM users WHERE client_id = ? AND community_name IS NOT NULL AND active = TRUE",
       [clientId]
     );
 

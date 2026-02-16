@@ -78,7 +78,7 @@ router.get("/account", async (req, res) => {
 
   // Current member count
   const memberCount = await db.get(
-    "SELECT COUNT(*) as count FROM users WHERE client_id = ?",
+    "SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE",
     [req.clientId]
   );
 
@@ -164,7 +164,7 @@ router.patch("/account/cadence", async (req, res) => {
 // Get board members (users table) for current client
 router.get("/board-members", async (req, res) => {
   const users = await db.all(
-    "SELECT id, first_name, last_name, email, community_name, management_company, updated_at FROM users WHERE client_id = ? ORDER BY email",
+    "SELECT id, first_name, last_name, email, community_name, management_company, active, updated_at FROM users WHERE client_id = ? AND active = TRUE ORDER BY email",
     [req.clientId]
   );
   res.json(users);
@@ -181,9 +181,20 @@ router.post("/board-members", async (req, res) => {
   const cleanEmail = email.toLowerCase().trim();
 
   // Check if email already exists for this client
-  const existing = await db.get("SELECT id FROM users WHERE email = ? AND client_id = ?", [cleanEmail, req.clientId]);
-  if (existing) {
+  // Check if email exists (including inactive — reactivate if so)
+  const existing = await db.get("SELECT id, active FROM users WHERE email = ? AND client_id = ?", [cleanEmail, req.clientId]);
+  if (existing && existing.active) {
     return res.status(400).json({ error: "A board member with this email already exists" });
+  }
+
+  if (existing && !existing.active) {
+    // Reactivate previously removed board member
+    await db.run(
+      "UPDATE users SET active = TRUE, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [first_name || null, last_name || null, community_name || null, management_company || null, existing.id]
+    );
+    const reactivated = await db.get("SELECT * FROM users WHERE id = ?", [existing.id]);
+    return res.json(reactivated);
   }
 
   const result = await db.run(
@@ -227,7 +238,7 @@ router.put("/board-members/:id", async (req, res) => {
   res.json(updatedUser);
 });
 
-// Delete board member
+// Deactivate board member (soft-delete — preserves historical survey data)
 router.delete("/board-members/:id", async (req, res) => {
   const { id } = req.params;
 
@@ -237,7 +248,7 @@ router.delete("/board-members/:id", async (req, res) => {
     return res.status(404).json({ error: "Board member not found" });
   }
 
-  await db.run("DELETE FROM users WHERE id = ?", [id]);
+  await db.run("UPDATE users SET active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
   res.json({ ok: true });
 });
 
@@ -287,11 +298,11 @@ router.post("/board-members/import", async (req, res) => {
       const management_company = companyIndex >= 0 ? values[companyIndex] || null : null;
 
       try {
-        const existing = await db.get("SELECT id FROM users WHERE email = ? AND client_id = ?", [email, req.clientId]);
+        const existing = await db.get("SELECT id, active FROM users WHERE email = ? AND client_id = ?", [email, req.clientId]);
 
         if (existing) {
           await db.run(
-            "UPDATE users SET first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE users SET first_name = ?, last_name = ?, community_name = ?, management_company = ?, active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             [first_name, last_name, community_name, management_company, existing.id]
           );
           updated++;

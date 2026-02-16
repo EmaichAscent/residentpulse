@@ -20,7 +20,7 @@ router.get("/validate", async (req, res) => {
 // List all users (admin) - filtered by client
 router.get("/", requireClientAdmin, async (req, res) => {
   const users = await db.all(
-    "SELECT * FROM users WHERE client_id = ? ORDER BY updated_at DESC",
+    "SELECT * FROM users WHERE client_id = ? AND active = TRUE ORDER BY updated_at DESC",
     [req.clientId]
   );
   res.json(users);
@@ -52,7 +52,7 @@ router.post("/import", requireClientAdmin, upload.single("file"), async (req, re
      WHERE cs.client_id = ? AND cs.status = 'active'`,
     [req.clientId]
   );
-  const currentCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ?", [req.clientId]);
+  const currentCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE", [req.clientId]);
   let remainingSlots = subscription ? subscription.member_limit - (currentCount?.count || 0) : Infinity;
 
   let created = 0;
@@ -72,10 +72,10 @@ router.post("/import", requireClientAdmin, upload.single("file"), async (req, re
     const firstName = firstNameIdx >= 0 ? (cols[firstNameIdx] || "").trim() : "";
     const lastName = lastNameIdx >= 0 ? (cols[lastNameIdx] || "").trim() : "";
 
-    const existing = await db.get("SELECT id FROM users WHERE LOWER(email) = ? AND client_id = ?", [email, req.clientId]);
+    const existing = await db.get("SELECT id, active FROM users WHERE LOWER(email) = ? AND client_id = ?", [email, req.clientId]);
     if (existing) {
       await db.run(
-        "UPDATE users SET first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        "UPDATE users SET first_name = ?, last_name = ?, community_name = ?, management_company = ?, active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         [firstName, lastName, community, company, existing.id]
       );
       updated++;
@@ -112,7 +112,7 @@ router.post("/", requireClientAdmin, async (req, res) => {
     [req.clientId]
   );
   if (subscription) {
-    const currentCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ?", [req.clientId]);
+    const currentCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE", [req.clientId]);
     if ((currentCount?.count || 0) >= subscription.member_limit) {
       return res.status(403).json({
         error: `Board member limit reached (${subscription.member_limit}). Please upgrade your plan to add more members.`
@@ -120,9 +120,19 @@ router.post("/", requireClientAdmin, async (req, res) => {
     }
   }
 
-  const existing = await db.get("SELECT id FROM users WHERE LOWER(email) = ? AND client_id = ?", [trimmedEmail, req.clientId]);
-  if (existing) {
+  // Check if email exists (including inactive — reactivate if so)
+  const existing = await db.get("SELECT id, active FROM users WHERE LOWER(email) = ? AND client_id = ?", [trimmedEmail, req.clientId]);
+  if (existing && existing.active) {
     return res.status(409).json({ error: "A user with this email already exists" });
+  }
+
+  if (existing && !existing.active) {
+    await db.run(
+      "UPDATE users SET active = TRUE, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [(first_name || "").trim(), (last_name || "").trim(), (community_name || "").trim(), (management_company || "").trim(), existing.id]
+    );
+    const reactivated = await db.get("SELECT * FROM users WHERE id = ?", [existing.id]);
+    return res.json(reactivated);
   }
 
   await db.run(
@@ -173,7 +183,7 @@ router.put("/:id", requireClientAdmin, async (req, res) => {
   res.json(updated);
 });
 
-// Delete user (admin) - scoped to client
+// Deactivate user (admin) - soft-delete, preserves historical survey data
 router.delete("/:id", requireClientAdmin, async (req, res) => {
   const id = Number(req.params.id);
 
@@ -183,7 +193,7 @@ router.delete("/:id", requireClientAdmin, async (req, res) => {
     return res.status(404).json({ error: "User not found" });
   }
 
-  await db.run("DELETE FROM users WHERE id = ?", [id]);
+  await db.run("UPDATE users SET active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
   res.json({ ok: true });
 });
 
