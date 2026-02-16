@@ -113,43 +113,112 @@ export default function IdentifyPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-6 bg-brand-gradient">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <img src="/CAMAscent.png" alt="CAM Ascent" className="w-80 mx-auto mb-4 object-contain drop-shadow-lg" />
-          <h1 className="text-2xl font-bold text-white tracking-wide mb-2">ResidentPulse</h1>
-          <p className="text-white/80">
-            Help us improve your community experience. Share your feedback in a quick conversation.
-          </p>
-        </div>
+    <div className="min-h-screen relative">
+      {/* Hero background image with overlay */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/hero-community.jpg')" }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900/85 via-gray-900/75 to-gray-800/80" />
+      </div>
 
-        <div className="bg-white shadow-2xl rounded-2xl p-8">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-lg font-medium text-gray-700 mb-2">
-                Your Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="board.member@example.com"
-                className="input-field"
-                autoFocus
-              />
+      <div className="relative flex flex-col lg:flex-row items-center justify-center min-h-screen px-4 py-8 gap-8 lg:gap-16 max-w-6xl mx-auto">
+
+        {/* Left: Why your voice matters */}
+        <div className="flex-1 max-w-lg text-center lg:text-left">
+          <h1 className="text-4xl lg:text-5xl font-extrabold text-white tracking-tight mb-2">
+            ResidentPulse
+          </h1>
+          <a href="https://camascent.com" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center lg:justify-start gap-2 mb-6 text-white/70 hover:text-white/90 transition-colors">
+            <span className="text-base font-medium">Powered by</span>
+            <img src="/CAMAscent.png" alt="CAM Ascent" className="h-8 object-contain" />
+            <span className="text-base font-semibold">CAM Ascent Analytical Insights</span>
+          </a>
+          <h2 className="text-xl lg:text-3xl font-bold text-white leading-tight mb-3 lg:mb-4">
+            Your voice shapes your community.
+          </h2>
+          <p className="hidden lg:block text-white/80 text-lg mb-6">
+            As a board member, you have a unique perspective on what's working
+            and what could be better. This short conversation helps your management
+            company understand your priorities and take meaningful action.
+          </p>
+          <p className="lg:hidden text-white/80 text-sm mb-4">
+            Your perspective as a board member matters. This quick conversation
+            helps improve services for your community.
+          </p>
+
+          <div className="space-y-3 lg:space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: "var(--cam-green)" }}>
+                <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-white font-semibold text-sm lg:text-base">Quick & Conversational</p>
+                <p className="text-white/60 text-sm hidden lg:block">Not a boring form — a friendly chat that takes just a few minutes.</p>
+              </div>
             </div>
 
-            {error && <p className="text-red-600 text-base font-medium">{error}</p>}
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: "var(--cam-green)" }}>
+                <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-white font-semibold text-sm lg:text-base">Your Feedback Drives Change</p>
+                <p className="text-white/60 text-sm hidden lg:block">Responses are reviewed by your management team and used to improve services for your community.</p>
+              </div>
+            </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary mt-2"
-            >
-              {loading ? "Verifying..." : "Start Feedback Session"}
-            </button>
-          </form>
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: "var(--cam-green)" }}>
+                <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-white font-semibold text-sm lg:text-base">Confidential & Secure</p>
+                <p className="text-white/60 text-sm hidden lg:block">Your individual responses are never shared publicly — only aggregated insights reach the team.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Email entry card */}
+        <div className="w-full max-w-md">
+          <div className="bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl p-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Ready to share your feedback?</h2>
+            <p className="text-sm text-gray-500 mb-6">Enter your email to start a quick conversation about your community experience.</p>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                  Your Email Address
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="board.member@example.com"
+                  className="input-field"
+                  autoFocus
+                />
+              </div>
+
+              {error && <p className="text-red-600 text-base font-medium">{error}</p>}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary mt-2"
+              >
+                {loading ? "Verifying..." : "Start Feedback Session"}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
 
