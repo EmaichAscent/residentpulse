@@ -18,12 +18,13 @@ export default function PromptEditor({ isSuperAdmin = false }) {
     setSaving(true);
     setSaved(false);
     try {
-      await fetch(`${apiBase}/prompt`, {
+      const res = await fetch(`${apiBase}/prompt`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
         credentials: "include"
       });
+      if (!res.ok) throw new Error("Save failed");
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch {

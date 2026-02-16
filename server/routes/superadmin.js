@@ -259,13 +259,26 @@ router.put("/prompt", async (req, res) => {
     return res.status(400).json({ error: "Prompt is required" });
   }
 
-  // Update global prompt (client_id = NULL)
-  await db.run(
-    "INSERT OR REPLACE INTO settings (key, value, client_id) VALUES ('system_prompt', ?, NULL)",
-    [prompt]
-  );
+  try {
+    // Try UPDATE first (row seeded on startup)
+    const result = await db.run(
+      "UPDATE settings SET value = ? WHERE key = 'system_prompt' AND client_id IS NULL",
+      [prompt]
+    );
 
-  res.json({ ok: true });
+    // If no row existed, insert it
+    if (!result.changes) {
+      await db.run(
+        "INSERT INTO settings (key, value, client_id) VALUES ('system_prompt', ?, NULL)",
+        [prompt]
+      );
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error saving prompt:", err);
+    res.status(500).json({ error: "Failed to save prompt" });
+  }
 });
 
 // Get all subscription plans

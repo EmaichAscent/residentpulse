@@ -45,6 +45,40 @@
     @apply max-w-[80%] px-5 py-4 rounded-2xl rounded-bl-md text-lg leading-relaxed text-gray-900 bg-white border border-gray-200 shadow-sm;
   }
 
+  /* Compact variants for admin interview UI */
+  .btn-primary-sm {
+    @apply w-full py-2.5 px-4 text-sm font-semibold text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--cam-blue);
+  }
+  .btn-primary-sm:hover {
+    background-color: var(--cam-blue-dark);
+  }
+
+  .btn-send-sm {
+    @apply px-4 py-2.5 text-sm font-semibold text-white rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed;
+    background-color: var(--cam-blue);
+  }
+  .btn-send-sm:hover {
+    background-color: var(--cam-blue-dark);
+  }
+
+  .input-field-sm {
+    @apply w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg outline-none transition;
+  }
+  .input-field-sm:focus {
+    border-color: var(--cam-blue);
+    box-shadow: 0 0 0 2px rgba(59, 159, 231, 0.15);
+  }
+
+  .bubble-user-sm {
+    @apply max-w-[85%] px-4 py-2.5 rounded-2xl rounded-br-sm text-sm leading-relaxed text-white;
+    background-color: var(--cam-blue);
+  }
+
+  .bubble-assistant-sm {
+    @apply max-w-[85%] px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm leading-relaxed text-gray-800 bg-white border border-gray-200 shadow-sm;
+  }
+
   .nps-selected-high {
     background-color: var(--cam-green);
     @apply text-white;
