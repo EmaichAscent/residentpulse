@@ -579,4 +579,59 @@ router.get("/clients/:id/activity", async (req, res) => {
   }
 });
 
+// Reset client (dev/testing) — wipes interviews, prompt, rounds, sessions but keeps board members
+router.post("/clients/:id/reset", async (req, res) => {
+  const clientId = Number(req.params.id);
+
+  try {
+    const client = await db.get("SELECT company_name FROM clients WHERE id = ?", [clientId]);
+    if (!client) return res.status(404).json({ error: "Client not found" });
+
+    // 1. Delete messages for all sessions belonging to this client
+    await db.run(
+      "DELETE FROM messages WHERE session_id IN (SELECT id FROM sessions WHERE client_id = ?)",
+      [clientId]
+    );
+
+    // 2. Delete sessions
+    await db.run("DELETE FROM sessions WHERE client_id = ?", [clientId]);
+
+    // 3. Delete critical alerts
+    await db.run("DELETE FROM critical_alerts WHERE client_id = ?", [clientId]);
+
+    // 4. Delete survey rounds
+    await db.run("DELETE FROM survey_rounds WHERE client_id = ?", [clientId]);
+
+    // 5. Delete admin interview messages, then interviews
+    await db.run(
+      "DELETE FROM admin_interview_messages WHERE interview_id IN (SELECT id FROM admin_interviews WHERE client_id = ?)",
+      [clientId]
+    );
+    await db.run("DELETE FROM admin_interviews WHERE client_id = ?", [clientId]);
+
+    // 6. Delete the prompt supplement setting
+    await db.run(
+      "DELETE FROM settings WHERE client_id = ? AND key = 'interview_prompt_supplement'",
+      [clientId]
+    );
+
+    // 7. Reset onboarding_completed on all client admins
+    await db.run(
+      "UPDATE client_admins SET onboarding_completed = FALSE WHERE client_id = ?",
+      [clientId]
+    );
+
+    // 8. Log the reset
+    await db.run(
+      "INSERT INTO activity_log (client_id, actor_email, action) VALUES (?, ?, ?)",
+      [clientId, req.session.user?.email || "superadmin", `Reset client "${client.company_name}" (interviews, rounds, sessions cleared)`]
+    );
+
+    res.json({ ok: true, message: `Client "${client.company_name}" has been reset. Board members preserved.` });
+  } catch (err) {
+    console.error("Client reset error:", err);
+    res.status(500).json({ error: "Failed to reset client" });
+  }
+});
+
 export default router;

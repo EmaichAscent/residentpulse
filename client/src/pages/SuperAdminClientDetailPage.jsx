@@ -15,6 +15,7 @@ export default function SuperAdminClientDetailPage() {
   const [expandedInterview, setExpandedInterview] = useState(null);
   const [transcriptMessages, setTranscriptMessages] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     Promise.all([loadDetail(), loadInterviews(), loadPlans(), loadActivity()])
@@ -117,6 +118,29 @@ export default function SuperAdminClientDetailPage() {
     if (res.ok) window.location.href = "/admin";
   };
 
+  const handleReset = async () => {
+    if (!confirm(`RESET "${detail.client.company_name}"?\n\nThis will delete:\n- Admin interviews & generated prompt\n- All survey rounds\n- All board member sessions & responses\n- Critical alerts\n\nBoard members will be preserved.\nAdmins will need to redo onboarding.\n\nThis cannot be undone.`)) return;
+
+    setResetting(true);
+    try {
+      const res = await fetch(`/api/superadmin/clients/${id}/reset`, {
+        method: "POST",
+        credentials: "include"
+      });
+      if (res.ok) {
+        alert("Client has been reset. Board members preserved.");
+        await Promise.all([loadDetail(), loadInterviews(), loadActivity()]);
+      } else {
+        const data = await res.json();
+        alert("Reset failed: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      alert("Reset failed: " + err.message);
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const formatDate = (d) => d ? new Date(d).toLocaleDateString() : "—";
   const formatDateTime = (d) => d ? new Date(d).toLocaleString() : "Never";
 
@@ -150,6 +174,10 @@ export default function SuperAdminClientDetailPage() {
             <p className="text-sm text-white/60">{client.client_code}</p>
           </div>
           <div className="flex gap-2">
+            <button onClick={handleReset} disabled={resetting}
+              className="px-3 py-1.5 text-xs font-medium text-red-200 border border-red-300/40 rounded-lg hover:bg-red-500/20 disabled:opacity-40">
+              {resetting ? "Resetting..." : "Reset"}
+            </button>
             <button onClick={handleImpersonate} disabled={client.status !== "active"}
               className="px-3 py-1.5 text-xs font-medium text-white border border-white/40 rounded-lg hover:bg-white/10 disabled:opacity-40">
               Impersonate
@@ -199,41 +227,41 @@ export default function SuperAdminClientDetailPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-gray-500">Company Name</label>
-                  <input type="text" value={editData.company_name || ""} onChange={(e) => setEditData({...editData, company_name: e.target.value})} className="input-field mt-1" />
+                  <input type="text" value={editData.company_name || ""} onChange={(e) => setEditData({...editData, company_name: e.target.value})} className="input-field-sm mt-1" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500">Phone</label>
-                  <input type="tel" value={editData.phone_number || ""} onChange={(e) => setEditData({...editData, phone_number: e.target.value})} className="input-field mt-1" />
+                  <input type="tel" value={editData.phone_number || ""} onChange={(e) => setEditData({...editData, phone_number: e.target.value})} className="input-field-sm mt-1" />
                 </div>
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500">Address</label>
-                <input type="text" value={editData.address_line1 || ""} onChange={(e) => setEditData({...editData, address_line1: e.target.value})} className="input-field mt-1" placeholder="Street address" />
+                <input type="text" value={editData.address_line1 || ""} onChange={(e) => setEditData({...editData, address_line1: e.target.value})} className="input-field-sm mt-1" placeholder="Street address" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs font-medium text-gray-500">City</label>
-                  <input type="text" value={editData.city || ""} onChange={(e) => setEditData({...editData, city: e.target.value})} className="input-field mt-1" />
+                  <input type="text" value={editData.city || ""} onChange={(e) => setEditData({...editData, city: e.target.value})} className="input-field-sm mt-1" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500">State</label>
-                  <input type="text" value={editData.state || ""} onChange={(e) => setEditData({...editData, state: e.target.value})} className="input-field mt-1" maxLength="2" />
+                  <input type="text" value={editData.state || ""} onChange={(e) => setEditData({...editData, state: e.target.value})} className="input-field-sm mt-1" maxLength="2" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500">ZIP</label>
-                  <input type="text" value={editData.zip || ""} onChange={(e) => setEditData({...editData, zip: e.target.value})} className="input-field mt-1" />
+                  <input type="text" value={editData.zip || ""} onChange={(e) => setEditData({...editData, zip: e.target.value})} className="input-field-sm mt-1" />
                 </div>
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500">Subscription Plan</label>
-                <select value={editPlanId || ""} onChange={(e) => setEditPlanId(Number(e.target.value))} className="input-field mt-1">
+                <select value={editPlanId || ""} onChange={(e) => setEditPlanId(Number(e.target.value))} className="input-field-sm mt-1">
                   <option value="">No plan</option>
                   {plans.map((p) => (
                     <option key={p.id} value={p.id}>{p.display_name} ({p.member_limit} members, {p.survey_rounds_per_year} rounds/yr)</option>
                   ))}
                 </select>
               </div>
-              <button onClick={handleSave} disabled={saving} className="btn-primary text-sm">
+              <button onClick={handleSave} disabled={saving} className="btn-primary-sm">
                 {saving ? "Saving..." : "Save Changes"}
               </button>
             </div>

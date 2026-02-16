@@ -107,115 +107,115 @@ export default function AccountSettings() {
     <div className="space-y-8">
       {/* Company Information */}
       <div className="bg-white shadow-md rounded-lg p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Company Information</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">Company Information</h2>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Company Name
-            </label>
-            <input
-              type="text"
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              className="input-field"
-            />
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Company Name
+              </label>
+              <input
+                type="text"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                className="input-field-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                className="input-field-sm"
+                placeholder="(555) 123-4567"
+              />
+            </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs font-medium text-gray-500 mb-1">
               Address Line 1
             </label>
             <input
               type="text"
               value={addressLine1}
               onChange={(e) => setAddressLine1(e.target.value)}
-              className="input-field"
+              className="input-field-sm"
               placeholder="Street address"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs font-medium text-gray-500 mb-1">
               Address Line 2
             </label>
             <input
               type="text"
               value={addressLine2}
               onChange={(e) => setAddressLine2(e.target.value)}
-              className="input-field"
+              className="input-field-sm"
               placeholder="Apartment, suite, etc. (optional)"
             />
           </div>
 
           <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
                 City
               </label>
               <input
                 type="text"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
-                className="input-field"
+                className="input-field-sm"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-xs font-medium text-gray-500 mb-1">
                 State
               </label>
               <input
                 type="text"
                 value={state}
                 onChange={(e) => setState(e.target.value)}
-                className="input-field"
+                className="input-field-sm"
                 maxLength="2"
                 placeholder="CA"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              ZIP Code
-            </label>
-            <input
-              type="text"
-              value={zip}
-              onChange={(e) => setZip(e.target.value)}
-              className="input-field"
-              maxLength="10"
-              placeholder="12345"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Phone Number
-            </label>
-            <input
-              type="tel"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              className="input-field"
-              placeholder="(555) 123-4567"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                ZIP Code
+              </label>
+              <input
+                type="text"
+                value={zip}
+                onChange={(e) => setZip(e.target.value)}
+                className="input-field-sm"
+                maxLength="10"
+                placeholder="12345"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 pt-1">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
                 Client ID
               </label>
               <p className="text-gray-900 font-mono text-sm">{client?.id}</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">
+              <label className="block text-xs font-medium text-gray-500 mb-1">
                 Status
               </label>
               <span
-                className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
                   client?.status === "active"
                     ? "bg-green-100 text-green-800"
                     : "bg-red-100 text-red-800"
@@ -224,22 +224,22 @@ export default function AccountSettings() {
                 {client?.status}
               </span>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-500 mb-1">
-              Created
-            </label>
-            <p className="text-gray-900 text-sm">
-              {client?.created_at ? new Date(client.created_at).toLocaleDateString() : "—"}
-            </p>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Created
+              </label>
+              <p className="text-gray-900 text-sm">
+                {client?.created_at ? new Date(client.created_at).toLocaleDateString() : "—"}
+              </p>
+            </div>
           </div>
 
           <div>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="btn-primary"
+              className="btn-primary-sm"
             >
               {saving ? "Saving..." : "Save Changes"}
             </button>
@@ -249,11 +249,12 @@ export default function AccountSettings() {
 
       {/* Admin Users */}
       <div className="bg-white shadow-md rounded-lg p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-900">Admin Users</h2>
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">Admin Users</h2>
           <button
             onClick={() => setShowAddUserModal(true)}
-            className="btn-primary"
+            className="px-3 py-1.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90"
+            style={{ backgroundColor: "var(--cam-blue)" }}
           >
             Add Admin User
           </button>
@@ -264,14 +265,14 @@ export default function AccountSettings() {
 
       {/* Subscription */}
       <div className="bg-white shadow-md rounded-lg p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Subscription</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">Subscription</h2>
 
         {client?.subscription ? (
           <div className="space-y-4">
             {/* Current Plan */}
             <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm font-semibold text-gray-900">
                   {client.subscription.plan_display_name} Plan
                 </p>
                 <p className="text-sm text-gray-600">
@@ -289,7 +290,7 @@ export default function AccountSettings() {
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 border border-gray-200 rounded-lg">
                 <p className="text-sm text-gray-500">Board Members</p>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-lg font-bold text-gray-900">
                   {client.usage?.member_count || 0}
                   <span className="text-sm font-normal text-gray-500">
                     {" / "}{client.subscription.member_limit}
@@ -309,7 +310,7 @@ export default function AccountSettings() {
 
               <div className="p-4 border border-gray-200 rounded-lg">
                 <p className="text-sm text-gray-500">Survey Rounds This Year</p>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-lg font-bold text-gray-900">
                   {client.usage?.survey_rounds_used || 0}
                   <span className="text-sm font-normal text-gray-500">
                     {" / "}{client.subscription.survey_cadence || client.subscription.survey_rounds_per_year}
