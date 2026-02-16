@@ -252,4 +252,78 @@ router.patch("/clients/:id/subscription", async (req, res) => {
   res.json({ ok: true });
 });
 
+// Diagnostic endpoint to investigate client data issues
+router.get("/clients/:id/diagnostics", async (req, res) => {
+  const clientId = Number(req.params.id);
+
+  try {
+    // 1. Client info
+    const client = await db.get("SELECT * FROM clients WHERE id = ?", [clientId]);
+    if (!client) {
+      return res.status(404).json({ error: "Client not found" });
+    }
+
+    // 2. All board members (users) for this client
+    const users = await db.all(
+      "SELECT id, email, first_name, last_name, client_id, invitation_token, invitation_token_expires, last_invited_at FROM users WHERE client_id = ?",
+      [clientId]
+    );
+
+    // 3. All sessions for this client_id
+    const sessionsByClientId = await db.all(
+      "SELECT id, email, client_id, user_id, round_id, nps_score, completed, created_at, summary FROM sessions WHERE client_id = ?",
+      [clientId]
+    );
+
+    // 4. All sessions matching any of this client's user emails (regardless of client_id)
+    const userEmails = users.map(u => u.email);
+    let sessionsByEmail = [];
+    if (userEmails.length > 0) {
+      const placeholders = userEmails.map((_, i) => `$${i + 1}`).join(", ");
+      const result = await db.pool.query(
+        `SELECT id, email, client_id, user_id, round_id, nps_score, completed, created_at, summary FROM sessions WHERE LOWER(email) IN (${placeholders})`,
+        userEmails.map(e => e.toLowerCase())
+      );
+      sessionsByEmail = result.rows;
+    }
+
+    // 5. Sessions with NULL client_id (orphaned)
+    const orphanedSessions = await db.all(
+      "SELECT id, email, client_id, user_id, round_id, nps_score, completed, created_at FROM sessions WHERE client_id IS NULL"
+    );
+
+    // 6. Survey rounds for this client
+    const surveyRounds = await db.all(
+      "SELECT * FROM survey_rounds WHERE client_id = ?",
+      [clientId]
+    );
+
+    // 7. Invitation logs for this client
+    const invitationLogs = await db.all(
+      "SELECT il.*, u.email as user_email FROM invitation_logs il LEFT JOIN users u ON u.id = il.user_id WHERE il.client_id = ?",
+      [clientId]
+    );
+
+    // 8. Client admins
+    const admins = await db.all(
+      "SELECT id, email, client_id, created_at FROM client_admins WHERE client_id = ?",
+      [clientId]
+    );
+
+    res.json({
+      client,
+      admins,
+      users,
+      sessions_by_client_id: sessionsByClientId,
+      sessions_by_email: sessionsByEmail,
+      orphaned_sessions: orphanedSessions,
+      survey_rounds: surveyRounds,
+      invitation_logs: invitationLogs
+    });
+  } catch (err) {
+    console.error("Diagnostics error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
