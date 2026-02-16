@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import db from "./db.js";
 import { sendReminder } from "./utils/emailService.js";
+import { generateRoundInsights } from "./utils/insightGenerator.js";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -18,6 +19,11 @@ async function concludeExpiredRounds() {
       [round.id]
     );
     console.log(`Auto-concluded round ${round.round_number} for client ${round.client_id}`);
+
+    // Generate AI insights asynchronously
+    generateRoundInsights(round.id, round.client_id).catch((err) =>
+      console.error(`Failed to generate insights for round ${round.id}:`, err.message)
+    );
   }
 }
 

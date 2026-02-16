@@ -4,6 +4,7 @@ import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
 import { hashPassword, generatePassword } from "../utils/password.js";
 import { sendInvitation } from "../utils/emailService.js";
+import { logActivity } from "../utils/activityLog.js";
 
 const router = Router();
 
@@ -522,6 +523,92 @@ router.delete("/users/:id", async (req, res) => {
 
   await db.run("DELETE FROM client_admins WHERE id = ?", [id]);
   res.json({ ok: true });
+});
+
+// --- Critical Alerts ---
+
+// Get undismissed alerts for this client
+router.get("/alerts", async (req, res) => {
+  try {
+    const alerts = await db.all(
+      `SELECT ca.*,
+              u.first_name, u.last_name, u.email as user_email, u.community_name,
+              sr.round_number
+       FROM critical_alerts ca
+       LEFT JOIN users u ON u.id = ca.user_id
+       LEFT JOIN survey_rounds sr ON sr.id = ca.round_id
+       WHERE ca.client_id = ? AND ca.dismissed = FALSE
+       ORDER BY ca.created_at DESC`,
+      [req.clientId]
+    );
+    res.json(alerts);
+  } catch (err) {
+    console.error("Error fetching alerts:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get alerts for a specific round (including dismissed)
+router.get("/alerts/round/:roundId", async (req, res) => {
+  try {
+    const roundId = Number(req.params.roundId);
+
+    // Verify round belongs to client
+    const round = await db.get(
+      "SELECT id FROM survey_rounds WHERE id = ? AND client_id = ?",
+      [roundId, req.clientId]
+    );
+    if (!round) return res.status(404).json({ error: "Round not found" });
+
+    const alerts = await db.all(
+      `SELECT ca.*,
+              u.first_name, u.last_name, u.email as user_email, u.community_name
+       FROM critical_alerts ca
+       LEFT JOIN users u ON u.id = ca.user_id
+       WHERE ca.round_id = ? AND ca.client_id = ?
+       ORDER BY ca.created_at DESC`,
+      [roundId, req.clientId]
+    );
+    res.json(alerts);
+  } catch (err) {
+    console.error("Error fetching round alerts:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Dismiss an alert
+router.post("/alerts/:id/dismiss", async (req, res) => {
+  try {
+    const alertId = Number(req.params.id);
+    const { reason } = req.body;
+
+    const alert = await db.get(
+      "SELECT id FROM critical_alerts WHERE id = ? AND client_id = ?",
+      [alertId, req.clientId]
+    );
+    if (!alert) return res.status(404).json({ error: "Alert not found" });
+
+    await db.run(
+      "UPDATE critical_alerts SET dismissed = TRUE, dismissed_by = ?, dismissed_at = CURRENT_TIMESTAMP, dismiss_reason = ? WHERE id = ?",
+      [req.userId, reason || null, alertId]
+    );
+
+    await logActivity({
+      actorType: "client_admin",
+      actorId: req.userId,
+      actorEmail: req.userEmail,
+      action: "dismiss_alert",
+      entityType: "critical_alert",
+      entityId: alertId,
+      clientId: req.clientId,
+      metadata: { reason: reason || null }
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error dismissing alert:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

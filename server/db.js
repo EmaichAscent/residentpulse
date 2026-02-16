@@ -171,6 +171,16 @@ async function initializeSchema() {
       console.log("Admin interviews migration skipped (already applied or file not found)");
     }
 
+    // Run dashboard redesign migration (insights + critical alerts)
+    try {
+      const dashboardMigrationPath = join(__dirname, "migrations", "add-dashboard-redesign.sql");
+      const dashboardMigrationSQL = readFileSync(dashboardMigrationPath, "utf-8");
+      await client.query(dashboardMigrationSQL);
+      console.log("Dashboard redesign migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Dashboard redesign migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");
   } catch (err) {

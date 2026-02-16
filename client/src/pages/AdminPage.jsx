@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import ResponseList from "../components/ResponseList";
-import Dashboard from "../components/Dashboard";
 import UserManager from "../components/UserManager";
 import AccountSettings from "../components/AccountSettings";
+import RoundsLanding from "../components/RoundsLanding";
+import TrendsView from "../components/TrendsView";
+import RoundDashboard from "../components/RoundDashboard";
 
 export default function AdminPage() {
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState("rounds");
+  const [selectedRoundId, setSelectedRoundId] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -58,11 +61,15 @@ export default function AdminPage() {
         method: "POST",
         credentials: "include"
       });
-      // Force full page reload to pick up restored session
       window.location.href = "/superadmin";
     } catch (err) {
       console.error("Failed to exit impersonation:", err);
     }
+  };
+
+  const handleSelectRound = (roundId) => {
+    setSelectedRoundId(roundId);
+    setTab("rounds");
   };
 
   const filtered = useMemo(() => {
@@ -76,6 +83,14 @@ export default function AdminPage() {
         s.summary?.toLowerCase().includes(q)
     );
   }, [sessions, search]);
+
+  const TABS = [
+    { key: "rounds", label: "Rounds" },
+    { key: "trends", label: "Trends" },
+    { key: "users", label: "Board Members" },
+    { key: "responses", label: "Responses" },
+    { key: "account", label: "Account" },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -114,49 +129,39 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1">
-        <button
-          onClick={() => setTab("dashboard")}
-          className={`flex-1 py-3 text-lg font-medium rounded-lg transition ${
-            tab === "dashboard" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          Dashboard
-        </button>
-        <button
-          onClick={() => setTab("users")}
-          className={`flex-1 py-3 text-lg font-medium rounded-lg transition ${
-            tab === "users" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          Board Members
-        </button>
-        <button
-          onClick={() => setTab("responses")}
-          className={`flex-1 py-3 text-lg font-medium rounded-lg transition ${
-            tab === "responses" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          Responses
-        </button>
-        <button
-          onClick={() => setTab("account")}
-          className={`flex-1 py-3 text-lg font-medium rounded-lg transition ${
-            tab === "account" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          Account
-        </button>
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => {
+              setTab(t.key);
+              if (t.key !== "rounds") setSelectedRoundId(null);
+            }}
+            className={`flex-1 py-3 text-sm font-medium rounded-lg transition ${
+              tab === t.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {/* Content */}
-      {tab === "users" && <UserManager sessions={sessions} />}
-      {tab === "dashboard" && (
-        loading ? (
-          <p className="text-gray-400 text-center py-10">Loading data...</p>
+      {tab === "rounds" && (
+        selectedRoundId ? (
+          <RoundDashboard
+            roundId={selectedRoundId}
+            onBack={() => setSelectedRoundId(null)}
+          />
         ) : (
-          <Dashboard sessions={sessions} user={user} onNavigate={setTab} />
+          <RoundsLanding
+            user={user}
+            onSelectRound={handleSelectRound}
+            onNavigate={setTab}
+          />
         )
       )}
+      {tab === "trends" && <TrendsView />}
+      {tab === "users" && <UserManager sessions={sessions} />}
       {tab === "responses" && (
         <>
           <div className="mb-4">

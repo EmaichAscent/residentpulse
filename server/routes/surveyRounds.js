@@ -4,6 +4,7 @@ import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
 import { sendInvitation } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
+import { generateRoundInsights, computeLiveWordFrequencies } from "../utils/insightGenerator.js";
 
 const router = Router();
 router.use(requireClientAdmin);
@@ -87,6 +88,288 @@ router.post("/schedule", async (req, res) => {
     res.json(createdRounds);
   } catch (err) {
     console.error("Error scheduling rounds:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cross-round trends data (must be before /:id routes)
+router.get("/trends", async (req, res) => {
+  try {
+    const rounds = await db.all(
+      `SELECT sr.id, sr.round_number, sr.status, sr.launched_at, sr.concluded_at,
+              sr.members_invited, sr.insights_json, sr.word_frequencies
+       FROM survey_rounds sr
+       WHERE sr.client_id = ? AND sr.status IN ('in_progress', 'concluded')
+       ORDER BY sr.round_number`,
+      [req.clientId]
+    );
+
+    const trendsData = [];
+    for (const round of rounds) {
+      // Get session stats for this round
+      const sessions = await db.all(
+        `SELECT s.nps_score, s.community_name, s.completed
+         FROM sessions s
+         WHERE s.round_id = ? AND s.client_id = ?`,
+        [round.id, req.clientId]
+      );
+
+      const completed = sessions.filter((s) => s.completed);
+      const npsScores = completed.filter((s) => s.nps_score != null).map((s) => s.nps_score);
+      const promoters = npsScores.filter((n) => n >= 9).length;
+      const detractors = npsScores.filter((n) => n <= 6).length;
+      const npsScore = npsScores.length > 0
+        ? Math.round(((promoters - detractors) / npsScores.length) * 100)
+        : null;
+
+      // Community cohort: group by community, take median NPS, classify
+      const communities = {};
+      for (const s of completed) {
+        if (s.community_name && s.nps_score != null) {
+          if (!communities[s.community_name]) communities[s.community_name] = [];
+          communities[s.community_name].push(s.nps_score);
+        }
+      }
+
+      const cohorts = { promoter: 0, passive: 0, detractor: 0 };
+      const communityDetails = [];
+      for (const [name, scores] of Object.entries(communities)) {
+        scores.sort((a, b) => a - b);
+        const median = scores[Math.floor(scores.length / 2)];
+        const cohort = median >= 9 ? "promoter" : median >= 7 ? "passive" : "detractor";
+        cohorts[cohort]++;
+        communityDetails.push({ name, median, cohort, respondents: scores.length });
+      }
+
+      trendsData.push({
+        id: round.id,
+        round_number: round.round_number,
+        status: round.status,
+        launched_at: round.launched_at,
+        concluded_at: round.concluded_at,
+        nps_score: npsScore,
+        response_count: completed.length,
+        invited_count: round.members_invited || 0,
+        response_rate: round.members_invited > 0
+          ? Math.round((completed.length / round.members_invited) * 100)
+          : 0,
+        community_cohorts: cohorts,
+        community_details: communityDetails,
+        word_frequencies: round.word_frequencies ? JSON.parse(round.word_frequencies) : null,
+      });
+    }
+
+    res.json(trendsData);
+  } catch (err) {
+    console.error("Error fetching trends:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Round dashboard — single endpoint for all round data
+router.get("/:id/dashboard", async (req, res) => {
+  try {
+    const roundId = Number(req.params.id);
+
+    const round = await db.get(
+      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ?",
+      [roundId, req.clientId]
+    );
+    if (!round) return res.status(404).json({ error: "Round not found" });
+
+    // All sessions for this round
+    const sessions = await db.all(
+      `SELECT s.id, s.email, s.nps_score, s.completed, s.summary, s.community_name,
+              s.created_at, u.first_name, u.last_name
+       FROM sessions s
+       LEFT JOIN users u ON u.id = s.user_id
+       WHERE s.round_id = ? AND s.client_id = ?
+       ORDER BY s.created_at DESC`,
+      [roundId, req.clientId]
+    );
+
+    // Invited users (from invitation_logs)
+    const invitedUsers = await db.all(
+      `SELECT DISTINCT u.id, u.first_name, u.last_name, u.email, u.community_name
+       FROM invitation_logs il
+       JOIN users u ON u.id = il.user_id
+       WHERE il.round_id = ? AND il.email_status = 'sent'`,
+      [roundId]
+    );
+
+    // Non-responders: invited but no completed session
+    const completedUserIds = new Set(
+      sessions.filter((s) => s.completed).map((s) => s.email)
+    );
+    const nonResponders = invitedUsers.filter((u) => !completedUserIds.has(u.email));
+
+    // NPS calculations
+    const completedSessions = sessions.filter((s) => s.completed && s.nps_score != null);
+    const npsScores = completedSessions.map((s) => s.nps_score);
+    const promoters = npsScores.filter((n) => n >= 9).length;
+    const passives = npsScores.filter((n) => n >= 7 && n <= 8).length;
+    const detractors = npsScores.filter((n) => n <= 6).length;
+    const npsScore = npsScores.length > 0
+      ? Math.round(((promoters - detractors) / npsScores.length) * 100)
+      : null;
+
+    // Community cohorts
+    const communities = {};
+    for (const s of completedSessions) {
+      if (s.community_name) {
+        if (!communities[s.community_name]) communities[s.community_name] = [];
+        communities[s.community_name].push(s.nps_score);
+      }
+    }
+
+    const communityCohorts = [];
+    for (const [name, scores] of Object.entries(communities)) {
+      scores.sort((a, b) => a - b);
+      const median = scores[Math.floor(scores.length / 2)];
+      const cohort = median >= 9 ? "promoter" : median >= 7 ? "passive" : "detractor";
+      communityCohorts.push({ name, median, cohort, respondents: scores.length });
+    }
+
+    // Critical alerts for this round
+    const alerts = await db.all(
+      `SELECT ca.*, u.first_name, u.last_name, u.email as user_email, u.community_name as alert_community
+       FROM critical_alerts ca
+       LEFT JOIN users u ON u.id = ca.user_id
+       WHERE ca.round_id = ? AND ca.client_id = ?
+       ORDER BY ca.created_at DESC`,
+      [roundId, req.clientId]
+    );
+
+    // Word frequencies (stored for concluded, computed live for active)
+    let wordFrequencies = null;
+    if (round.word_frequencies) {
+      wordFrequencies = JSON.parse(round.word_frequencies);
+    } else if (round.status === "in_progress") {
+      // Compute live from user messages
+      const userMessages = await db.all(
+        `SELECT m.content
+         FROM messages m
+         JOIN sessions s ON s.id = m.session_id
+         WHERE s.round_id = ? AND s.client_id = ? AND m.role = 'user'`,
+        [roundId, req.clientId]
+      );
+      wordFrequencies = computeLiveWordFrequencies(userMessages);
+    }
+
+    // Insights (concluded rounds only)
+    const insights = round.insights_json ? JSON.parse(round.insights_json) : null;
+
+    res.json({
+      round: {
+        id: round.id,
+        round_number: round.round_number,
+        status: round.status,
+        scheduled_date: round.scheduled_date,
+        launched_at: round.launched_at,
+        closes_at: round.closes_at,
+        concluded_at: round.concluded_at,
+        members_invited: round.members_invited,
+        insights_generated_at: round.insights_generated_at,
+      },
+      nps: {
+        score: npsScore,
+        promoters,
+        passives,
+        detractors,
+        total: npsScores.length,
+      },
+      response_rate: {
+        completed: completedSessions.length,
+        invited: invitedUsers.length,
+        percentage: invitedUsers.length > 0
+          ? Math.round((completedSessions.length / invitedUsers.length) * 100)
+          : 0,
+      },
+      sessions,
+      non_responders: nonResponders,
+      community_cohorts: communityCohorts,
+      alerts,
+      word_frequencies: wordFrequencies,
+      insights,
+    });
+  } catch (err) {
+    console.error("Error fetching round dashboard:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Close a round early
+router.post("/:id/close", async (req, res) => {
+  try {
+    const roundId = Number(req.params.id);
+
+    const round = await db.get(
+      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ?",
+      [roundId, req.clientId]
+    );
+    if (!round) return res.status(404).json({ error: "Round not found" });
+    if (round.status !== "in_progress") {
+      return res.status(400).json({ error: "Only in-progress rounds can be closed" });
+    }
+
+    await db.run(
+      "UPDATE survey_rounds SET status = 'concluded', concluded_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [roundId]
+    );
+
+    await logActivity({
+      actorType: "client_admin",
+      actorId: req.userId,
+      actorEmail: req.userEmail,
+      action: "close_round_early",
+      entityType: "survey_round",
+      entityId: roundId,
+      clientId: req.clientId,
+      metadata: { round_number: round.round_number }
+    });
+
+    // Generate insights asynchronously
+    generateRoundInsights(roundId, req.clientId).catch((err) =>
+      console.error(`Failed to generate insights for round ${roundId}:`, err.message)
+    );
+
+    res.json({ ok: true, message: "Round closed. AI insights are being generated." });
+  } catch (err) {
+    console.error("Error closing round:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Regenerate insights for a concluded round
+router.post("/:id/regenerate-insights", async (req, res) => {
+  try {
+    const roundId = Number(req.params.id);
+
+    const round = await db.get(
+      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ?",
+      [roundId, req.clientId]
+    );
+    if (!round) return res.status(404).json({ error: "Round not found" });
+    if (round.status !== "concluded") {
+      return res.status(400).json({ error: "Insights can only be generated for concluded rounds" });
+    }
+
+    // Run synchronously so the admin gets the result
+    const insights = await generateRoundInsights(roundId, req.clientId);
+
+    await logActivity({
+      actorType: "client_admin",
+      actorId: req.userId,
+      actorEmail: req.userEmail,
+      action: "regenerate_insights",
+      entityType: "survey_round",
+      entityId: roundId,
+      clientId: req.clientId,
+    });
+
+    res.json({ ok: true, insights });
+  } catch (err) {
+    console.error("Error regenerating insights:", err);
     res.status(500).json({ error: err.message });
   }
 });

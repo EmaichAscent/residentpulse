@@ -74,12 +74,82 @@ router.post("/", async (req, res) => {
     // Save assistant message
     await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'assistant', ?)", [Number(session_id), assistantMessage]);
 
-    const saved = await db.get("SELECT created_at FROM messages WHERE session_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1", [Number(session_id)]);
-    res.json({ message: assistantMessage, timestamp: saved?.created_at });
+    // Get the saved message ID for alert linking
+    const savedMsg = await db.get(
+      "SELECT id, created_at FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at DESC LIMIT 1",
+      [Number(session_id)]
+    );
+
+    // Fire critical alert detection asynchronously (don't block the response)
+    detectCriticalAlert(message, session, savedMsg?.id).catch((err) =>
+      console.error("Critical alert detection error:", err.message)
+    );
+
+    res.json({ message: assistantMessage, timestamp: savedMsg?.created_at });
   } catch (err) {
     console.error("Anthropic API error:", err.message);
     res.status(500).json({ error: "Failed to get AI response" });
   }
 });
+
+/**
+ * Async critical alert detection — analyzes the board member's message
+ * for time-sensitive concerns (contract termination, legal threats, safety).
+ * Uses Haiku for speed. High threshold to avoid false positives.
+ */
+async function detectCriticalAlert(userMessage, session, messageId) {
+  // Skip short messages unlikely to contain actionable concerns
+  if (userMessage.length < 30) return;
+
+  const result = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 200,
+    system: `You are a critical alert detector for a property management NPS survey platform. Analyze the board member's message for URGENT, TIME-SENSITIVE concerns that require immediate management company attention.
+
+ONLY flag messages that contain:
+- Explicit intent to terminate/replace the management company (not just frustration)
+- Threats of legal action or lawsuits
+- Safety emergencies or hazardous conditions
+- Other issues requiring immediate intervention
+
+DO NOT flag: general complaints, low satisfaction, frustration, venting, suggestions for improvement, or anything that can wait for a normal report.
+
+Respond with JSON only:
+{"is_critical": false}
+or
+{"is_critical": true, "alert_type": "contract_termination|legal_threat|safety_concern|other_critical", "severity": "high|critical", "description": "Brief 1-sentence description of the concern"}`,
+    messages: [{ role: "user", content: userMessage }],
+  });
+
+  const text = result.content[0].text.trim();
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    // If JSON parsing fails, try to extract from markdown code block
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) parsed = JSON.parse(match[0]);
+    else return;
+  }
+
+  if (!parsed.is_critical) return;
+
+  await db.run(
+    `INSERT INTO critical_alerts (client_id, round_id, session_id, user_id, alert_type, severity, description, source_message_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      session.client_id,
+      session.round_id || null,
+      session.id,
+      session.user_id || null,
+      parsed.alert_type || "other_critical",
+      parsed.severity || "high",
+      parsed.description || "Critical concern detected in board member response",
+      messageId || null,
+    ]
+  );
+
+  console.log(`CRITICAL ALERT created for client ${session.client_id}, session ${session.id}: ${parsed.alert_type}`);
+}
 
 export default router;
