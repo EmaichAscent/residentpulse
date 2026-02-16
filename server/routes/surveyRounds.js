@@ -155,7 +155,7 @@ router.get("/trends", async (req, res) => {
           : 0,
         community_cohorts: cohorts,
         community_details: communityDetails,
-        word_frequencies: round.word_frequencies ? JSON.parse(round.word_frequencies) : null,
+        word_frequencies: round.word_frequencies || null,
       });
     }
 
@@ -243,7 +243,7 @@ router.get("/:id/dashboard", async (req, res) => {
     // Word frequencies (stored for concluded, computed live for active)
     let wordFrequencies = null;
     if (round.word_frequencies) {
-      wordFrequencies = JSON.parse(round.word_frequencies);
+      wordFrequencies = round.word_frequencies;
     } else if (round.status === "in_progress") {
       // Compute live from user messages
       const userMessages = await db.all(
@@ -257,7 +257,7 @@ router.get("/:id/dashboard", async (req, res) => {
     }
 
     // Insights (concluded rounds only)
-    const insights = round.insights_json ? JSON.parse(round.insights_json) : null;
+    const insights = round.insights_json || null;
 
     res.json({
       round: {
