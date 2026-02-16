@@ -108,11 +108,15 @@ async function detectCriticalAlert(userMessage, session, messageId) {
 
 ONLY flag messages that contain:
 - Explicit intent to terminate/replace the management company (not just frustration)
-- Threats of legal action or lawsuits
+- Threats of legal action BY THE BOARD MEMBER against the management company or community association — someone saying they personally plan to sue or hire an attorney to take action against management
 - Safety emergencies or hazardous conditions
 - Other issues requiring immediate intervention
 
-DO NOT flag: general complaints, low satisfaction, frustration, venting, suggestions for improvement, or anything that can wait for a normal report.
+DO NOT flag:
+- General complaints, low satisfaction, frustration, venting, or suggestions for improvement
+- Routine community legal matters: hiring attorneys for delinquencies/collections, covenant enforcement, lien filings, or any standard HOA legal process
+- Mentions of attorneys or legal processes that are normal community business, not directed as threats against the management company
+- Anything that can wait for a normal report
 
 Respond with JSON only:
 {"is_critical": false}
