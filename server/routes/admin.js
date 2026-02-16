@@ -5,6 +5,7 @@ import { requireClientAdmin } from "../middleware/auth.js";
 import { hashPassword, generatePassword } from "../utils/password.js";
 import { sendInvitation } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
+import { generateSummary } from "../utils/summaryGenerator.js";
 
 const router = Router();
 
@@ -607,6 +608,55 @@ router.post("/alerts/:id/dismiss", async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error("Error dismissing alert:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Session Finalization ---
+
+// Finalize an incomplete session (generate summary + mark complete)
+router.post("/sessions/:id/finalize", async (req, res) => {
+  try {
+    const sessionId = Number(req.params.id);
+
+    const session = await db.get(
+      "SELECT * FROM sessions WHERE id = ? AND client_id = ?",
+      [sessionId, req.clientId]
+    );
+    if (!session) return res.status(404).json({ error: "Session not found" });
+
+    if (session.completed) {
+      return res.status(400).json({ error: "Session is already completed" });
+    }
+
+    // Check it has enough data to finalize
+    const messageCount = await db.get(
+      "SELECT COUNT(*) as count FROM messages WHERE session_id = ? AND role = 'user'",
+      [sessionId]
+    );
+    if (!messageCount || messageCount.count < 2) {
+      return res.status(400).json({ error: "Session does not have enough conversation data to finalize" });
+    }
+
+    // Mark complete
+    await db.run("UPDATE sessions SET completed = TRUE WHERE id = ?", [sessionId]);
+
+    // Generate summary synchronously so admin sees the result
+    const summary = await generateSummary(sessionId);
+
+    await logActivity({
+      actorType: "client_admin",
+      actorId: req.userId,
+      actorEmail: req.userEmail,
+      action: "finalize_session",
+      entityType: "session",
+      entityId: sessionId,
+      clientId: req.clientId,
+    });
+
+    res.json({ ok: true, summary });
+  } catch (err) {
+    console.error("Error finalizing session:", err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -16,6 +16,7 @@ export default function RoundDashboard({ roundId, onBack }) {
   const [regenerating, setRegenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [dismissing, setDismissing] = useState(null);
+  const [finalizing, setFinalizing] = useState(null);
 
   useEffect(() => {
     loadDashboard();
@@ -116,6 +117,23 @@ export default function RoundDashboard({ roundId, onBack }) {
     }
   };
 
+  const handleFinalize = async (sessionId) => {
+    setFinalizing(sessionId);
+    try {
+      const res = await fetch(`/api/admin/sessions/${sessionId}/finalize`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        await loadDashboard();
+      }
+    } catch (err) {
+      console.error("Failed to finalize session:", err);
+    } finally {
+      setFinalizing(null);
+    }
+  };
+
   const formatDate = (d) =>
     d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
 
@@ -136,6 +154,7 @@ export default function RoundDashboard({ roundId, onBack }) {
   const dPct = nps.total > 0 ? Math.round((nps.detractors / nps.total) * 100) : 0;
 
   const completedSessions = sessions.filter((s) => s.completed);
+  const incompleteSessions = sessions.filter((s) => !s.completed && s.nps_score != null);
 
   // Community cohort chart data
   const cohortChartData = community_cohorts.map((c) => ({
@@ -420,6 +439,48 @@ export default function RoundDashboard({ roundId, onBack }) {
                 ) : (
                   <p className="text-sm text-gray-400 italic">Summary not yet available</p>
                 )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Incomplete Sessions (abandoned / in progress) */}
+      {incompleteSessions.length > 0 && (
+        <div className="bg-white rounded-xl border border-amber-200 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm font-semibold text-gray-700">
+              Incomplete Responses ({incompleteSessions.length})
+            </p>
+            <p className="text-xs text-gray-400">
+              These board members started but didn't finish. Finalize to include their feedback.
+            </p>
+          </div>
+          <div className="space-y-3">
+            {incompleteSessions.map((s) => (
+              <div key={s.id} className="border border-amber-100 bg-amber-50/50 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-medium text-gray-900">
+                      {s.first_name || s.last_name ? `${s.first_name || ""} ${s.last_name || ""}`.trim() : s.email}
+                    </span>
+                    {s.community_name && (
+                      <span className="text-sm text-gray-500 ml-2">({s.community_name})</span>
+                    )}
+                    <span className="text-xs text-gray-400 ml-2">NPS: {s.nps_score}</span>
+                  </div>
+                  <button
+                    onClick={() => handleFinalize(s.id)}
+                    disabled={finalizing === s.id}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg transition disabled:opacity-50 text-white"
+                    style={{ backgroundColor: "var(--cam-blue)" }}
+                  >
+                    {finalizing === s.id ? "Finalizing..." : "Finalize"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

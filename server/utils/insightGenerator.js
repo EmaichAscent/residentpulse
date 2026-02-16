@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
+import { generateSummary } from "./summaryGenerator.js";
 
 const anthropic = new Anthropic();
 const MODEL = "claude-sonnet-4-5-20250929";
@@ -35,6 +36,9 @@ const STOP_WORDS = new Set([
  */
 export async function generateRoundInsights(roundId, clientId) {
   console.log(`Generating insights for round ${roundId}, client ${clientId}...`);
+
+  // Auto-finalize abandoned sessions before generating insights
+  await finalizeStaleSessionsForRound(roundId, clientId);
 
   // Fetch completed sessions with summaries for this round
   const sessions = await db.all(
@@ -293,4 +297,33 @@ export function computeLiveWordFrequencies(messages) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 60)
     .map(([word, count]) => ({ word, count }));
+}
+
+/**
+ * Auto-finalize abandoned sessions for a round.
+ * Criteria: has NPS score + at least 2 user messages + not completed.
+ * Generates a summary and marks as complete.
+ */
+async function finalizeStaleSessionsForRound(roundId, clientId) {
+  const staleSessions = await db.all(
+    `SELECT s.id
+     FROM sessions s
+     WHERE s.round_id = ? AND s.client_id = ? AND s.completed = FALSE AND s.nps_score IS NOT NULL
+       AND (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id AND m.role = 'user') >= 2`,
+    [roundId, clientId]
+  );
+
+  if (staleSessions.length === 0) return;
+
+  console.log(`Auto-finalizing ${staleSessions.length} abandoned session(s) for round ${roundId}`);
+
+  for (const session of staleSessions) {
+    try {
+      await db.run("UPDATE sessions SET completed = TRUE WHERE id = ?", [session.id]);
+      await generateSummary(session.id);
+      console.log(`Auto-finalized session ${session.id}`);
+    } catch (err) {
+      console.error(`Failed to auto-finalize session ${session.id}:`, err.message);
+    }
+  }
 }

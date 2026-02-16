@@ -1,6 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import ResponseList from "../components/ResponseList";
 import UserManager from "../components/UserManager";
 import AccountSettings from "../components/AccountSettings";
 import RoundsLanding from "../components/RoundsLanding";
@@ -10,15 +9,11 @@ import RoundDashboard from "../components/RoundDashboard";
 export default function AdminPage() {
   const [tab, setTab] = useState("rounds");
   const [selectedRoundId, setSelectedRoundId] = useState(null);
-  const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     checkAuth();
-    loadSessions();
   }, []);
 
   const checkAuth = async () => {
@@ -36,14 +31,6 @@ export default function AdminPage() {
     } catch (err) {
       navigate("/admin/login");
     }
-  };
-
-  const loadSessions = () => {
-    fetch("/api/admin/responses", { credentials: "include" })
-      .then((r) => r.json())
-      .then((data) => setSessions(data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
   };
 
   const handleLogout = async () => {
@@ -72,23 +59,10 @@ export default function AdminPage() {
     setTab("rounds");
   };
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return sessions;
-    const q = search.toLowerCase();
-    return sessions.filter(
-      (s) =>
-        s.email?.toLowerCase().includes(q) ||
-        s.community_name?.toLowerCase().includes(q) ||
-        s.management_company?.toLowerCase().includes(q) ||
-        s.summary?.toLowerCase().includes(q)
-    );
-  }, [sessions, search]);
-
   const TABS = [
     { key: "rounds", label: "Rounds" },
     { key: "trends", label: "Trends" },
     { key: "users", label: "Board Members" },
-    { key: "responses", label: "Responses" },
     { key: "account", label: "Account" },
   ];
 
@@ -161,25 +135,7 @@ export default function AdminPage() {
         )
       )}
       {tab === "trends" && <TrendsView />}
-      {tab === "users" && <UserManager sessions={sessions} />}
-      {tab === "responses" && (
-        <>
-          <div className="mb-4">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by email, community, company, or summary..."
-              className="input-field"
-            />
-          </div>
-          {loading ? (
-            <p className="text-gray-400 text-center py-10">Loading responses...</p>
-          ) : (
-            <ResponseList sessions={filtered} onDelete={(id) => setSessions((prev) => prev.filter((s) => s.id !== id))} />
-          )}
-        </>
-      )}
+      {tab === "users" && <UserManager />}
       {tab === "account" && <AccountSettings />}
       </div>
     </div>
