@@ -326,4 +326,34 @@ router.get("/clients/:id/diagnostics", async (req, res) => {
   }
 });
 
+// Reassign a session to the correct client (fix mismatched client_id)
+router.patch("/sessions/:id/reassign", async (req, res) => {
+  const sessionId = Number(req.params.id);
+  const { client_id, round_id } = req.body;
+
+  if (!client_id) {
+    return res.status(400).json({ error: "client_id is required" });
+  }
+
+  // Verify client exists
+  const client = await db.get("SELECT id FROM clients WHERE id = ?", [client_id]);
+  if (!client) {
+    return res.status(404).json({ error: "Client not found" });
+  }
+
+  // Verify session exists
+  const session = await db.get("SELECT * FROM sessions WHERE id = ?", [sessionId]);
+  if (!session) {
+    return res.status(404).json({ error: "Session not found" });
+  }
+
+  await db.run(
+    "UPDATE sessions SET client_id = ?, round_id = ? WHERE id = ?",
+    [client_id, round_id || null, sessionId]
+  );
+
+  const updated = await db.get("SELECT * FROM sessions WHERE id = ?", [sessionId]);
+  res.json({ ok: true, session: updated });
+});
+
 export default router;

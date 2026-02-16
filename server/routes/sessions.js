@@ -116,7 +116,15 @@ router.post("/", async (req, res) => {
   const cleanEmail = email.trim().toLowerCase();
 
   // Look up user to get their client_id
-  const user = await db.get("SELECT client_id FROM users WHERE LOWER(email) = ?", [cleanEmail]);
+  // Prefer user_id lookup (from token validation) to avoid ambiguity when
+  // the same email exists as a board member under multiple clients
+  let user;
+  if (user_id) {
+    user = await db.get("SELECT client_id FROM users WHERE id = ?", [user_id]);
+  }
+  if (!user) {
+    user = await db.get("SELECT client_id FROM users WHERE LOWER(email) = ?", [cleanEmail]);
+  }
   if (!user || !user.client_id) {
     return res.status(400).json({ error: "User not found or not associated with a client" });
   }
