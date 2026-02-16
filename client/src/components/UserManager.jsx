@@ -1,4 +1,53 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+
+function AutocompleteInput({ value, onChange, options, placeholder, className }) {
+  const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const wrapperRef = useRef(null);
+
+  const filtered = useMemo(() => {
+    if (!value) return options;
+    const q = value.toLowerCase();
+    return options.filter((o) => o.toLowerCase().includes(q) && o.toLowerCase() !== q);
+  }, [value, options]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => { setFocused(true); setOpen(true); }}
+        onBlur={() => setFocused(false)}
+        placeholder={placeholder}
+        className={className}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+          {filtered.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange(opt); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition"
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TrendArrow({ sessions, email }) {
   const userSessions = useMemo(() => {
@@ -48,7 +97,7 @@ function TrendArrow({ sessions, email }) {
   );
 }
 
-export default function UserManager({ sessions }) {
+export default function UserManager({ sessions, companyName }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -209,6 +258,17 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
       })
     : users;
 
+  // Unique community and company names for autocomplete
+  const communityOptions = useMemo(() =>
+    [...new Set(users.map((u) => u.community_name).filter(Boolean))].sort(),
+    [users]
+  );
+  const companyOptions = useMemo(() => {
+    const names = new Set(users.map((u) => u.management_company).filter(Boolean));
+    if (companyName) names.add(companyName);
+    return [...names].sort();
+  }, [users, companyName]);
+
   return (
     <div className="space-y-6">
       {/* Search Bar with Import and Add Buttons */}
@@ -219,7 +279,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search board members..."
-            className="input-field flex-1"
+            className="input-field-sm flex-1"
           />
           <label className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg cursor-pointer transition hover:opacity-90 disabled:opacity-50 whitespace-nowrap" style={{ backgroundColor: "var(--cam-blue)" }}>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
@@ -230,7 +290,11 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
             <input type="file" accept=".csv" onChange={handleUpload} disabled={uploading} className="hidden" />
           </label>
           <button
-            onClick={() => { setShowForm(!showForm); setFormError(""); }}
+            onClick={() => {
+              if (!showForm) setForm({ email: "", first_name: "", last_name: "", community_name: "", management_company: companyName || "" });
+              setShowForm(!showForm);
+              setFormError("");
+            }}
             className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 whitespace-nowrap"
             style={{ backgroundColor: "var(--cam-blue)" }}
           >
@@ -282,14 +346,14 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                 value={form.first_name}
                 onChange={(e) => setForm({ ...form, first_name: e.target.value })}
                 placeholder="First name"
-                className="input-field !py-3 !text-sm"
+                className="input-field-sm"
               />
               <input
                 type="text"
                 value={form.last_name}
                 onChange={(e) => setForm({ ...form, last_name: e.target.value })}
                 placeholder="Last name"
-                className="input-field !py-3 !text-sm"
+                className="input-field-sm"
               />
             </div>
             <input
@@ -297,23 +361,23 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               placeholder="Email (required)"
-              className="input-field !py-3 !text-sm"
+              className="input-field-sm"
               required
             />
             <div className="grid grid-cols-2 gap-3">
-              <input
-                type="text"
+              <AutocompleteInput
                 value={form.community_name}
-                onChange={(e) => setForm({ ...form, community_name: e.target.value })}
+                onChange={(v) => setForm({ ...form, community_name: v })}
+                options={communityOptions}
                 placeholder="Community name"
-                className="input-field !py-3 !text-sm"
+                className="input-field-sm"
               />
-              <input
-                type="text"
+              <AutocompleteInput
                 value={form.management_company}
-                onChange={(e) => setForm({ ...form, management_company: e.target.value })}
+                onChange={(v) => setForm({ ...form, management_company: v })}
+                options={companyOptions}
                 placeholder="Management company"
-                className="input-field !py-3 !text-sm"
+                className="input-field-sm"
               />
             </div>
             {formError && <p className="text-red-600 text-sm">{formError}</p>}
@@ -373,14 +437,14 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                             value={editForm.first_name}
                             onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
                             placeholder="First name"
-                            className="input-field !py-2 !text-sm"
+                            className="input-field-sm"
                           />
                           <input
                             type="text"
                             value={editForm.last_name}
                             onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
                             placeholder="Last name"
-                            className="input-field !py-2 !text-sm"
+                            className="input-field-sm"
                           />
                         </div>
                         <input
@@ -388,22 +452,22 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                           value={editForm.email}
                           onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                           placeholder="Email (required)"
-                          className="input-field !py-2 !text-sm"
+                          className="input-field-sm"
                         />
                         <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="text"
+                          <AutocompleteInput
                             value={editForm.community_name}
-                            onChange={(e) => setEditForm({ ...editForm, community_name: e.target.value })}
+                            onChange={(v) => setEditForm({ ...editForm, community_name: v })}
+                            options={communityOptions}
                             placeholder="Community name"
-                            className="input-field !py-2 !text-sm"
+                            className="input-field-sm"
                           />
-                          <input
-                            type="text"
+                          <AutocompleteInput
                             value={editForm.management_company}
-                            onChange={(e) => setEditForm({ ...editForm, management_company: e.target.value })}
+                            onChange={(v) => setEditForm({ ...editForm, management_company: v })}
+                            options={companyOptions}
                             placeholder="Management company"
-                            className="input-field !py-2 !text-sm"
+                            className="input-field-sm"
                           />
                         </div>
                         {editError && <p className="text-red-600 text-sm">{editError}</p>}
