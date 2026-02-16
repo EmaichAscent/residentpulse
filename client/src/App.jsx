@@ -1,5 +1,4 @@
-import { Routes, Route } from "react-router-dom";
-import IdentifyPage from "./pages/IdentifyPage";
+import { Routes, Route, Navigate } from "react-router-dom";
 import ChatPage from "./pages/ChatPage";
 import TokenSurveyPage from "./pages/TokenSurveyPage";
 import AdminPage from "./pages/AdminPage";
@@ -17,7 +16,7 @@ export default function App() {
     <div className="min-h-screen bg-gray-50">
       <Routes>
         {/* Public routes */}
-        <Route path="/" element={<IdentifyPage />} />
+        <Route path="/" element={<Navigate to="/admin/login" replace />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/survey" element={<TokenSurveyPage />} />
 

@@ -79,23 +79,6 @@ router.get("/validate-token/:token", async (req, res) => {
   }
 });
 
-// Check for incomplete session by email
-router.get("/incomplete/:email", async (req, res) => {
-  const email = req.params.email.trim().toLowerCase();
-
-  // Look up user to get their client_id
-  const user = await db.get("SELECT client_id FROM users WHERE LOWER(email) = ?", [email]);
-  if (!user) {
-    return res.json({ session: null });
-  }
-
-  const incompleteSession = await db.get(
-    "SELECT * FROM sessions WHERE email = ? AND client_id = ? AND completed = FALSE ORDER BY created_at DESC LIMIT 1",
-    [email, user.client_id]
-  );
-  res.json({ session: incompleteSession || null });
-});
-
 // Delete a session
 router.delete("/:id", async (req, res) => {
   const id = Number(req.params.id);
