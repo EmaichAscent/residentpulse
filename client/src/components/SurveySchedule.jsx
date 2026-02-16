@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ReInterviewDialog from "./ReInterviewDialog";
 
 export default function SurveySchedule() {
   const [rounds, setRounds] = useState([]);
@@ -9,6 +10,7 @@ export default function SurveySchedule() {
   const [launchResult, setLaunchResult] = useState(null);
   const [confirmLaunch, setConfirmLaunch] = useState(null);
   const [error, setError] = useState(null);
+  const [reInterviewPrompt, setReInterviewPrompt] = useState(null);
 
   useEffect(() => {
     loadRounds();
@@ -51,6 +53,22 @@ export default function SurveySchedule() {
     } finally {
       setScheduling(false);
     }
+  };
+
+  const handlePreLaunchCheck = async (roundId) => {
+    // Check if a re-interview should be offered before launching
+    try {
+      const res = await fetch("/api/admin/interview/status", { credentials: "include" });
+      const data = await res.json();
+
+      if (data.hasCompletedInterview && data.lastInterviewDate) {
+        setReInterviewPrompt({ roundId, lastInterviewDate: data.lastInterviewDate });
+        return;
+      }
+    } catch {
+      // If check fails, just proceed with launch
+    }
+    setConfirmLaunch(roundId);
   };
 
   const handleLaunch = async (roundId) => {
@@ -230,7 +248,7 @@ export default function SurveySchedule() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => setConfirmLaunch(round.id)}
+                    onClick={() => handlePreLaunchCheck(round.id)}
                     className="text-sm px-4 py-2 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90"
                   >
                     Confirm & Launch
@@ -241,6 +259,14 @@ export default function SurveySchedule() {
           </div>
         ))}
       </div>
+
+      {reInterviewPrompt && (
+        <ReInterviewDialog
+          lastInterviewDate={reInterviewPrompt.lastInterviewDate}
+          onSkip={() => setConfirmLaunch(reInterviewPrompt.roundId)}
+          onClose={() => setReInterviewPrompt(null)}
+        />
+      )}
     </div>
   );
 }

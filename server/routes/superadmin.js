@@ -2,6 +2,7 @@ import { Router } from "express";
 import db from "../db.js";
 import { requireSuperAdmin } from "../middleware/auth.js";
 import { hashPassword, generatePassword } from "../utils/password.js";
+import { generateClientCode } from "../utils/clientCode.js";
 
 const router = Router();
 
@@ -25,16 +26,81 @@ router.post("/exit-impersonation", (req, res) => {
 // All other SuperAdmin routes require authentication
 router.use(requireSuperAdmin);
 
-// Get all clients
+// Dashboard aggregate stats
+router.get("/dashboard", async (req, res) => {
+  try {
+    const totalClients = await db.get("SELECT COUNT(*) as count FROM clients");
+    const activeClients = await db.get("SELECT COUNT(*) as count FROM clients WHERE status = 'active'");
+    const activeRounds = await db.get("SELECT COUNT(*) as count FROM survey_rounds WHERE status = 'in_progress'");
+    const totalResponses = await db.get("SELECT COUNT(*) as count FROM sessions WHERE completed = TRUE");
+    const totalMembers = await db.get("SELECT COUNT(*) as count FROM users");
+
+    // Engagement warnings: clients with no admin login in 30+ days (or never)
+    const warnings = await db.all(
+      `SELECT c.id, c.company_name, c.client_code, MAX(ca.last_login_at) as last_login
+       FROM clients c
+       LEFT JOIN client_admins ca ON ca.client_id = c.id
+       WHERE c.status = 'active'
+       GROUP BY c.id, c.company_name, c.client_code
+       HAVING MAX(ca.last_login_at) IS NULL OR MAX(ca.last_login_at) < NOW() - INTERVAL '30 days'`
+    );
+
+    res.json({
+      total_clients: totalClients?.count || 0,
+      active_clients: activeClients?.count || 0,
+      active_rounds: activeRounds?.count || 0,
+      total_responses: totalResponses?.count || 0,
+      total_members: totalMembers?.count || 0,
+      engagement_warnings: warnings
+    });
+  } catch (err) {
+    console.error("Dashboard error:", err);
+    res.status(500).json({ error: "Failed to load dashboard" });
+  }
+});
+
+// Activity log (paginated)
+router.get("/activity-log", async (req, res) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
+
+    const entries = await db.all(
+      `SELECT al.*, c.company_name
+       FROM activity_log al
+       LEFT JOIN clients c ON c.id = al.client_id
+       ORDER BY al.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [limit, offset]
+    );
+
+    const total = await db.get("SELECT COUNT(*) as count FROM activity_log");
+
+    res.json({
+      entries,
+      total: total?.count || 0,
+      page,
+      limit
+    });
+  } catch (err) {
+    console.error("Activity log error:", err);
+    res.status(500).json({ error: "Failed to load activity log" });
+  }
+});
+
+// Get all clients (simplified for list view)
 router.get("/clients", async (req, res) => {
   const clients = await db.all(
-    `SELECT c.*, COUNT(ca.id) as admin_count,
-            sp.display_name as plan_name, sp.name as plan_key
+    `SELECT c.id, c.company_name, c.client_code, c.status, c.created_at,
+            sp.display_name as plan_name, sp.name as plan_key,
+            MAX(ca.last_login_at) as last_activity,
+            COUNT(ca.id) as admin_count
      FROM clients c
      LEFT JOIN client_admins ca ON ca.client_id = c.id
      LEFT JOIN client_subscriptions cs ON cs.client_id = c.id
      LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
-     GROUP BY c.id, sp.display_name, sp.name
+     GROUP BY c.id, c.company_name, c.client_code, c.status, c.created_at, sp.display_name, sp.name
      ORDER BY c.created_at DESC`
   );
   res.json(clients);
@@ -55,10 +121,11 @@ router.post("/clients", async (req, res) => {
   }
 
   try {
-    // Create client
+    // Create client with unique code
+    const clientCode = await generateClientCode();
     const clientResult = await db.run(
-      "INSERT INTO clients (company_name, address_line1, address_line2, city, state, zip, phone_number, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [company_name, address_line1 || null, address_line2 || null, city || null, state || null, zip || null, phone_number || null, "active"]
+      "INSERT INTO clients (company_name, address_line1, address_line2, city, state, zip, phone_number, status, client_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [company_name, address_line1 || null, address_line2 || null, city || null, state || null, zip || null, phone_number || null, "active", clientCode]
     );
     const clientId = clientResult.lastInsertRowid;
 
@@ -93,6 +160,7 @@ router.post("/clients", async (req, res) => {
     res.json({
       ok: true,
       client_id: clientId,
+      client_code: clientCode,
       admin_email: admin_email.toLowerCase().trim(),
       temp_password: tempPassword,
       message: "Client created successfully. Share these credentials with the client admin."
@@ -354,6 +422,148 @@ router.patch("/sessions/:id/reassign", async (req, res) => {
 
   const updated = await db.get("SELECT * FROM sessions WHERE id = ?", [sessionId]);
   res.json({ ok: true, session: updated });
+});
+
+// Client detail (consolidated view)
+router.get("/clients/:id/detail", async (req, res) => {
+  const clientId = Number(req.params.id);
+
+  try {
+    const client = await db.get("SELECT * FROM clients WHERE id = ?", [clientId]);
+    if (!client) return res.status(404).json({ error: "Client not found" });
+
+    // Subscription
+    const subscription = await db.get(
+      `SELECT cs.*, sp.name as plan_name, sp.display_name as plan_display_name,
+              sp.member_limit, sp.survey_rounds_per_year
+       FROM client_subscriptions cs
+       JOIN subscription_plans sp ON sp.id = cs.plan_id
+       WHERE cs.client_id = ?`,
+      [clientId]
+    );
+
+    // Admins with last login
+    const admins = await db.all(
+      "SELECT id, email, created_at, last_login_at, onboarding_completed FROM client_admins WHERE client_id = ?",
+      [clientId]
+    );
+
+    // Member + community counts
+    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ?", [clientId]);
+    const communityCount = await db.get(
+      "SELECT COUNT(DISTINCT community_name) as count FROM users WHERE client_id = ? AND community_name IS NOT NULL",
+      [clientId]
+    );
+
+    // Latest interview
+    const latestInterview = await db.get(
+      "SELECT id, interview_type, status, generated_prompt, interview_summary, created_at, completed_at FROM admin_interviews WHERE client_id = ? AND status = 'completed' ORDER BY completed_at DESC LIMIT 1",
+      [clientId]
+    );
+
+    // Active interview prompt supplement
+    const promptSupplement = await db.get(
+      "SELECT value FROM settings WHERE key = 'interview_prompt_supplement' AND client_id = ?",
+      [clientId]
+    );
+
+    // Survey rounds
+    const surveyRounds = await db.all(
+      `SELECT sr.*,
+              (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true) as responses_completed,
+              (SELECT COUNT(DISTINCT il.user_id) FROM invitation_logs il WHERE il.round_id = sr.id AND il.email_status = 'sent') as invitations_sent
+       FROM survey_rounds sr
+       WHERE sr.client_id = ?
+       ORDER BY sr.round_number`,
+      [clientId]
+    );
+
+    // Engagement warning
+    const lastLogin = admins.reduce((latest, a) => {
+      if (!a.last_login_at) return latest;
+      return !latest || new Date(a.last_login_at) > new Date(latest) ? a.last_login_at : latest;
+    }, null);
+
+    const daysSinceLogin = lastLogin
+      ? Math.floor((Date.now() - new Date(lastLogin).getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    res.json({
+      client,
+      subscription,
+      admins,
+      member_count: memberCount?.count || 0,
+      community_count: communityCount?.count || 0,
+      latest_interview: latestInterview,
+      prompt_supplement: promptSupplement?.value || null,
+      survey_rounds: surveyRounds,
+      engagement: {
+        last_login: lastLogin,
+        days_since_login: daysSinceLogin,
+        warning: daysSinceLogin === null || daysSinceLogin > 30
+      }
+    });
+  } catch (err) {
+    console.error("Client detail error:", err);
+    res.status(500).json({ error: "Failed to load client details" });
+  }
+});
+
+// Get all interviews for a client (version history)
+router.get("/clients/:id/interviews", async (req, res) => {
+  try {
+    const interviews = await db.all(
+      `SELECT ai.id, ai.interview_type, ai.status, ai.generated_prompt, ai.interview_summary,
+              ai.admin_confirmed, ai.created_at, ai.completed_at,
+              ca.email as admin_email,
+              (SELECT COUNT(*) FROM admin_interview_messages aim WHERE aim.interview_id = ai.id) as message_count
+       FROM admin_interviews ai
+       LEFT JOIN client_admins ca ON ca.id = ai.admin_id
+       WHERE ai.client_id = ?
+       ORDER BY ai.created_at DESC`,
+      [Number(req.params.id)]
+    );
+    res.json(interviews);
+  } catch (err) {
+    console.error("Interviews list error:", err);
+    res.status(500).json({ error: "Failed to load interviews" });
+  }
+});
+
+// Get full transcript for an interview
+router.get("/clients/:id/interviews/:interviewId/messages", async (req, res) => {
+  try {
+    const interview = await db.get(
+      "SELECT * FROM admin_interviews WHERE id = ? AND client_id = ?",
+      [Number(req.params.interviewId), Number(req.params.id)]
+    );
+
+    if (!interview) return res.status(404).json({ error: "Interview not found" });
+
+    const messages = await db.all(
+      "SELECT id, role, content, created_at FROM admin_interview_messages WHERE interview_id = ? ORDER BY created_at",
+      [interview.id]
+    );
+
+    res.json({ interview, messages });
+  } catch (err) {
+    console.error("Interview messages error:", err);
+    res.status(500).json({ error: "Failed to load interview messages" });
+  }
+});
+
+// Activity log for a specific client
+router.get("/clients/:id/activity", async (req, res) => {
+  try {
+    const entries = await db.all(
+      "SELECT * FROM activity_log WHERE client_id = ? ORDER BY created_at DESC LIMIT 50",
+      [Number(req.params.id)]
+    );
+    res.json(entries);
+  } catch (err) {
+    console.error("Client activity error:", err);
+    res.status(500).json({ error: "Failed to load activity" });
+  }
 });
 
 export default router;

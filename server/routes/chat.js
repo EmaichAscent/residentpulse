@@ -21,9 +21,24 @@ router.post("/", async (req, res) => {
   // Get conversation history
   const history = await db.all("SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at", [Number(session_id)]);
 
-  // Get system prompt
-  const setting = await db.get("SELECT value FROM settings WHERE key = ?", ["system_prompt"]);
-  let systemPrompt = setting?.value || "You are a helpful NPS survey chatbot.";
+  // Get system prompt (prefer client-specific, fall back to global)
+  const clientSetting = await db.get(
+    "SELECT value FROM settings WHERE key = 'system_prompt' AND client_id = ?",
+    [session.client_id]
+  );
+  const globalSetting = await db.get(
+    "SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL"
+  );
+  let systemPrompt = clientSetting?.value || globalSetting?.value || "You are a helpful NPS survey chatbot.";
+
+  // Append interview prompt supplement if the client has one
+  const supplement = await db.get(
+    "SELECT value FROM settings WHERE key = 'interview_prompt_supplement' AND client_id = ?",
+    [session.client_id]
+  );
+  if (supplement?.value) {
+    systemPrompt += "\n\nADDITIONAL CLIENT CONTEXT:\n" + supplement.value;
+  }
 
   // Check for prior sessions from this user to give the AI context
   const priorSessions = await db.all(

@@ -1,38 +1,35 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-export default function ClientList({ clients, onEdit, onToggleStatus, onImpersonate, onRefresh }) {
+export default function ClientList({ clients }) {
   const [search, setSearch] = useState("");
+  const navigate = useNavigate();
 
   const filtered = clients.filter(client =>
-    client.company_name.toLowerCase().includes(search.toLowerCase())
+    client.company_name.toLowerCase().includes(search.toLowerCase()) ||
+    (client.client_code || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const formatAddress = (client) => {
-    const parts = [];
-    if (client.address_line1) parts.push(client.address_line1);
-    if (client.address_line2) parts.push(client.address_line2);
-
-    const cityStateZip = [];
-    if (client.city) cityStateZip.push(client.city);
-    if (client.state) cityStateZip.push(client.state);
-    if (client.zip) cityStateZip.push(client.zip);
-
-    if (cityStateZip.length > 0) {
-      parts.push(cityStateZip.join(", "));
-    }
-
-    return parts.length > 0 ? parts.join(", ") : "—";
+  const formatLastActivity = (dateStr) => {
+    if (!dateStr) return "Never";
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.floor((now - d) / 86400000);
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 30) return `${diffDays}d ago`;
+    return d.toLocaleDateString();
   };
 
   return (
     <div>
-      <div className="mb-4 flex gap-3">
+      <div className="mb-4">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search clients..."
-          className="input-field flex-1"
+          placeholder="Search by name or client code..."
+          className="input-field"
         />
       </div>
 
@@ -41,10 +38,7 @@ export default function ClientList({ clients, onEdit, onToggleStatus, onImperson
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Company Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Address
+                Company
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Plan
@@ -53,33 +47,27 @@ export default function ClientList({ clients, onEdit, onToggleStatus, onImperson
                 Status
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Admins
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Created
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
+                Last Activity
               </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan="7" className="px-6 py-8 text-center text-gray-400">
+                <td colSpan="4" className="px-6 py-8 text-center text-gray-400">
                   No clients found
                 </td>
               </tr>
             ) : (
               filtered.map((client) => (
-                <tr key={client.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{client.company_name}</div>
-                  </td>
+                <tr
+                  key={client.id}
+                  onClick={() => navigate(`/superadmin/clients/${client.id}`)}
+                  className="hover:bg-gray-50 cursor-pointer"
+                >
                   <td className="px-6 py-4">
-                    <div className="text-sm text-gray-500 max-w-xs truncate" title={formatAddress(client)}>
-                      {formatAddress(client)}
-                    </div>
+                    <div className="text-sm font-medium text-gray-900">{client.company_name}</div>
+                    <div className="text-xs text-gray-400">{client.client_code}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {client.plan_name || "—"}
@@ -98,31 +86,7 @@ export default function ClientList({ clients, onEdit, onToggleStatus, onImperson
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {client.admin_count}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(client.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                    <button
-                      onClick={() => onImpersonate(client)}
-                      className="text-blue-600 hover:text-blue-900"
-                      disabled={client.status !== "active"}
-                    >
-                      Impersonate
-                    </button>
-                    <button
-                      onClick={() => onEdit(client)}
-                      className="text-indigo-600 hover:text-indigo-900"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => onToggleStatus(client)}
-                      className={client.status === "active" ? "text-red-600 hover:text-red-900" : "text-green-600 hover:text-green-900"}
-                    >
-                      {client.status === "active" ? "Deactivate" : "Activate"}
-                    </button>
+                    {formatLastActivity(client.last_activity)}
                   </td>
                 </tr>
               ))

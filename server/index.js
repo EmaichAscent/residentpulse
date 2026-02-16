@@ -14,6 +14,7 @@ import authRoutes from "./routes/auth.js";
 import signupRoutes from "./routes/signup.js";
 import superadminRoutes from "./routes/superadmin.js";
 import surveyRoundsRoutes from "./routes/surveyRounds.js";
+import interviewRoutes from "./routes/interview.js";
 import { startScheduler } from "./scheduler.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -62,6 +63,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/admin/users", userRoutes);
 app.use("/api/admin/insights", insightsRoutes);
 app.use("/api/admin/survey-rounds", surveyRoundsRoutes);
+app.use("/api/admin/interview", interviewRoutes);
 
 // Survey session routes
 app.use("/api/sessions", sessionRoutes);

@@ -161,6 +161,16 @@ async function initializeSchema() {
       console.log("Survey rounds migration skipped (already applied or file not found)");
     }
 
+    // Run admin interviews migration
+    try {
+      const interviewMigrationPath = join(__dirname, "migrations", "add-admin-interviews.sql");
+      const interviewMigrationSQL = readFileSync(interviewMigrationPath, "utf-8");
+      await client.query(interviewMigrationSQL);
+      console.log("Admin interviews migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Admin interviews migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");
   } catch (err) {

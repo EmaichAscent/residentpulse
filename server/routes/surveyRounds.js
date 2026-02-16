@@ -3,6 +3,7 @@ import crypto from "crypto";
 import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
 import { sendInvitation } from "../utils/emailService.js";
+import { logActivity } from "../utils/activityLog.js";
 
 const router = Router();
 router.use(requireClientAdmin);
@@ -187,6 +188,17 @@ router.post("/:id/launch", async (req, res) => {
         await sleep(500);
       }
     }
+
+    await logActivity({
+      actorType: "client_admin",
+      actorId: req.userId,
+      actorEmail: req.userEmail,
+      action: "launch_round",
+      entityType: "survey_round",
+      entityId: roundId,
+      clientId: req.clientId,
+      metadata: { sent: sentCount, failed: failedCount, round_number: round.round_number }
+    });
 
     res.json({
       ok: true,

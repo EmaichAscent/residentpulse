@@ -4,6 +4,8 @@ import rateLimit from "express-rate-limit";
 import db from "../db.js";
 import { hashPassword } from "../utils/password.js";
 import { sendVerificationEmail } from "../utils/emailService.js";
+import { logActivity } from "../utils/activityLog.js";
+import { generateClientCode } from "../utils/clientCode.js";
 
 const router = Router();
 
@@ -61,10 +63,11 @@ router.post("/register", signupLimiter, async (req, res) => {
       return res.status(400).json({ error: "Invalid subscription plan" });
     }
 
-    // Create client with pending status
+    // Create client with pending status and unique code
+    const clientCode = await generateClientCode();
     const clientResult = await db.run(
-      "INSERT INTO clients (company_name, address_line1, address_line2, city, state, zip, phone_number, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [company_name, address_line1, address_line2 || null, city, state, zip, phone_number, "pending"]
+      "INSERT INTO clients (company_name, address_line1, address_line2, city, state, zip, phone_number, status, client_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [company_name, address_line1, address_line2 || null, city, state, zip, phone_number, "pending", clientCode]
     );
     const clientId = clientResult.lastInsertRowid;
 
@@ -104,6 +107,15 @@ router.post("/register", signupLimiter, async (req, res) => {
       console.error("Failed to send verification email:", emailErr.message);
       console.log(`Verification link: ${(process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "")}/admin/verify-email?token=${verificationToken}`);
     }
+
+    await logActivity({
+      actorType: "client_admin",
+      actorEmail: email,
+      action: "signup",
+      entityType: "client",
+      entityId: clientId,
+      clientId
+    });
 
     res.json({ ok: true, message: "Check your email to verify your account." });
   } catch (err) {

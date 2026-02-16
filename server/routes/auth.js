@@ -4,6 +4,7 @@ import rateLimit from "express-rate-limit";
 import db from "../db.js";
 import { comparePassword, hashPassword } from "../utils/password.js";
 import { sendPasswordResetEmail } from "../utils/emailService.js";
+import { logActivity } from "../utils/activityLog.js";
 
 const router = Router();
 
@@ -48,6 +49,13 @@ router.post("/superadmin/login", loginLimiter, async (req, res) => {
     role: "superadmin"
   };
 
+  await logActivity({
+    actorType: "superadmin",
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: "login"
+  });
+
   res.json({
     user: {
       id: admin.id,
@@ -66,7 +74,7 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
   }
 
   const admin = await db.get(
-    `SELECT ca.*, c.status as client_status, c.company_name
+    `SELECT ca.*, c.status as client_status, c.company_name, ca.onboarding_completed
      FROM client_admins ca
      JOIN clients c ON c.id = ca.client_id
      WHERE ca.email = ?`,
@@ -96,14 +104,26 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
     return res.status(401).json({ error: "Invalid email or password" });
   }
 
-  // Create session
+  // Track last login
+  await db.run("UPDATE client_admins SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?", [admin.id]);
+
+  // Create session (include onboarding_completed for redirect logic)
   req.session.user = {
     id: admin.id,
     email: admin.email,
     role: "client_admin",
     client_id: admin.client_id,
-    company_name: admin.company_name
+    company_name: admin.company_name,
+    onboarding_completed: admin.onboarding_completed || false
   };
+
+  await logActivity({
+    actorType: "client_admin",
+    actorId: admin.id,
+    actorEmail: admin.email,
+    action: "login",
+    clientId: admin.client_id
+  });
 
   res.json({
     user: {
@@ -111,7 +131,8 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
       email: admin.email,
       role: "client_admin",
       client_id: admin.client_id,
-      company_name: admin.company_name
+      company_name: admin.company_name,
+      onboarding_completed: admin.onboarding_completed || false
     }
   });
 });
@@ -201,9 +222,20 @@ router.post("/logout", (req, res) => {
 });
 
 // Get current authentication status
-router.get("/status", (req, res) => {
+router.get("/status", async (req, res) => {
   if (!req.session || !req.session.user) {
     return res.json({ authenticated: false, user: null });
+  }
+
+  // For client admins, refresh onboarding_completed from DB (may have changed during session)
+  if (req.session.user.role === "client_admin") {
+    const admin = await db.get(
+      "SELECT onboarding_completed FROM client_admins WHERE id = ?",
+      [req.session.user.id]
+    );
+    if (admin) {
+      req.session.user.onboarding_completed = admin.onboarding_completed || false;
+    }
   }
 
   res.json({

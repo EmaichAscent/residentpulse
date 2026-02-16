@@ -9,6 +9,8 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import SignUpPage from "./pages/SignUpPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
+import AdminOnboardingPage from "./pages/AdminOnboardingPage";
+import SuperAdminClientDetailPage from "./pages/SuperAdminClientDetailPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 export default function App() {
@@ -30,6 +32,14 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/superadmin/clients/:id"
+          element={
+            <ProtectedRoute requiredRole="superadmin">
+              <SuperAdminClientDetailPage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Client Admin routes */}
         <Route path="/admin/login" element={<ClientAdminLoginPage />} />
@@ -37,6 +47,14 @@ export default function App() {
         <Route path="/admin/reset-password" element={<ResetPasswordPage />} />
         <Route path="/admin/signup" element={<SignUpPage />} />
         <Route path="/admin/verify-email" element={<VerifyEmailPage />} />
+        <Route
+          path="/admin/onboarding"
+          element={
+            <ProtectedRoute requiredRole="client_admin">
+              <AdminOnboardingPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/admin"
           element={
