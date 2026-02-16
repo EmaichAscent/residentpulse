@@ -6,11 +6,15 @@ export default function ClientAdminLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingVerification, setPendingVerification] = useState(false);
+  const [resendStatus, setResendStatus] = useState("");
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setPendingVerification(false);
+    setResendStatus("");
     setLoading(true);
 
     try {
@@ -23,6 +27,9 @@ export default function ClientAdminLoginPage() {
 
       if (!response.ok) {
         const data = await response.json();
+        if (data.pending_verification) {
+          setPendingVerification(true);
+        }
         throw new Error(data.error || "Login failed");
       }
 
@@ -32,6 +39,22 @@ export default function ClientAdminLoginPage() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendStatus("sending");
+    try {
+      const response = await fetch("/api/signup/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      setResendStatus("sent");
+    } catch {
+      setResendStatus("error");
     }
   };
 
@@ -186,6 +209,20 @@ export default function ClientAdminLoginPage() {
               {error && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
                   <p className="text-sm text-red-600">{error}</p>
+                  {pendingVerification && (
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      disabled={resendStatus === "sending" || resendStatus === "sent"}
+                      className="mt-2 text-sm font-semibold hover:underline disabled:opacity-50"
+                      style={{ color: "var(--cam-blue)" }}
+                    >
+                      {resendStatus === "sending" ? "Sending..." : resendStatus === "sent" ? "Verification email sent! Check your inbox." : "Resend verification email"}
+                    </button>
+                  )}
+                  {resendStatus === "error" && (
+                    <p className="text-sm text-red-500 mt-1">Failed to resend. Please try again.</p>
+                  )}
                 </div>
               )}
 

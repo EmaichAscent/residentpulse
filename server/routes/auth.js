@@ -14,6 +14,13 @@ const loginLimiter = rateLimit({
   message: { error: "Too many login attempts, please try again later" }
 });
 
+// Separate rate limiter for password reset (more generous)
+const resetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3, // 3 reset requests per window
+  message: { error: "Too many password reset requests, please try again later" }
+});
+
 // SuperAdmin login
 router.post("/superadmin/login", loginLimiter, async (req, res) => {
   const { email, password } = req.body;
@@ -110,7 +117,7 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
 });
 
 // Request password reset
-router.post("/admin/forgot-password", loginLimiter, async (req, res) => {
+router.post("/admin/forgot-password", resetLimiter, async (req, res) => {
   const { email } = req.body;
 
   if (!email) {
@@ -118,12 +125,12 @@ router.post("/admin/forgot-password", loginLimiter, async (req, res) => {
   }
 
   try {
-    // Look up admin with active client
+    // Look up admin (allow pending accounts too - they may need to reset before verifying)
     const admin = await db.get(
       `SELECT ca.id, ca.email
        FROM client_admins ca
        JOIN clients c ON c.id = ca.client_id
-       WHERE ca.email = ? AND c.status = 'active'`,
+       WHERE ca.email = ? AND c.status IN ('active', 'pending')`,
       [email.toLowerCase().trim()]
     );
 

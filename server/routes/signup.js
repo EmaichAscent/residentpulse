@@ -149,4 +149,48 @@ router.get("/verify", async (req, res) => {
   }
 });
 
+// Resend verification email
+router.post("/resend-verification", rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  message: { error: "Too many requests, please try again later" }
+}), async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+
+  try {
+    const admin = await db.get(
+      `SELECT ca.id, ca.email, ca.email_verified
+       FROM client_admins ca
+       JOIN clients c ON c.id = ca.client_id
+       WHERE ca.email = ? AND c.status = 'pending'`,
+      [email.toLowerCase().trim()]
+    );
+
+    if (!admin || admin.email_verified) {
+      // Don't reveal whether account exists
+      return res.json({ message: "If an unverified account exists with that email, a new verification link has been sent." });
+    }
+
+    // Generate new token
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await db.run(
+      "UPDATE client_admins SET email_verification_token = ?, email_verification_expires = ? WHERE id = ?",
+      [verificationToken, expires.toISOString(), admin.id]
+    );
+
+    await sendVerificationEmail(admin.email, verificationToken);
+
+    res.json({ message: "If an unverified account exists with that email, a new verification link has been sent." });
+  } catch (err) {
+    console.error("Error resending verification:", err);
+    res.json({ message: "If an unverified account exists with that email, a new verification link has been sent." });
+  }
+});
+
 export default router;
