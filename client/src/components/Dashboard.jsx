@@ -393,45 +393,54 @@ export default function Dashboard({ sessions, user, onNavigate }) {
           </div>
         </div>
 
-        {/* Built for Community Associations */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-8">
-          <p className="text-xs font-semibold uppercase tracking-wide mb-4" style={{ color: "var(--cam-green)" }}>Built for Community Associations</p>
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">
-            AI-powered engagement designed for condos, HOAs, and co-ops
-          </h3>
-          <p className="text-gray-500 leading-relaxed mb-4">
-            ResidentPulse isn't a generic survey tool — it's purpose-built for the community association
-            industry. Our AI-driven conversations go beyond simple questionnaires, engaging board members
-            in natural dialogue about the topics that matter most to your community: management performance,
-            communication, financial transparency, and overall satisfaction.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: "var(--cam-blue)", opacity: 0.1 }}>
-                <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
-              </div>
-              <h4 className="text-sm font-semibold text-gray-900 mb-1">AI Conversations</h4>
-              <p className="text-xs text-gray-500">Natural, guided dialogue — not boring forms — so board members actually engage.</p>
+        {/* Powered by CAM Ascent Analytical Insights */}
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <div className="px-8 pt-8 pb-4 flex items-center gap-3">
+            <a href="https://camascent.com" target="_blank" rel="noopener noreferrer">
+              <img src="/CAMAscent.png" alt="CAM Ascent" className="h-10 object-contain" />
+            </a>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--cam-green)" }}>Powered by CAM Ascent Analytical Insights</p>
+              <h3 className="text-lg font-semibold text-gray-900">
+                AI-driven intelligence built for community association management
+              </h3>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: "var(--cam-blue)", opacity: 0.1 }}>
-                <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
+          </div>
+          <div className="px-8 pb-6">
+            <p className="text-gray-500 leading-relaxed mb-5">
+              ResidentPulse leverages CAM Ascent's analytical engine to transform raw board member feedback
+              into clear, actionable intelligence. Our AI doesn't just collect data — it reads between the lines,
+              identifies emerging trends, and delivers insights your team can act on immediately. Purpose-built for
+              the community association industry, not adapted from generic survey tools.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: "var(--cam-blue)", opacity: 0.1 }}>
+                  <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                </div>
+                <h4 className="text-sm font-semibold text-gray-900 mb-1">AI-Guided Conversations</h4>
+                <p className="text-xs text-gray-500">Intelligent dialogue that adapts to each board member's responses — uncovering what surveys miss.</p>
               </div>
-              <h4 className="text-sm font-semibold text-gray-900 mb-1">Industry-Specific NPS</h4>
-              <p className="text-xs text-gray-500">Benchmarks and insights tailored to community management, not generic business metrics.</p>
-            </div>
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: "var(--cam-blue)", opacity: 0.1 }}>
-                <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: "var(--cam-green)", opacity: 0.1 }}>
+                  <svg className="w-5 h-5" style={{ color: "var(--cam-green)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+                <h4 className="text-sm font-semibold text-gray-900 mb-1">Sentiment Analytics</h4>
+                <p className="text-xs text-gray-500">CAM Ascent's AI analyzes tone, themes, and satisfaction signals across all your communities at once.</p>
               </div>
-              <h4 className="text-sm font-semibold text-gray-900 mb-1">Actionable Insights</h4>
-              <p className="text-xs text-gray-500">AI-generated recommendations you can act on immediately to improve board satisfaction.</p>
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: "var(--cam-blue)", opacity: 0.1 }}>
+                  <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <h4 className="text-sm font-semibold text-gray-900 mb-1">Actionable Recommendations</h4>
+                <p className="text-xs text-gray-500">Get specific, prioritized actions — not just data — so you know exactly what to improve next.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -541,12 +550,17 @@ export default function Dashboard({ sessions, user, onNavigate }) {
             <p className="text-sm text-gray-500 mt-2">Based on {nps.total} user{nps.total !== 1 ? "s" : ""} (latest response per user)</p>
           </div>
 
-          {/* AI Insights */}
+          {/* AI Insights — Powered by CAM Ascent */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">AI-Generated Insights</p>
-                <p className="text-xs text-gray-500 mt-1">Actionable recommendations based on current NPS responses</p>
+              <div className="flex items-center gap-3">
+                <a href="https://camascent.com" target="_blank" rel="noopener noreferrer">
+                  <img src="/CAMAscent.png" alt="CAM Ascent" className="h-8 object-contain" />
+                </a>
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-wide" style={{ color: "var(--cam-green)" }}>AI Insights by CAM Ascent Analytics</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Actionable recommendations powered by AI analysis of your NPS responses</p>
+                </div>
               </div>
               <div className="flex gap-2">
                 {insights && (
