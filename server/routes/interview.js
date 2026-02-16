@@ -22,10 +22,11 @@ You have already received their structured data (company size, years in business
 5. Anything unique about their company culture or approach that the AI should be aware of
 
 Guidelines:
-- Be warm, professional, and concise (2-3 sentences per response)
+- Keep every response to 1-2 short sentences. Never exceed 2 sentences. No filler, no preamble, no restating what they said
 - Ask 5-8 questions total, one at a time
-- Ask follow-up questions where more detail would genuinely improve results
-- When you have enough information, provide a brief summary of what you learned and ask "Does this sound right?"
+- Ask follow-up questions only where more detail would genuinely improve results
+- Never summarize or echo back what the admin just told you — just move to the next question
+- When you have enough information, provide a brief 2-3 sentence summary and ask "Does this sound right?"
 - Do not use markdown formatting — plain conversational text only`;
 
 const RE_INTERVIEW_SYSTEM_PROMPT = `You are a professional onboarding specialist for ResidentPulse conducting a check-in interview with a returning client admin. They have used the platform before and you have context from their previous interview.
@@ -38,10 +39,11 @@ Focus this shorter conversation on:
 5. Any new concerns or focus areas
 
 Guidelines:
-- Be warm, professional, and concise (2-3 sentences per response)
+- Keep every response to 1-2 short sentences. Never exceed 2 sentences. No filler, no preamble, no restating what they said
 - Reference what they told you last time where relevant — show you remember
 - This should be shorter than the initial interview (3-5 questions typically)
-- When satisfied, summarize what's changed and ask "Does this sound right?"
+- Never summarize or echo back what the admin just told you — just move to the next question
+- When satisfied, provide a brief 2-3 sentence summary of what's changed and ask "Does this sound right?"
 - Do not use markdown formatting — plain conversational text only`;
 
 const PROMPT_GENERATION_INSTRUCTION = `Based on the following interview with a community association management (CAM) company admin, generate a concise prompt supplement that will be appended to the system prompt used when AI interviews their board members.
