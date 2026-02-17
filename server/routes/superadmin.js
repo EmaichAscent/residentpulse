@@ -226,6 +226,14 @@ router.post("/clients/:id/impersonate", async (req, res) => {
     return res.status(404).json({ error: "No admin users found for this client" });
   }
 
+  // Get plan name for tier gating
+  const sub = await db.get(
+    `SELECT sp.name as plan_name FROM client_subscriptions cs
+     JOIN subscription_plans sp ON sp.id = cs.plan_id
+     WHERE cs.client_id = ? AND cs.status = 'active'`,
+    [id]
+  );
+
   // Store original superadmin session
   req.session.originalUser = req.session.user;
 
@@ -236,6 +244,7 @@ router.post("/clients/:id/impersonate", async (req, res) => {
     role: "client_admin",
     client_id: client.id,
     company_name: client.company_name,
+    plan_name: sub?.plan_name || "free",
     impersonating: true
   };
 

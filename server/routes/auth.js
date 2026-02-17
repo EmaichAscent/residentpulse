@@ -74,9 +74,12 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
   }
 
   const admin = await db.get(
-    `SELECT ca.*, c.status as client_status, c.company_name, ca.onboarding_completed
+    `SELECT ca.*, c.status as client_status, c.company_name, ca.onboarding_completed,
+            sp.name as plan_name
      FROM client_admins ca
      JOIN clients c ON c.id = ca.client_id
+     LEFT JOIN client_subscriptions cs ON cs.client_id = ca.client_id AND cs.status = 'active'
+     LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
      WHERE ca.email = ?`,
     [email.toLowerCase().trim()]
   );
@@ -114,7 +117,8 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
     role: "client_admin",
     client_id: admin.client_id,
     company_name: admin.company_name,
-    onboarding_completed: admin.onboarding_completed || false
+    onboarding_completed: admin.onboarding_completed || false,
+    plan_name: admin.plan_name || "free"
   };
 
   await logActivity({
@@ -227,14 +231,19 @@ router.get("/status", async (req, res) => {
     return res.json({ authenticated: false, user: null });
   }
 
-  // For client admins, refresh onboarding_completed from DB (may have changed during session)
+  // For client admins, refresh onboarding_completed and plan from DB (may have changed during session)
   if (req.session.user.role === "client_admin") {
     const admin = await db.get(
-      "SELECT onboarding_completed FROM client_admins WHERE id = ?",
+      `SELECT ca.onboarding_completed, sp.name as plan_name
+       FROM client_admins ca
+       LEFT JOIN client_subscriptions cs ON cs.client_id = ca.client_id AND cs.status = 'active'
+       LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
+       WHERE ca.id = ?`,
       [req.session.user.id]
     );
     if (admin) {
       req.session.user.onboarding_completed = admin.onboarding_completed || false;
+      req.session.user.plan_name = admin.plan_name || "free";
     }
   }
 

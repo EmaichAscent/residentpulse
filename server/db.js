@@ -185,6 +185,29 @@ async function initializeSchema() {
       console.log("Dashboard redesign migration skipped (already applied or file not found)");
     }
 
+    // Run communities migration (paid-tier community data)
+    try {
+      const communitiesMigrationPath = join(__dirname, "migrations", "add-communities.sql");
+      const communitiesMigrationSQL = readFileSync(communitiesMigrationPath, "utf-8");
+      await client.query(communitiesMigrationSQL);
+      console.log("Communities migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Communities migration skipped (already applied or file not found)");
+    }
+
+    // Auto-link existing users to communities by matching community_name
+    try {
+      await client.query(`
+        UPDATE users u SET community_id = c.id
+        FROM communities c
+        WHERE u.client_id = c.client_id
+          AND LOWER(TRIM(u.community_name)) = LOWER(TRIM(c.community_name))
+          AND u.community_id IS NULL
+      `);
+    } catch (linkErr) {
+      // Silently skip if communities table doesn't exist yet
+    }
+
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");
   } catch (err) {

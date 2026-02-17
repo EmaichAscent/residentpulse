@@ -135,7 +135,7 @@ export default function AdminPage() {
         )
       )}
       {tab === "trends" && <TrendsView />}
-      {tab === "users" && <UserManager companyName={user?.company_name} />}
+      {tab === "users" && <UserManager companyName={user?.company_name} planName={user?.plan_name} />}
       {tab === "account" && <AccountSettings />}
       </div>
     </div>

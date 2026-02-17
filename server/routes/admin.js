@@ -193,6 +193,7 @@ router.post("/board-members", async (req, res) => {
       "UPDATE users SET active = TRUE, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
       [first_name || null, last_name || null, community_name || null, management_company || null, existing.id]
     );
+    await autoLinkUsersToCommunities(req.clientId);
     const reactivated = await db.get("SELECT * FROM users WHERE id = ?", [existing.id]);
     return res.json(reactivated);
   }
@@ -202,6 +203,7 @@ router.post("/board-members", async (req, res) => {
     [req.clientId, cleanEmail, first_name || null, last_name || null, community_name || null, management_company || null]
   );
 
+  await autoLinkUsersToCommunities(req.clientId);
   const newUser = await db.get("SELECT * FROM users WHERE id = ?", [result.lastInsertRowid]);
   res.json(newUser);
 });
@@ -317,6 +319,9 @@ router.post("/board-members/import", async (req, res) => {
         errors.push(`Row ${i + 1}: ${err.message}`);
       }
     }
+
+    // Auto-link imported members to communities if they exist
+    await autoLinkUsersToCommunities(req.clientId);
 
     res.json({
       created,
@@ -670,6 +675,254 @@ router.post("/sessions/:id/finalize", async (req, res) => {
     console.error("Error finalizing session:", err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ============ Community Endpoints (Paid Tiers) ============
+
+// Helper: check if client is on a paid tier
+async function requirePaidTier(req, res) {
+  const sub = await db.get(
+    `SELECT sp.name as plan_name FROM client_subscriptions cs
+     JOIN subscription_plans sp ON sp.id = cs.plan_id
+     WHERE cs.client_id = ? AND cs.status = 'active'`,
+    [req.clientId]
+  );
+  if (!sub || sub.plan_name === "free") {
+    res.status(403).json({ error: "Community data import requires a paid plan. Please upgrade to access this feature." });
+    return false;
+  }
+  return true;
+}
+
+// Helper: Levenshtein distance for fuzzy name matching
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+// Helper: auto-link users to communities by normalized name
+async function autoLinkUsersToCommunities(clientId) {
+  const result = await db.pool.query(
+    `UPDATE users u SET community_id = c.id
+     FROM communities c
+     WHERE u.client_id = c.client_id
+       AND u.client_id = $1
+       AND LOWER(TRIM(u.community_name)) = LOWER(TRIM(c.community_name))
+       AND u.community_id IS NULL`,
+    [clientId]
+  );
+  return result.rowCount || 0;
+}
+
+// Helper: parse CSV rows (reused for import and preview)
+function parseCommunityCSV(csv) {
+  const lines = csv.split("\n").map((l) => l.trim()).filter((l) => l);
+  if (lines.length < 2) return { error: "CSV file is empty or invalid", rows: [] };
+
+  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
+  const nameIdx = headers.indexOf("community_name");
+  if (nameIdx === -1) return { error: "CSV must contain a 'community_name' column", rows: [] };
+
+  const contractIdx = headers.indexOf("contract_value");
+  const managerIdx = headers.indexOf("community_manager_name");
+  const typeIdx = headers.indexOf("property_type");
+  const unitsIdx = headers.indexOf("number_of_units");
+
+  const rows = [];
+  const errors = [];
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(",").map((v) => v.trim());
+    const name = values[nameIdx];
+    if (!name) {
+      errors.push(`Row ${i + 1}: Missing community_name`);
+      continue;
+    }
+    rows.push({
+      community_name: name,
+      contract_value: contractIdx >= 0 ? parseFloat(values[contractIdx]) || null : null,
+      community_manager_name: managerIdx >= 0 ? values[managerIdx] || null : null,
+      property_type: typeIdx >= 0 ? values[typeIdx]?.toLowerCase().replace(/\s+/g, "_") || null : null,
+      number_of_units: unitsIdx >= 0 ? parseInt(values[unitsIdx]) || null : null,
+    });
+  }
+  return { rows, errors };
+}
+
+// Get all communities for this client
+router.get("/communities", async (req, res) => {
+  const communities = await db.all(
+    `SELECT c.*, COUNT(u.id) as member_count
+     FROM communities c
+     LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
+     WHERE c.client_id = ?
+     GROUP BY c.id
+     ORDER BY c.community_name`,
+    [req.clientId]
+  );
+  res.json(communities);
+});
+
+// Preview community CSV import (no save)
+router.post("/communities/import/preview", async (req, res) => {
+  try {
+    if (!(await requirePaidTier(req, res))) return;
+
+    if (!req.files || !req.files.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const csv = req.files.file.data.toString("utf8");
+    const { rows, errors, error } = parseCommunityCSV(csv);
+    if (error) return res.status(400).json({ error });
+
+    // Get existing community names from board members
+    const existingNames = await db.all(
+      "SELECT DISTINCT community_name FROM users WHERE client_id = ? AND community_name IS NOT NULL AND active = TRUE",
+      [req.clientId]
+    );
+    const nameList = existingNames.map((r) => r.community_name);
+
+    // Get member counts per community name
+    const memberCounts = await db.all(
+      "SELECT community_name, COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND community_name IS NOT NULL GROUP BY community_name",
+      [req.clientId]
+    );
+    const countMap = Object.fromEntries(memberCounts.map((r) => [r.community_name.toLowerCase().trim(), r.count]));
+
+    const matched = [];
+    const unmatched = [];
+
+    for (const row of rows) {
+      const normalized = row.community_name.toLowerCase().trim();
+      const exactMatch = nameList.find((n) => n.toLowerCase().trim() === normalized);
+
+      if (exactMatch) {
+        matched.push({
+          ...row,
+          matched_name: exactMatch,
+          member_count: countMap[normalized] || 0,
+        });
+      } else {
+        // Find close matches via Levenshtein
+        const suggestions = nameList
+          .map((n) => ({ name: n, distance: levenshtein(normalized, n.toLowerCase().trim()) }))
+          .filter((s) => s.distance <= 3 || normalized.includes(s.name.toLowerCase().trim()) || s.name.toLowerCase().trim().includes(normalized))
+          .sort((a, b) => a.distance - b.distance)
+          .slice(0, 3)
+          .map((s) => ({
+            name: s.name,
+            member_count: countMap[s.name.toLowerCase().trim()] || 0,
+          }));
+
+        unmatched.push({
+          ...row,
+          suggestions,
+        });
+      }
+    }
+
+    res.json({ matched, unmatched, errors });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Import communities from CSV
+router.post("/communities/import", async (req, res) => {
+  try {
+    if (!(await requirePaidTier(req, res))) return;
+
+    if (!req.files || !req.files.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const csv = req.files.file.data.toString("utf8");
+    const { rows, errors, error } = parseCommunityCSV(csv);
+    if (error) return res.status(400).json({ error });
+
+    // Optional: name remapping from preview (e.g., "Oak Ridge" → "Oak Ridge HOA")
+    const nameMap = req.body.name_map ? JSON.parse(req.body.name_map) : {};
+
+    let created = 0;
+    let updated = 0;
+
+    const validTypes = ["condo", "townhome", "single_family", "mixed", "other"];
+
+    for (const row of rows) {
+      const finalName = nameMap[row.community_name] || row.community_name;
+      const propType = validTypes.includes(row.property_type) ? row.property_type : null;
+
+      try {
+        const existing = await db.get(
+          "SELECT id FROM communities WHERE LOWER(TRIM(community_name)) = ? AND client_id = ?",
+          [finalName.toLowerCase().trim(), req.clientId]
+        );
+
+        if (existing) {
+          await db.run(
+            `UPDATE communities SET contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [row.contract_value, row.community_manager_name, propType, row.number_of_units, existing.id]
+          );
+          updated++;
+        } else {
+          await db.run(
+            `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [req.clientId, finalName, row.contract_value, row.community_manager_name, propType, row.number_of_units]
+          );
+          created++;
+        }
+      } catch (err) {
+        errors.push(`${finalName}: ${err.message}`);
+      }
+    }
+
+    // Auto-link board members to communities
+    const linked = await autoLinkUsersToCommunities(req.clientId);
+
+    res.json({ created, updated, matched_members: linked, total: created + updated, errors: errors.length > 0 ? errors : undefined });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update a community
+router.put("/communities/:id", async (req, res) => {
+  const { id } = req.params;
+  const community = await db.get("SELECT id FROM communities WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  if (!community) return res.status(404).json({ error: "Community not found" });
+
+  const { community_name, contract_value, community_manager_name, property_type, number_of_units } = req.body;
+  const validTypes = ["condo", "townhome", "single_family", "mixed", "other"];
+  const propType = validTypes.includes(property_type) ? property_type : null;
+
+  await db.run(
+    `UPDATE communities SET community_name = ?, contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [community_name, contract_value || null, community_manager_name || null, propType, number_of_units || null, id]
+  );
+
+  const updated = await db.get("SELECT * FROM communities WHERE id = ?", [id]);
+  res.json(updated);
+});
+
+// Delete a community
+router.delete("/communities/:id", async (req, res) => {
+  const { id } = req.params;
+  const community = await db.get("SELECT id FROM communities WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  if (!community) return res.status(404).json({ error: "Community not found" });
+
+  await db.run("DELETE FROM communities WHERE id = ?", [id]);
+  res.json({ ok: true });
 });
 
 export default router;
