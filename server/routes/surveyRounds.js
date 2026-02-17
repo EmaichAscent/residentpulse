@@ -595,7 +595,9 @@ router.post("/:id/launch", async (req, res) => {
 
     // Check member limit
     const sub = await db.get(
-      "SELECT sp.member_limit FROM subscription_plans sp JOIN clients c ON c.subscription_plan_id = sp.id WHERE c.id = ?",
+      `SELECT sp.member_limit FROM client_subscriptions cs
+       JOIN subscription_plans sp ON sp.id = cs.plan_id
+       WHERE cs.client_id = $1`,
       [req.clientId]
     );
     if (sub?.member_limit && members.length > sub.member_limit) {
