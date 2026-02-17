@@ -145,7 +145,10 @@ export default function RoundDashboard({ roundId, onBack }) {
     return <p className="text-red-500 text-center py-10">Failed to load round data.</p>;
   }
 
-  const { round, nps, response_rate, sessions, non_responders, community_cohorts, alerts, word_frequencies, insights } = data;
+  const { round, nps, response_rate, sessions, non_responders, community_cohorts, is_paid_tier, community_analytics, alerts, word_frequencies, insights } = data;
+
+  const formatCurrency = (val) => val != null ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(val) : "$0";
+  const formatPropertyType = (t) => ({ condo: "Condo", townhome: "Townhome", single_family: "Single Family", mixed: "Mixed", other: "Other" }[t] || t);
   const isActive = round.status === "in_progress";
   const isConcluded = round.status === "concluded";
 
@@ -345,6 +348,138 @@ export default function RoundDashboard({ roundId, onBack }) {
             <span><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.detractor }} />Detractor (0-6)</span>
           </div>
         </div>
+      )}
+
+      {/* Paid Tier Community Analytics */}
+      {is_paid_tier && community_analytics && (
+        <>
+          {/* Revenue at Risk */}
+          {community_analytics.revenue_at_risk.total_portfolio_value > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Revenue at Risk</p>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(community_analytics.revenue_at_risk.total_portfolio_value)}</p>
+                  <p className="text-xs text-gray-500 mt-1">Total Portfolio</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-red-600">{formatCurrency(community_analytics.revenue_at_risk.at_risk_value)}</p>
+                  <p className="text-xs text-gray-500 mt-1">At Risk</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold" style={{
+                    color: community_analytics.revenue_at_risk.percent_at_risk > 20 ? "#EF4444"
+                      : community_analytics.revenue_at_risk.percent_at_risk > 10 ? "#F59E0B" : "#1AB06E"
+                  }}>
+                    {community_analytics.revenue_at_risk.percent_at_risk}%
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">% at Risk</p>
+                </div>
+              </div>
+              {community_analytics.revenue_at_risk.at_risk_communities.length > 0 && (
+                <div className="border-t border-gray-100 pt-3">
+                  <p className="text-xs font-medium text-gray-500 mb-2">At-Risk Communities (Detractor NPS)</p>
+                  <div className="space-y-2">
+                    {community_analytics.revenue_at_risk.at_risk_communities.map((c, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm py-1.5 px-3 bg-red-50 rounded-lg">
+                        <span className="font-medium text-gray-900">{c.name}</span>
+                        <div className="flex items-center gap-4">
+                          <span className="text-gray-600">{formatCurrency(c.contract_value)}</span>
+                          <span className="font-semibold text-red-600">NPS {c.median}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Manager Performance */}
+          {community_analytics.manager_performance.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Manager Performance</p>
+              <div className="space-y-3">
+                {community_analytics.manager_performance.map((m, i) => (
+                  <div key={i} className="flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{m.manager}</p>
+                      <p className="text-xs text-gray-500">
+                        {m.communities} communit{m.communities === 1 ? "y" : "ies"} · {m.respondents} respondent{m.respondents !== 1 ? "s" : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.max(5, Math.min(100, (m.nps + 100) / 2))}%`,
+                            backgroundColor: m.nps >= 50 ? COLORS.promoter : m.nps >= 0 ? COLORS.passive : COLORS.detractor,
+                          }}
+                        />
+                      </div>
+                      <span className="text-sm font-bold w-12 text-right" style={{ color: npsColor(m.nps) }}>
+                        {m.nps > 0 ? "+" : ""}{m.nps}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Property Type Analysis */}
+          {community_analytics.property_type_analysis.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Property Type Analysis</p>
+              <div className="space-y-3">
+                {community_analytics.property_type_analysis.map((pt, i) => (
+                  <div key={i} className="flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">{formatPropertyType(pt.property_type)}</p>
+                      <p className="text-xs text-gray-500">
+                        {pt.communities} communit{pt.communities === 1 ? "y" : "ies"} · {pt.respondents} respondent{pt.respondents !== 1 ? "s" : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.max(5, Math.min(100, (pt.nps + 100) / 2))}%`,
+                            backgroundColor: pt.nps >= 50 ? COLORS.promoter : pt.nps >= 0 ? COLORS.passive : COLORS.detractor,
+                          }}
+                        />
+                      </div>
+                      <span className="text-sm font-bold w-12 text-right" style={{ color: npsColor(pt.nps) }}>
+                        {pt.nps > 0 ? "+" : ""}{pt.nps}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Size-Based Trends */}
+          {community_analytics.size_trends.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">Size-Based Trends</p>
+              <p className="text-xs text-gray-400 mb-4">Community size vs. satisfaction</p>
+              <div className="space-y-2">
+                {community_analytics.size_trends.map((s, i) => (
+                  <div key={i} className="flex items-center gap-4 text-sm py-1.5">
+                    <span className="font-medium text-gray-900 flex-1 truncate">{s.name}</span>
+                    <span className="text-gray-500 w-20 text-right">{s.units} units</span>
+                    <span className="font-semibold w-16 text-right" style={{ color: barColor(s.median) }}>
+                      NPS {s.median}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Word Cloud */}

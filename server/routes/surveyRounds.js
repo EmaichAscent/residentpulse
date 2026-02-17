@@ -230,6 +230,122 @@ router.get("/:id/dashboard", async (req, res) => {
       communityCohorts.push({ name, median, cohort, respondents: scores.length });
     }
 
+    // Community analytics for paid tiers
+    let communityAnalytics = null;
+    const planResult = await db.get(
+      `SELECT sp.name as plan_name FROM client_subscriptions cs
+       JOIN subscription_plans sp ON sp.id = cs.plan_id
+       WHERE cs.client_id = ?`,
+      [req.clientId]
+    );
+    const isPaidTier = planResult && planResult.plan_name !== "free";
+
+    if (isPaidTier && communityCohorts.length > 0) {
+      const communityData = await db.all(
+        `SELECT id, community_name, contract_value, community_manager_name, property_type, number_of_units
+         FROM communities WHERE client_id = ?`,
+        [req.clientId]
+      );
+
+      // Build lookup by normalized name
+      const communityLookup = {};
+      for (const c of communityData) {
+        communityLookup[c.community_name.trim().toLowerCase()] = c;
+      }
+
+      // Build community_name -> individual NPS scores for this round
+      const communityScores = {};
+      for (const s of completedSessions) {
+        if (s.community_name) {
+          const key = s.community_name.trim().toLowerCase();
+          if (!communityScores[key]) communityScores[key] = [];
+          communityScores[key].push(s.nps_score);
+        }
+      }
+
+      // Enrich cohorts with business data
+      const enrichedCohorts = communityCohorts.map(cohort => {
+        const meta = communityLookup[cohort.name.trim().toLowerCase()];
+        return {
+          ...cohort,
+          contract_value: meta?.contract_value ? Number(meta.contract_value) : null,
+          community_manager_name: meta?.community_manager_name || null,
+          property_type: meta?.property_type || null,
+          number_of_units: meta?.number_of_units ? Number(meta.number_of_units) : null,
+        };
+      });
+
+      // Revenue at Risk
+      const totalPortfolioValue = communityData.reduce((sum, c) => sum + (Number(c.contract_value) || 0), 0);
+      const atRiskCommunities = enrichedCohorts.filter(c => c.cohort === "detractor" && c.contract_value);
+      const revenueAtRisk = atRiskCommunities.reduce((sum, c) => sum + c.contract_value, 0);
+
+      // Manager Performance: group scores by manager
+      const managerScores = {};
+      for (const c of communityData) {
+        const mgr = c.community_manager_name;
+        if (!mgr) continue;
+        const key = c.community_name.trim().toLowerCase();
+        const scores = communityScores[key] || [];
+        if (!managerScores[mgr]) managerScores[mgr] = { communities: [], scores: [] };
+        managerScores[mgr].communities.push(c.community_name);
+        managerScores[mgr].scores.push(...scores);
+      }
+
+      const managerPerformance = Object.entries(managerScores)
+        .filter(([_, data]) => data.scores.length > 0)
+        .map(([manager, data]) => {
+          const p = data.scores.filter(n => n >= 9).length;
+          const d = data.scores.filter(n => n <= 6).length;
+          const nps = Math.round(((p - d) / data.scores.length) * 100);
+          return { manager, communities: data.communities.length, nps, respondents: data.scores.length };
+        })
+        .sort((a, b) => b.nps - a.nps);
+
+      // Property Type Analysis
+      const typeScores = {};
+      for (const c of communityData) {
+        if (!c.property_type) continue;
+        const key = c.community_name.trim().toLowerCase();
+        const scores = communityScores[key] || [];
+        if (!typeScores[c.property_type]) typeScores[c.property_type] = { communities: 0, scores: [] };
+        if (scores.length > 0) {
+          typeScores[c.property_type].communities++;
+          typeScores[c.property_type].scores.push(...scores);
+        }
+      }
+
+      const propertyTypeAnalysis = Object.entries(typeScores)
+        .filter(([_, data]) => data.scores.length > 0)
+        .map(([type, data]) => {
+          const p = data.scores.filter(n => n >= 9).length;
+          const d = data.scores.filter(n => n <= 6).length;
+          const nps = Math.round(((p - d) / data.scores.length) * 100);
+          return { property_type: type, communities: data.communities, nps, respondents: data.scores.length };
+        })
+        .sort((a, b) => b.nps - a.nps);
+
+      // Size-Based Trends
+      const sizeTrends = enrichedCohorts
+        .filter(c => c.number_of_units)
+        .map(c => ({ name: c.name, units: c.number_of_units, median: c.median, cohort: c.cohort, respondents: c.respondents }))
+        .sort((a, b) => a.units - b.units);
+
+      communityAnalytics = {
+        revenue_at_risk: {
+          total_portfolio_value: totalPortfolioValue,
+          at_risk_value: revenueAtRisk,
+          percent_at_risk: totalPortfolioValue > 0 ? Math.round((revenueAtRisk / totalPortfolioValue) * 100) : 0,
+          at_risk_communities: atRiskCommunities.map(c => ({
+            name: c.name, contract_value: c.contract_value, median: c.median, respondents: c.respondents,
+          })),
+        },
+        manager_performance: managerPerformance,
+        property_type_analysis: propertyTypeAnalysis,
+        size_trends: sizeTrends,
+      };
+    }
+
     // Critical alerts for this round
     const alerts = await db.all(
       `SELECT ca.*, u.first_name, u.last_name, u.email as user_email, u.community_name as alert_community
@@ -288,6 +404,8 @@ router.get("/:id/dashboard", async (req, res) => {
       sessions,
       non_responders: nonResponders,
       community_cohorts: communityCohorts,
+      is_paid_tier: isPaidTier,
+      community_analytics: communityAnalytics,
       alerts,
       word_frequencies: wordFrequencies,
       insights,
