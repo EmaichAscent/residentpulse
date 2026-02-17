@@ -165,7 +165,7 @@ export default function SignUpPage() {
                       )}
                       <p className="font-bold text-gray-900">{plan.display_name}</p>
                       <p className="text-sm text-gray-600 mt-1">
-                        Up to {plan.member_limit.toLocaleString()} members
+                        Up to {plan.member_limit.toLocaleString()} board members
                       </p>
                       <p className="text-sm text-gray-600">
                         {plan.survey_rounds_per_year} survey rounds/year

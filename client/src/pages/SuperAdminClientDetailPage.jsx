@@ -222,7 +222,7 @@ export default function SuperAdminClientDetailPage() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 text-sm">
-            <div><span className="text-gray-500 block">Members</span><span className="font-semibold">{member_count}</span></div>
+            <div><span className="text-gray-500 block">Board Members</span><span className="font-semibold">{member_count}</span></div>
             <div><span className="text-gray-500 block">Communities</span><span className="font-semibold">{community_count}</span></div>
             <div><span className="text-gray-500 block">Plan</span><span className="font-semibold">{subscription?.plan_display_name || "None"}</span></div>
             <div><span className="text-gray-500 block">Created</span><span className="font-semibold">{formatDate(client.created_at)}</span></div>
@@ -264,7 +264,7 @@ export default function SuperAdminClientDetailPage() {
                 <select value={editPlanId || ""} onChange={(e) => setEditPlanId(Number(e.target.value))} className="input-field-sm mt-1">
                   <option value="">No plan</option>
                   {plans.map((p) => (
-                    <option key={p.id} value={p.id}>{p.display_name} ({p.member_limit} members, {p.survey_rounds_per_year} rounds/yr)</option>
+                    <option key={p.id} value={p.id}>{p.display_name} ({p.member_limit} board members, {p.survey_rounds_per_year} rounds/yr)</option>
                   ))}
                 </select>
               </div>

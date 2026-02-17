@@ -410,7 +410,7 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
                 <th className="px-5 py-3">Manager</th>
                 <th className="px-5 py-3">Type</th>
                 <th className="px-5 py-3">Units</th>
-                <th className="px-5 py-3">Members</th>
+                <th className="px-5 py-3">Board Members</th>
                 <th className="px-5 py-3 w-20"></th>
               </tr>
             </thead>

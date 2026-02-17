@@ -323,9 +323,9 @@ export default function RoundsLanding() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
             <div>
-              <p className="text-sm font-semibold text-amber-800">Member limit exceeded</p>
+              <p className="text-sm font-semibold text-amber-800">Board member limit exceeded</p>
               <p className="text-sm text-amber-700 mt-0.5">
-                You have {memberCount} board members but your plan supports {memberLimit}. New survey rounds cannot be launched until you're within your plan limit. Remove inactive members or upgrade your plan.
+                You have {memberCount} board members but your plan supports {memberLimit}. New survey rounds cannot be launched until you're within your plan limit. Remove inactive board members or upgrade your plan.
               </p>
             </div>
           </div>

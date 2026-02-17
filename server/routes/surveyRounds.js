@@ -600,7 +600,7 @@ router.post("/:id/launch", async (req, res) => {
     );
     if (sub?.member_limit && members.length > sub.member_limit) {
       return res.status(400).json({
-        error: `You have ${members.length} board members but your plan supports ${sub.member_limit}. Remove members or upgrade your plan before launching.`
+        error: `You have ${members.length} board members but your plan supports ${sub.member_limit}. Remove board members or upgrade your plan before launching.`
       });
     }
 

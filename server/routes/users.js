@@ -115,7 +115,7 @@ router.post("/", requireClientAdmin, async (req, res) => {
     const currentCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE", [req.clientId]);
     if ((currentCount?.count || 0) >= subscription.member_limit) {
       return res.status(403).json({
-        error: `Board member limit reached (${subscription.member_limit}). Please upgrade your plan to add more members.`
+        error: `Board member limit reached (${subscription.member_limit}). Please upgrade your plan to add more board members.`
       });
     }
   }
