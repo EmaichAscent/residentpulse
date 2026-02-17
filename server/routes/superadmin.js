@@ -644,32 +644,39 @@ router.post("/clients/:id/reset", async (req, res) => {
     // 3. Delete critical alerts
     await db.run("DELETE FROM critical_alerts WHERE client_id = ?", [clientId]);
 
-    // 4. Delete survey rounds
+    // 4. Delete invitation logs
+    await db.run("DELETE FROM invitation_logs WHERE client_id = ?", [clientId]);
+
+    // 5. Delete survey rounds
     await db.run("DELETE FROM survey_rounds WHERE client_id = ?", [clientId]);
 
-    // 5. Delete admin interview messages, then interviews
+    // 6. Delete admin interview messages, then interviews
     await db.run(
       "DELETE FROM admin_interview_messages WHERE interview_id IN (SELECT id FROM admin_interviews WHERE client_id = ?)",
       [clientId]
     );
     await db.run("DELETE FROM admin_interviews WHERE client_id = ?", [clientId]);
 
-    // 6. Delete the prompt supplement setting
+    // 7. Delete the prompt supplement setting
     await db.run(
       "DELETE FROM settings WHERE client_id = ? AND key = 'interview_prompt_supplement'",
       [clientId]
     );
 
-    // 7. Reset onboarding_completed on all client admins
+    // 8. Clear communities and unlink board members
+    await db.run("UPDATE users SET community_id = NULL WHERE client_id = ?", [clientId]);
+    await db.run("DELETE FROM communities WHERE client_id = ?", [clientId]);
+
+    // 9. Reset onboarding_completed on all client admins
     await db.run(
       "UPDATE client_admins SET onboarding_completed = FALSE WHERE client_id = ?",
       [clientId]
     );
 
-    // 8. Log the reset
+    // 10. Log the reset
     await db.run(
-      "INSERT INTO activity_log (client_id, actor_email, action) VALUES (?, ?, ?)",
-      [clientId, req.session.user?.email || "superadmin", `Reset client "${client.company_name}" (interviews, rounds, sessions cleared)`]
+      "INSERT INTO activity_log (client_id, actor_type, actor_email, action) VALUES (?, 'superadmin', ?, ?)",
+      [clientId, req.session.user?.email || "superadmin", `Reset client "${client.company_name}" (interviews, rounds, sessions, communities cleared)`]
     );
 
     res.json({ ok: true, message: `Client "${client.company_name}" has been reset. Board members preserved.` });
