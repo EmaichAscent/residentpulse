@@ -102,6 +102,7 @@ export default function UserManager() {
   const { user } = useOutletContext();
   const companyName = user?.company_name;
   const [users, setUsers] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState(null);
@@ -131,9 +132,17 @@ export default function UserManager() {
       .catch(() => {});
   };
 
+  const fetchSessions = () => {
+    fetch("/api/admin/sessions", { credentials: "include" })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setSessions(data))
+      .catch(() => {});
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchCommunityNames();
+    fetchSessions();
   }, []);
 
   const handleUpload = async (e) => {
