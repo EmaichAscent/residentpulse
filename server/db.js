@@ -195,6 +195,16 @@ async function initializeSchema() {
       console.log("Communities migration skipped (already applied or file not found)");
     }
 
+    // Run session community_id migration (stable community reference on sessions)
+    try {
+      const sessionCommunityPath = join(__dirname, "migrations", "add-session-community-id.sql");
+      const sessionCommunitySQL = readFileSync(sessionCommunityPath, "utf-8");
+      await client.query(sessionCommunitySQL);
+      console.log("Session community_id migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Session community_id migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");
   } catch (err) {

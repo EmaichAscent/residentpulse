@@ -42,10 +42,12 @@ export async function generateRoundInsights(roundId, clientId) {
 
   // Fetch completed sessions with summaries for this round
   const sessions = await db.all(
-    `SELECT s.id, s.email, s.nps_score, s.summary, s.community_name,
+    `SELECT s.id, s.email, s.nps_score, s.summary,
+            COALESCE(sc.community_name, s.community_name) as community_name,
             u.first_name, u.last_name
      FROM sessions s
      LEFT JOIN users u ON u.id = s.user_id
+     LEFT JOIN communities sc ON sc.id = s.community_id
      WHERE s.round_id = ? AND s.client_id = ? AND s.completed = TRUE AND s.summary IS NOT NULL`,
     [roundId, clientId]
   );

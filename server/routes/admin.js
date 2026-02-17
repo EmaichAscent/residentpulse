@@ -15,11 +15,13 @@ router.use(requireClientAdmin);
 // Get all sessions with message count (filtered by client)
 router.get("/responses", async (req, res) => {
   const sessions = await db.all(
-    `SELECT s.*, COUNT(m.id) as message_count
+    `SELECT s.*, COALESCE(sc.community_name, s.community_name) as community_name,
+            COUNT(m.id) as message_count
      FROM sessions s
      LEFT JOIN messages m ON m.session_id = s.id
+     LEFT JOIN communities sc ON sc.id = s.community_id
      WHERE s.client_id = ?
-     GROUP BY s.id
+     GROUP BY s.id, sc.community_name
      ORDER BY s.created_at DESC`,
     [req.clientId]
   );

@@ -102,15 +102,15 @@ router.post("/", async (req, res) => {
 
   const cleanEmail = email.trim().toLowerCase();
 
-  // Look up user to get their client_id
+  // Look up user to get their client_id and community_id
   // Prefer user_id lookup (from token validation) to avoid ambiguity when
   // the same email exists as a board member under multiple clients
   let user;
   if (user_id) {
-    user = await db.get("SELECT client_id FROM users WHERE id = ?", [user_id]);
+    user = await db.get("SELECT client_id, community_id FROM users WHERE id = ?", [user_id]);
   }
   if (!user) {
-    user = await db.get("SELECT client_id FROM users WHERE LOWER(email) = ?", [cleanEmail]);
+    user = await db.get("SELECT client_id, community_id FROM users WHERE LOWER(email) = ?", [cleanEmail]);
   }
   if (!user || !user.client_id) {
     return res.status(400).json({ error: "User not found or not associated with a client" });
@@ -123,8 +123,8 @@ router.post("/", async (req, res) => {
   );
 
   const result = await db.run(
-    "INSERT INTO sessions (email, user_id, community_name, management_company, client_id, round_id) VALUES (?, ?, ?, ?, ?, ?)",
-    [cleanEmail, user_id || null, community_name?.trim() || null, management_company?.trim() || null, user.client_id, activeRound?.id || null]
+    "INSERT INTO sessions (email, user_id, community_name, management_company, client_id, round_id, community_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [cleanEmail, user_id || null, community_name?.trim() || null, management_company?.trim() || null, user.client_id, activeRound?.id || null, user.community_id || null]
   );
   const session = await db.get("SELECT * FROM sessions WHERE id = ?", [result.lastInsertRowid]);
   res.json(session);

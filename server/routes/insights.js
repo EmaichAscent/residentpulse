@@ -19,9 +19,12 @@ router.post("/", async (req, res) => {
   // Get summaries for all the sessions (filtered by client)
   const placeholders = session_ids.map(() => "?").join(",");
   const sessions = await db.all(
-    `SELECT id, email, nps_score, summary, community_name, management_company
-     FROM sessions
-     WHERE id IN (${placeholders}) AND summary IS NOT NULL AND client_id = ?`,
+    `SELECT s.id, s.email, s.nps_score, s.summary,
+            COALESCE(sc.community_name, s.community_name) as community_name,
+            s.management_company
+     FROM sessions s
+     LEFT JOIN communities sc ON sc.id = s.community_id
+     WHERE s.id IN (${placeholders}) AND s.summary IS NOT NULL AND s.client_id = ?`,
     [...session_ids, req.clientId]
   );
 

@@ -141,8 +141,9 @@ router.get("/trends", async (req, res) => {
     for (const round of rounds) {
       // Get session stats for this round
       const sessions = await db.all(
-        `SELECT s.nps_score, s.community_name, s.completed
+        `SELECT s.nps_score, COALESCE(sc.community_name, s.community_name) as community_name, s.completed
          FROM sessions s
+         LEFT JOIN communities sc ON sc.id = s.community_id
          WHERE s.round_id = ? AND s.client_id = ?`,
         [round.id, req.clientId]
       );
@@ -212,10 +213,12 @@ router.get("/:id/dashboard", async (req, res) => {
 
     // All sessions for this round
     const sessions = await db.all(
-      `SELECT s.id, s.email, s.nps_score, s.completed, s.summary, s.community_name,
+      `SELECT s.id, s.email, s.nps_score, s.completed, s.summary,
+              COALESCE(sc.community_name, s.community_name) as community_name,
               s.created_at, u.first_name, u.last_name
        FROM sessions s
        LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN communities sc ON sc.id = s.community_id
        WHERE s.round_id = ? AND s.client_id = ?
        ORDER BY s.created_at DESC`,
       [roundId, req.clientId]
