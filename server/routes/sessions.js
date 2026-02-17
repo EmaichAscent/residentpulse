@@ -27,9 +27,14 @@ router.get("/validate-token/:token", async (req, res) => {
   }
 
   try {
-    // Look up user by invitation token
+    // Look up user by invitation token (join communities for canonical name)
     const user = await db.get(
-      "SELECT id, email, first_name, last_name, community_name, management_company, client_id, invitation_token_expires FROM users WHERE invitation_token = ?",
+      `SELECT u.id, u.email, u.first_name, u.last_name,
+              COALESCE(c.community_name, u.community_name) as community_name,
+              u.management_company, u.client_id, u.invitation_token_expires
+       FROM users u
+       LEFT JOIN communities c ON c.id = u.community_id
+       WHERE u.invitation_token = ?`,
       [token]
     );
 

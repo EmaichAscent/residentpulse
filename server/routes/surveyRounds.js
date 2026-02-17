@@ -223,9 +223,11 @@ router.get("/:id/dashboard", async (req, res) => {
 
     // Invited users (from invitation_logs)
     const invitedUsers = await db.all(
-      `SELECT DISTINCT u.id, u.first_name, u.last_name, u.email, u.community_name
+      `SELECT DISTINCT u.id, u.first_name, u.last_name, u.email,
+              COALESCE(c.community_name, u.community_name) as community_name
        FROM invitation_logs il
        JOIN users u ON u.id = il.user_id
+       LEFT JOIN communities c ON c.id = u.community_id
        WHERE il.round_id = ? AND il.email_status = 'sent'`,
       [roundId]
     );
@@ -381,9 +383,11 @@ router.get("/:id/dashboard", async (req, res) => {
 
     // Critical alerts for this round
     const alerts = await db.all(
-      `SELECT ca.*, u.first_name, u.last_name, u.email as user_email, u.community_name as alert_community
+      `SELECT ca.*, u.first_name, u.last_name, u.email as user_email,
+              COALESCE(c.community_name, u.community_name) as alert_community
        FROM critical_alerts ca
        LEFT JOIN users u ON u.id = ca.user_id
+       LEFT JOIN communities c ON c.id = u.community_id
        WHERE ca.round_id = ? AND ca.client_id = ?
        ORDER BY ca.created_at DESC`,
       [roundId, req.clientId]
@@ -560,7 +564,12 @@ router.post("/:id/launch", async (req, res) => {
 
     // Get active board members only
     const members = await db.all(
-      "SELECT id, email, first_name, last_name, community_name, management_company FROM users WHERE client_id = ? AND active = TRUE",
+      `SELECT u.id, u.email, u.first_name, u.last_name,
+              COALESCE(c.community_name, u.community_name) as community_name,
+              u.management_company
+       FROM users u
+       LEFT JOIN communities c ON c.id = u.community_id
+       WHERE u.client_id = ? AND u.active = TRUE`,
       [req.clientId]
     );
 

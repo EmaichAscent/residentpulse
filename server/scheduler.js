@@ -71,9 +71,11 @@ async function sendRoundReminders(round, dayNumber) {
   // Find non-responders: users invited for this round who haven't completed a session
   const nonResponders = await db.all(
     `SELECT DISTINCT u.id, u.email, u.first_name, u.last_name,
-            u.community_name, u.management_company, u.invitation_token
+            COALESCE(c.community_name, u.community_name) as community_name,
+            u.management_company, u.invitation_token
      FROM invitation_logs il
      JOIN users u ON u.id = il.user_id
+     LEFT JOIN communities c ON c.id = u.community_id
      WHERE il.round_id = ? AND il.email_status = 'sent'
        AND NOT EXISTS (
          SELECT 1 FROM sessions s

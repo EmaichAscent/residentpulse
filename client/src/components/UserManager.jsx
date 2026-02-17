@@ -111,6 +111,7 @@ export default function UserManager({ sessions, companyName }) {
   const [editForm, setEditForm] = useState({});
   const [editError, setEditError] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [communityNames, setCommunityNames] = useState([]);
 
   const fetchUsers = () => {
     fetch("/api/admin/board-members")
@@ -120,8 +121,16 @@ export default function UserManager({ sessions, companyName }) {
       .finally(() => setLoading(false));
   };
 
+  const fetchCommunityNames = () => {
+    fetch("/api/admin/communities", { credentials: "include" })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setCommunityNames(data.map((c) => c.community_name).filter(Boolean)))
+      .catch(() => {});
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchCommunityNames();
   }, []);
 
   const handleUpload = async (e) => {
@@ -258,11 +267,12 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
       })
     : users;
 
-  // Unique community and company names for autocomplete
-  const communityOptions = useMemo(() =>
-    [...new Set(users.map((u) => u.community_name).filter(Boolean))].sort(),
-    [users]
-  );
+  // Unique community names for autocomplete (merged from board members + communities table)
+  const communityOptions = useMemo(() => {
+    const names = new Set(users.map((u) => u.community_name).filter(Boolean));
+    communityNames.forEach((n) => names.add(n));
+    return [...names].sort();
+  }, [users, communityNames]);
   const companyOptions = useMemo(() => {
     const names = new Set(users.map((u) => u.management_company).filter(Boolean));
     if (companyName) names.add(companyName);

@@ -271,7 +271,13 @@ router.patch("/account/cadence", async (req, res) => {
 // Get board members (users table) for current client
 router.get("/board-members", async (req, res) => {
   const users = await db.all(
-    "SELECT id, first_name, last_name, email, community_name, management_company, active, updated_at FROM users WHERE client_id = ? AND active = TRUE ORDER BY email",
+    `SELECT u.id, u.first_name, u.last_name, u.email,
+            COALESCE(c.community_name, u.community_name) as community_name,
+            u.management_company, u.active, u.updated_at
+     FROM users u
+     LEFT JOIN communities c ON c.id = u.community_id
+     WHERE u.client_id = ? AND u.active = TRUE
+     ORDER BY u.email`,
     [req.clientId]
   );
   res.json(users);
@@ -296,18 +302,20 @@ router.post("/board-members", async (req, res) => {
 
   if (existing && !existing.active) {
     // Reactivate previously removed board member
+    const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name);
     await db.run(
       "UPDATE users SET active = TRUE, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [first_name || null, last_name || null, community_name || null, management_company || null, existing.id]
+      [first_name || null, last_name || null, canonicalCommunity || community_name || null, management_company || null, existing.id]
     );
     await autoLinkUsersToCommunities(req.clientId);
     const reactivated = await db.get("SELECT * FROM users WHERE id = ?", [existing.id]);
     return res.json(reactivated);
   }
 
+  const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name);
   const result = await db.run(
     "INSERT INTO users (client_id, email, first_name, last_name, community_name, management_company) VALUES (?, ?, ?, ?, ?, ?)",
-    [req.clientId, cleanEmail, first_name || null, last_name || null, community_name || null, management_company || null]
+    [req.clientId, cleanEmail, first_name || null, last_name || null, canonicalCommunity || community_name || null, management_company || null]
   );
 
   await autoLinkUsersToCommunities(req.clientId);
@@ -338,10 +346,13 @@ router.put("/board-members/:id", async (req, res) => {
     return res.status(400).json({ error: "A board member with this email already exists" });
   }
 
+  const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name);
   await db.run(
-    "UPDATE users SET email = ?, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    [cleanEmail, first_name || null, last_name || null, community_name || null, management_company || null, id]
+    "UPDATE users SET email = ?, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP, community_id = NULL WHERE id = ?",
+    [cleanEmail, first_name || null, last_name || null, canonicalCommunity || community_name || null, management_company || null, id]
   );
+
+  await autoLinkUsersToCommunities(req.clientId);
 
   const updatedUser = await db.get("SELECT * FROM users WHERE id = ?", [id]);
   res.json(updatedUser);
@@ -407,18 +418,22 @@ router.post("/board-members/import", async (req, res) => {
       const management_company = companyIndex >= 0 ? values[companyIndex] || null : null;
 
       try {
+        // Fuzzy-match community name to prevent duplicates
+        const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name);
+        const finalCommunity = canonicalCommunity || community_name;
+
         const existing = await db.get("SELECT id, active FROM users WHERE email = ? AND client_id = ?", [email, req.clientId]);
 
         if (existing) {
           await db.run(
             "UPDATE users SET first_name = ?, last_name = ?, community_name = ?, management_company = ?, active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            [first_name, last_name, community_name, management_company, existing.id]
+            [first_name, last_name, finalCommunity, management_company, existing.id]
           );
           updated++;
         } else {
           await db.run(
             "INSERT INTO users (client_id, email, first_name, last_name, community_name, management_company) VALUES (?, ?, ?, ?, ?, ?)",
-            [req.clientId, email, first_name, last_name, community_name, management_company]
+            [req.clientId, email, first_name, last_name, finalCommunity, management_company]
           );
           created++;
         }
@@ -656,10 +671,12 @@ router.get("/alerts", async (req, res) => {
   try {
     const alerts = await db.all(
       `SELECT ca.*,
-              u.first_name, u.last_name, u.email as user_email, u.community_name,
+              u.first_name, u.last_name, u.email as user_email,
+              COALESCE(cm.community_name, u.community_name) as community_name,
               sr.round_number
        FROM critical_alerts ca
        LEFT JOIN users u ON u.id = ca.user_id
+       LEFT JOIN communities cm ON cm.id = u.community_id
        LEFT JOIN survey_rounds sr ON sr.id = ca.round_id
        WHERE ca.client_id = ? AND ca.dismissed = FALSE
        ORDER BY ca.created_at DESC`,
@@ -686,9 +703,11 @@ router.get("/alerts/round/:roundId", async (req, res) => {
 
     const alerts = await db.all(
       `SELECT ca.*,
-              u.first_name, u.last_name, u.email as user_email, u.community_name
+              u.first_name, u.last_name, u.email as user_email,
+              COALESCE(cm.community_name, u.community_name) as community_name
        FROM critical_alerts ca
        LEFT JOIN users u ON u.id = ca.user_id
+       LEFT JOIN communities cm ON cm.id = u.community_id
        WHERE ca.round_id = ? AND ca.client_id = ?
        ORDER BY ca.created_at DESC`,
       [roundId, req.clientId]
@@ -817,6 +836,46 @@ function levenshtein(a, b) {
   return dp[m][n];
 }
 
+// Helper: auto-create community if community_name doesn't exist for this client.
+// Uses fuzzy matching to prevent near-duplicate communities (e.g. "Oak Ridge" vs "Oak Ridge HOA").
+// If a close match is found, normalizes the user's community_name to the existing one.
+// Returns the canonical community_name (existing match or the new one).
+async function autoCreateCommunityIfNeeded(clientId, communityName) {
+  if (!communityName || !communityName.trim()) return null;
+  const trimmed = communityName.trim();
+  const normalized = trimmed.toLowerCase();
+
+  // Exact match check first
+  const exact = await db.get(
+    "SELECT id, community_name FROM communities WHERE client_id = ? AND LOWER(TRIM(community_name)) = LOWER(?)",
+    [clientId, trimmed]
+  );
+  if (exact) return exact.community_name;
+
+  // Fuzzy match: check all communities for this client
+  const allCommunities = await db.all(
+    "SELECT id, community_name FROM communities WHERE client_id = ?",
+    [clientId]
+  );
+
+  for (const c of allCommunities) {
+    const existingNorm = c.community_name.toLowerCase().trim();
+    const dist = levenshtein(normalized, existingNorm);
+    const maxLen = Math.max(normalized.length, existingNorm.length);
+    // Match if: Levenshtein ≤ 2, OR one is a substring of the other (for "Oak Ridge" vs "Oak Ridge HOA")
+    if (dist <= 2 || existingNorm.includes(normalized) || normalized.includes(existingNorm)) {
+      return c.community_name; // Use existing name as canonical
+    }
+  }
+
+  // No match found — create new community
+  await db.run(
+    "INSERT INTO communities (client_id, community_name) VALUES (?, ?)",
+    [clientId, trimmed]
+  );
+  return trimmed;
+}
+
 // Helper: auto-link users to communities by normalized name
 async function autoLinkUsersToCommunities(clientId) {
   const result = await db.pool.query(
@@ -927,10 +986,23 @@ router.post("/communities", async (req, res) => {
     const propType = validTypes.includes(property_type) ? property_type : null;
 
     const existing = await db.get(
-      "SELECT id FROM communities WHERE LOWER(TRIM(community_name)) = ? AND client_id = ?",
+      "SELECT id, community_name FROM communities WHERE LOWER(TRIM(community_name)) = ? AND client_id = ?",
       [community_name.toLowerCase().trim(), req.clientId]
     );
     if (existing) return res.status(400).json({ error: "A community with that name already exists" });
+
+    // Fuzzy check: warn if a similar community exists
+    const allCommunities = await db.all(
+      "SELECT community_name FROM communities WHERE client_id = ?", [req.clientId]
+    );
+    const normalized = community_name.toLowerCase().trim();
+    for (const c of allCommunities) {
+      const existingNorm = c.community_name.toLowerCase().trim();
+      const dist = levenshtein(normalized, existingNorm);
+      if (dist <= 2 || existingNorm.includes(normalized) || normalized.includes(existingNorm)) {
+        return res.status(400).json({ error: `A similar community already exists: "${c.community_name}". Did you mean to update that one instead?` });
+      }
+    }
 
     await db.run(
       `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units)
@@ -1039,14 +1111,32 @@ router.post("/communities/import", async (req, res) => {
     const validTypes = ["condo", "townhome", "single_family", "mixed", "other"];
 
     for (const row of rows) {
-      const finalName = nameMap[row.community_name] || row.community_name;
+      let finalName = nameMap[row.community_name] || row.community_name;
       const propType = validTypes.includes(row.property_type) ? row.property_type : null;
 
       try {
-        const existing = await db.get(
-          "SELECT id FROM communities WHERE LOWER(TRIM(community_name)) = ? AND client_id = ?",
+        // Exact match first
+        let existing = await db.get(
+          "SELECT id, community_name FROM communities WHERE LOWER(TRIM(community_name)) = ? AND client_id = ?",
           [finalName.toLowerCase().trim(), req.clientId]
         );
+
+        // Fuzzy match if no exact match and no explicit remap from preview
+        if (!existing && !nameMap[row.community_name]) {
+          const allCommunities = await db.all(
+            "SELECT id, community_name FROM communities WHERE client_id = ?", [req.clientId]
+          );
+          const normalized = finalName.toLowerCase().trim();
+          for (const c of allCommunities) {
+            const existingNorm = c.community_name.toLowerCase().trim();
+            const dist = levenshtein(normalized, existingNorm);
+            if (dist <= 2 || existingNorm.includes(normalized) || normalized.includes(existingNorm)) {
+              existing = c;
+              finalName = c.community_name;
+              break;
+            }
+          }
+        }
 
         if (existing) {
           await db.run(

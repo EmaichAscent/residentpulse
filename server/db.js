@@ -205,8 +205,27 @@ async function initializeSchema() {
     client.release();
   }
 
+  // Auto-create community records for any board member community_name not yet in communities table
+  try {
+    const result = await pool.query(`
+      INSERT INTO communities (client_id, community_name)
+      SELECT DISTINCT u.client_id, TRIM(u.community_name)
+      FROM users u
+      WHERE u.community_name IS NOT NULL AND TRIM(u.community_name) != ''
+        AND NOT EXISTS (
+          SELECT 1 FROM communities c
+          WHERE c.client_id = u.client_id
+            AND LOWER(TRIM(c.community_name)) = LOWER(TRIM(u.community_name))
+        )
+    `);
+    if (result.rowCount > 0) {
+      console.log(`Auto-created ${result.rowCount} community records from board member data`);
+    }
+  } catch (syncErr) {
+    // Silently skip if communities table doesn't exist yet
+  }
+
   // Auto-link existing users to communities by matching community_name
-  // Runs outside the schema transaction to avoid poisoning it on failure
   try {
     await pool.query(`
       UPDATE users u SET community_id = c.id
