@@ -175,26 +175,75 @@ router.patch("/account/cadence", async (req, res) => {
     [req.clientId]
   );
 
+  // Count total rounds this year (all statuses)
+  const allRounds = await db.all(
+    "SELECT id, round_number, status FROM survey_rounds WHERE client_id = ? ORDER BY round_number ASC",
+    [req.clientId]
+  );
+
+  // If increasing cadence and we need more planned rounds, create them
+  if (survey_cadence > allRounds.length) {
+    const maxRoundNum = allRounds.length > 0 ? Math.max(...allRounds.map(r => r.round_number)) : 0;
+    const baseDate = lastRound ? new Date(lastRound.launched_at) : new Date();
+
+    for (let i = allRounds.length; i < survey_cadence; i++) {
+      const nextDate = new Date(baseDate);
+      nextDate.setMonth(nextDate.getMonth() + intervalMonths * (i));
+      const now = new Date();
+      const finalDate = nextDate <= now
+        ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i - allRounds.length + 1))
+        : nextDate;
+
+      await db.run(
+        "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status) VALUES (?, ?, ?, 'planned')",
+        [req.clientId, maxRoundNum + (i - allRounds.length + 1), finalDate.toISOString()]
+      );
+    }
+  }
+
+  // If decreasing cadence, remove excess planned rounds (only planned, never active/concluded)
+  if (survey_cadence < allRounds.length) {
+    const excessPlanned = await db.all(
+      "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'planned' ORDER BY round_number DESC",
+      [req.clientId]
+    );
+    const nonPlannedCount = allRounds.filter(r => r.status !== "planned").length;
+    const targetPlanned = Math.max(0, survey_cadence - nonPlannedCount);
+    const toRemove = excessPlanned.slice(0, excessPlanned.length - targetPlanned);
+    for (const r of toRemove) {
+      await db.run("DELETE FROM survey_rounds WHERE id = ?", [r.id]);
+    }
+  }
+
+  // Re-fetch planned rounds after additions/removals
+  const updatedPlanned = await db.all(
+    `SELECT id, round_number FROM survey_rounds
+     WHERE client_id = ? AND status = 'planned'
+     ORDER BY round_number ASC`,
+    [req.clientId]
+  );
+
   let message = "";
-  if (plannedRounds.length > 0 && lastRound) {
+  if (updatedPlanned.length > 0 && lastRound) {
     const baseDate = new Date(lastRound.launched_at);
     const now = new Date();
     let adjustedCount = 0;
 
-    for (let i = 0; i < plannedRounds.length; i++) {
+    // Recalculate dates for all planned rounds relative to last launched round
+    const nonPlannedCount = allRounds.filter(r => r.status !== "planned").length;
+    for (let i = 0; i < updatedPlanned.length; i++) {
       const nextDate = new Date(baseDate);
-      nextDate.setMonth(nextDate.getMonth() + intervalMonths * (i + 1));
+      nextDate.setMonth(nextDate.getMonth() + intervalMonths * (nonPlannedCount + i));
 
-      // If calculated date is in the past, set to 30 days from now
       const finalDate = nextDate <= now
-        ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+        ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i + 1))
         : nextDate;
 
       if (nextDate <= now) adjustedCount++;
 
       await db.run(
         "UPDATE survey_rounds SET scheduled_date = ? WHERE id = ?",
-        [finalDate.toISOString(), plannedRounds[i].id]
+        [finalDate.toISOString(), updatedPlanned[i].id]
       );
     }
 

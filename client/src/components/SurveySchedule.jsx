@@ -189,7 +189,7 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
                     ? "text-white shadow-sm"
                     : "text-gray-500 hover:text-gray-700"
                 } disabled:opacity-50`}
-                style={cadence === 2 ? { backgroundColor: "var(--cam-green)" } : {}}
+                style={cadence === 2 ? { backgroundColor: "#10B981" } : {}}
               >
                 2x/yr
               </button>
@@ -201,7 +201,7 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
                     ? "text-white shadow-sm"
                     : "text-gray-500 hover:text-gray-700"
                 } disabled:opacity-50`}
-                style={cadence === 4 ? { backgroundColor: "var(--cam-green)" } : {}}
+                style={cadence === 4 ? { backgroundColor: "#10B981" } : {}}
               >
                 4x/yr
               </button>
