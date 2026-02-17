@@ -130,7 +130,7 @@ router.put("/account", async (req, res) => {
   res.json({ ok: true });
 });
 
-// Update survey cadence
+// Update survey cadence and recalculate planned round dates
 router.patch("/account/cadence", async (req, res) => {
   const { survey_cadence } = req.body;
 
@@ -140,7 +140,7 @@ router.patch("/account/cadence", async (req, res) => {
 
   // Check plan allows this cadence (free tier limited to 2)
   const subscription = await db.get(
-    `SELECT sp.survey_rounds_per_year
+    `SELECT cs.survey_cadence as current_cadence, sp.survey_rounds_per_year
      FROM client_subscriptions cs
      JOIN subscription_plans sp ON sp.id = cs.plan_id
      WHERE cs.client_id = ? AND cs.status = 'active'`,
@@ -153,12 +153,70 @@ router.patch("/account/cadence", async (req, res) => {
     });
   }
 
+  // Update cadence
   await db.run(
     "UPDATE client_subscriptions SET survey_cadence = ? WHERE client_id = ?",
     [survey_cadence, req.clientId]
   );
 
-  res.json({ ok: true });
+  // Recalculate planned round dates based on the most recent concluded or in-progress round
+  const intervalMonths = survey_cadence === 4 ? 3 : 6;
+  const lastRound = await db.get(
+    `SELECT launched_at, concluded_at FROM survey_rounds
+     WHERE client_id = ? AND status IN ('in_progress', 'concluded')
+     ORDER BY launched_at DESC LIMIT 1`,
+    [req.clientId]
+  );
+
+  const plannedRounds = await db.all(
+    `SELECT id, round_number FROM survey_rounds
+     WHERE client_id = ? AND status = 'planned'
+     ORDER BY round_number ASC`,
+    [req.clientId]
+  );
+
+  let message = "";
+  if (plannedRounds.length > 0 && lastRound) {
+    const baseDate = new Date(lastRound.launched_at);
+    const now = new Date();
+    let adjustedCount = 0;
+
+    for (let i = 0; i < plannedRounds.length; i++) {
+      const nextDate = new Date(baseDate);
+      nextDate.setMonth(nextDate.getMonth() + intervalMonths * (i + 1));
+
+      // If calculated date is in the past, set to 30 days from now
+      const finalDate = nextDate <= now
+        ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+        : nextDate;
+
+      if (nextDate <= now) adjustedCount++;
+
+      await db.run(
+        "UPDATE survey_rounds SET scheduled_date = ? WHERE id = ?",
+        [finalDate.toISOString(), plannedRounds[i].id]
+      );
+    }
+
+    const nextPlanned = await db.get(
+      "SELECT scheduled_date FROM survey_rounds WHERE client_id = ? AND status = 'planned' ORDER BY scheduled_date ASC LIMIT 1",
+      [req.clientId]
+    );
+
+    const nextDateStr = nextPlanned
+      ? new Date(nextPlanned.scheduled_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+      : null;
+
+    if (adjustedCount > 0) {
+      message = `Cadence updated to ${survey_cadence}x/year. Your next round has been scheduled for ${nextDateStr} (30 days from today to give you time to prepare).`;
+    } else {
+      message = `Cadence updated to ${survey_cadence}x/year. Your next round is scheduled for ${nextDateStr}.`;
+    }
+  } else {
+    message = `Cadence updated to ${survey_cadence}x/year.`;
+  }
+
+  res.json({ ok: true, message, survey_cadence });
 });
 
 // Get board members (users table) for current client
@@ -770,6 +828,43 @@ router.get("/communities", async (req, res) => {
     [req.clientId]
   );
   res.json(communities);
+});
+
+// Create a single community
+router.post("/communities", async (req, res) => {
+  try {
+    if (!(await requirePaidTier(req, res))) return;
+
+    const { community_name, contract_value, community_manager_name, property_type, number_of_units } = req.body;
+    if (!community_name?.trim()) return res.status(400).json({ error: "Community name is required" });
+
+    const validTypes = ["condo", "townhome", "single_family", "mixed", "other"];
+    const propType = validTypes.includes(property_type) ? property_type : null;
+
+    const existing = await db.get(
+      "SELECT id FROM communities WHERE LOWER(TRIM(community_name)) = ? AND client_id = ?",
+      [community_name.toLowerCase().trim(), req.clientId]
+    );
+    if (existing) return res.status(400).json({ error: "A community with that name already exists" });
+
+    await db.run(
+      `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [req.clientId, community_name.trim(), contract_value || null, community_manager_name || null, propType, number_of_units || null]
+    );
+
+    const created = await db.get(
+      "SELECT * FROM communities WHERE client_id = ? AND LOWER(TRIM(community_name)) = ?",
+      [req.clientId, community_name.toLowerCase().trim()]
+    );
+
+    // Auto-link any board members with matching community name
+    await autoLinkUsersToCommunities(req.clientId);
+
+    res.json(created);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Preview community CSV import (no save)

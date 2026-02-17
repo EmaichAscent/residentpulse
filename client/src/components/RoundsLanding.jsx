@@ -8,10 +8,32 @@ export default function RoundsLanding({ user, onSelectRound, onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [closingRound, setClosingRound] = useState(null);
   const [confirmClose, setConfirmClose] = useState(null);
+  const [cadence, setCadence] = useState(null);
+  const [maxCadence, setMaxCadence] = useState(null);
+  const [cadenceUpdating, setCadenceUpdating] = useState(false);
+  const [cadenceMessage, setCadenceMessage] = useState(null);
+  const [memberCount, setMemberCount] = useState(0);
+  const [memberLimit, setMemberLimit] = useState(null);
 
   useEffect(() => {
     loadRounds();
+    loadAccount();
   }, []);
+
+  const loadAccount = async () => {
+    try {
+      const res = await fetch("/api/admin/account", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setCadence(data.subscription?.survey_cadence || 2);
+        setMaxCadence(data.subscription?.survey_rounds_per_year || 2);
+        setMemberCount(data.usage?.member_count || 0);
+        setMemberLimit(data.subscription?.member_limit || null);
+      }
+    } catch (err) {
+      console.error("Failed to load account:", err);
+    }
+  };
 
   const loadRounds = async () => {
     try {
@@ -24,6 +46,31 @@ export default function RoundsLanding({ user, onSelectRound, onNavigate }) {
       console.error("Failed to load rounds:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCadenceChange = async (newCadence) => {
+    if (newCadence === cadence || cadenceUpdating) return;
+    setCadenceUpdating(true);
+    setCadenceMessage(null);
+    try {
+      const res = await fetch("/api/admin/account/cadence", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ survey_cadence: newCadence }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setCadence(newCadence);
+      setCadenceMessage(data.message);
+      await loadRounds();
+      setTimeout(() => setCadenceMessage(null), 8000);
+    } catch (err) {
+      setCadenceMessage(err.message);
+      setTimeout(() => setCadenceMessage(null), 8000);
+    } finally {
+      setCadenceUpdating(false);
     }
   };
 
@@ -249,7 +296,30 @@ export default function RoundsLanding({ user, onSelectRound, onNavigate }) {
           <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
             Upcoming Rounds
           </h3>
-          <SurveySchedule />
+          <SurveySchedule
+            cadence={cadence}
+            maxCadence={maxCadence}
+            onCadenceChange={handleCadenceChange}
+            cadenceUpdating={cadenceUpdating}
+            cadenceMessage={cadenceMessage}
+          />
+        </div>
+      )}
+
+      {/* Member Limit Warning */}
+      {memberLimit && memberCount > memberLimit && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Member limit exceeded</p>
+              <p className="text-sm text-amber-700 mt-0.5">
+                You have {memberCount} board members but your plan supports {memberLimit}. New survey rounds cannot be launched until you're within your plan limit. Remove inactive members or upgrade your plan.
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -5,6 +5,7 @@ import AccountSettings from "../components/AccountSettings";
 import RoundsLanding from "../components/RoundsLanding";
 import TrendsView from "../components/TrendsView";
 import RoundDashboard from "../components/RoundDashboard";
+import CommunityManager from "../components/CommunityManager";
 
 export default function AdminPage() {
   const [tab, setTab] = useState("rounds");
@@ -59,9 +60,12 @@ export default function AdminPage() {
     setTab("rounds");
   };
 
+  const isPaidTier = user?.plan_name && user.plan_name !== "free";
+
   const TABS = [
     { key: "rounds", label: "Rounds" },
     { key: "trends", label: "Trends" },
+    ...(isPaidTier ? [{ key: "communities", label: "Communities" }] : []),
     { key: "users", label: "Board Members" },
     { key: "account", label: "Account" },
   ];
@@ -135,7 +139,8 @@ export default function AdminPage() {
         )
       )}
       {tab === "trends" && <TrendsView />}
-      {tab === "users" && <UserManager companyName={user?.company_name} planName={user?.plan_name} />}
+      {tab === "communities" && <CommunityManager />}
+      {tab === "users" && <UserManager companyName={user?.company_name} />}
       {tab === "account" && <AccountSettings />}
       </div>
     </div>

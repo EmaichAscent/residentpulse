@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import ReInterviewDialog from "./ReInterviewDialog";
 
-export default function SurveySchedule() {
+export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, cadenceUpdating, cadenceMessage }) {
   const [rounds, setRounds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [firstDate, setFirstDate] = useState("");
@@ -175,7 +175,47 @@ export default function SurveySchedule() {
   // Rounds exist — show timeline
   return (
     <div className="bg-white rounded-xl border p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Survey Rounds</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-900">Your Survey Rounds</h3>
+        {maxCadence >= 4 && onCadenceChange && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 mr-1">Cadence:</span>
+            <div className="flex bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => onCadenceChange(2)}
+                disabled={cadenceUpdating || cadence === 2}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition ${
+                  cadence === 2
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                } disabled:opacity-50`}
+              >
+                2x/yr
+              </button>
+              <button
+                onClick={() => onCadenceChange(4)}
+                disabled={cadenceUpdating || cadence === 4}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition ${
+                  cadence === 4
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                } disabled:opacity-50`}
+              >
+                4x/yr
+              </button>
+            </div>
+            {cadenceUpdating && (
+              <span className="text-xs text-gray-400">Updating...</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {cadenceMessage && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+          <p className="text-sm text-blue-800">{cadenceMessage}</p>
+        </div>
+      )}
 
       {launchResult && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">

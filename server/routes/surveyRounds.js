@@ -413,6 +413,17 @@ router.post("/:id/launch", async (req, res) => {
       return res.status(400).json({ error: "No active board members found. Add board members before launching a survey round." });
     }
 
+    // Check member limit
+    const sub = await db.get(
+      "SELECT sp.member_limit FROM subscription_plans sp JOIN clients c ON c.subscription_plan_id = sp.id WHERE c.id = ?",
+      [req.clientId]
+    );
+    if (sub?.member_limit && members.length > sub.member_limit) {
+      return res.status(400).json({
+        error: `You have ${members.length} board members but your plan supports ${sub.member_limit}. Remove members or upgrade your plan before launching.`
+      });
+    }
+
     // Calculate close date (30 days from now)
     const now = new Date();
     const closesAt = new Date(now);
