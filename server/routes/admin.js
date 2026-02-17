@@ -818,7 +818,7 @@ function parseCommunityCSV(csv) {
 
 // Get all communities for this client
 router.get("/communities", async (req, res) => {
-  const communities = await db.all(
+  let communities = await db.all(
     `SELECT c.*, COUNT(u.id) as member_count
      FROM communities c
      LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
@@ -827,6 +827,42 @@ router.get("/communities", async (req, res) => {
      ORDER BY c.community_name`,
     [req.clientId]
   );
+
+  // Auto-seed: if no communities exist, create them from board member community_name values
+  if (communities.length === 0) {
+    try {
+      const distinctNames = await db.all(
+        `SELECT DISTINCT community_name FROM users
+         WHERE client_id = ? AND community_name IS NOT NULL AND TRIM(community_name) != '' AND active = TRUE`,
+        [req.clientId]
+      );
+
+      for (const row of distinctNames) {
+        await db.run(
+          "INSERT INTO communities (client_id, community_name) VALUES (?, ?)",
+          [req.clientId, row.community_name.trim()]
+        );
+      }
+
+      if (distinctNames.length > 0) {
+        await autoLinkUsersToCommunities(req.clientId);
+
+        // Re-fetch with member counts
+        communities = await db.all(
+          `SELECT c.*, COUNT(u.id) as member_count
+           FROM communities c
+           LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
+           WHERE c.client_id = ?
+           GROUP BY c.id
+           ORDER BY c.community_name`,
+          [req.clientId]
+        );
+      }
+    } catch (err) {
+      console.error("Auto-seed communities failed:", err);
+    }
+  }
+
   res.json(communities);
 });
 
