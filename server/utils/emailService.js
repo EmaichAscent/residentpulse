@@ -24,7 +24,7 @@ function getResendClient() {
 function buildInvitationEmail(user, surveyLink, roundInfo) {
   const firstName = user.first_name || "Board Member";
   const communityName = user.community_name || "your community";
-  const managementCompany = user.management_company || "your management company";
+  const managementCompany = roundInfo?.companyName || user.management_company || "your management company";
 
   return `
     <!DOCTYPE html>
@@ -32,53 +32,68 @@ function buildInvitationEmail(user, surveyLink, roundInfo) {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Share Your Feedback</title>
+      <title>Your Feedback Matters</title>
     </head>
     <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 40px 20px;">
-        <!-- Header -->
-        <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #3B9FE7; font-size: 28px; margin: 0 0 10px 0;">ResidentPulse</h1>
-          <p style="color: #666666; font-size: 14px; margin: 0;">Powered by CAM Ascent</p>
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+        <!-- Header Banner -->
+        <div style="background-color: #3B9FE7; padding: 24px 20px; text-align: center;">
+          <h1 style="color: #ffffff; font-size: 28px; margin: 0 0 4px 0; font-weight: bold;">ResidentPulse</h1>
+          <p style="color: rgba(255,255,255,0.8); font-size: 13px; margin: 0;">Powered by CAM Ascent Analytics</p>
         </div>
 
-        <!-- Greeting -->
-        <h2 style="color: #3B9FE7; font-size: 24px; margin: 0 0 20px 0;">Hi ${firstName},</h2>
+        <div style="padding: 40px 30px;">
+          <!-- Headline -->
+          <h2 style="color: #333333; font-size: 22px; margin: 0 0 24px 0; font-style: italic;">Your Voice Shapes the Future</h2>
 
-        <!-- Body -->
-        <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 15px 0;">
-          CAM Ascent is reaching out on behalf of <strong>${managementCompany}</strong> to gather feedback about your experience at <strong>${communityName}</strong>.
-        </p>
-
-        <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
-          As a board member, your perspective is invaluable. This quick survey takes just 2-3 minutes and helps improve the management services for your community.
-        </p>
-
-        <!-- CTA Button -->
-        <div style="text-align: center; margin: 40px 0;">
-          <a href="${surveyLink}"
-             style="display: inline-block;
-                    background-color: #3B9FE7;
-                    color: #ffffff;
-                    padding: 16px 32px;
-                    text-decoration: none;
-                    border-radius: 8px;
-                    font-weight: bold;
-                    font-size: 16px;">
-            Share Your Feedback
-          </a>
-        </div>
-
-        <!-- Footer -->
-        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eeeeee;">
-          <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0 0 10px 0;">
-            ${roundInfo?.closesAt
-              ? `This survey is open until ${new Date(roundInfo.closesAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
-              : "This invitation expires in 48 hours."}
+          <!-- Greeting -->
+          <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">
+            Dear ${firstName},
           </p>
-          <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0;">
-            Questions? Contact your property manager.
+
+          <!-- Body -->
+          <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">
+            <strong>${managementCompany}</strong> partners with ResidentPulse to help communities thrive through honest feedback. Your perspective as a board member at <strong>${communityName}</strong> doesn't just inform decisions — it actively shapes the future of your community.
           </p>
+
+          <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">
+            <strong>A Few Minutes, A Real Impact:</strong> We respect your time, so this survey is designed to be brief. Your participation helps measure performance, identify opportunities for growth, and highlight successes.
+          </p>
+
+          <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 8px 0;">
+            To get started, click the button below. <em>Please do not share this unique survey link with others.</em>
+          </p>
+
+          <!-- CTA Button -->
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${surveyLink}"
+               style="display: inline-block;
+                      background-color: #3B9FE7;
+                      color: #ffffff;
+                      padding: 16px 40px;
+                      text-decoration: none;
+                      border-radius: 8px;
+                      font-weight: bold;
+                      font-size: 16px;">
+              Take the Survey
+            </a>
+          </div>
+
+          <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 0 0;">
+            Thank you for your time and thoughtful contributions.
+          </p>
+
+          <!-- Footer -->
+          <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+            <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0 0 10px 0;">
+              ${roundInfo?.closesAt
+                ? `This survey is open until ${new Date(roundInfo.closesAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
+                : "This invitation expires in 48 hours."}
+            </p>
+            <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0;">
+              Questions? Contact your property manager.
+            </p>
+          </div>
         </div>
       </div>
     </body>
@@ -98,13 +113,14 @@ export async function sendInvitation(user, token, roundInfo) {
   const surveyLink = `${surveyBaseUrl}/survey?token=${token}`;
 
   const emailHtml = buildInvitationEmail(user, surveyLink, roundInfo);
+  const companyName = roundInfo?.companyName || user.management_company || "ResidentPulse";
 
   try {
     const resendClient = getResendClient();
     const { data, error } = await resendClient.emails.send({
-      from: "ResidentPulse <residentpulse@camascent.com>",
+      from: `${companyName} via ResidentPulse <residentpulse@camascent.com>`,
       to: [user.email],
-      subject: `We'd love your feedback, ${user.first_name || "Board Member"}`,
+      subject: `Your Feedback Matters, ${user.first_name || "Board Member"}`,
       html: emailHtml,
     });
 
@@ -322,9 +338,10 @@ export async function sendVerificationEmail(email, token) {
  * @param {number} daysRemaining - Days left in the survey round
  * @returns {string} HTML email template
  */
-function buildReminderEmail(user, surveyLink, daysRemaining) {
+function buildReminderEmail(user, surveyLink, daysRemaining, companyName) {
   const firstName = user.first_name || "Board Member";
   const communityName = user.community_name || "your community";
+  const mgmtCompany = companyName || user.management_company || "your management company";
 
   return `
     <!DOCTYPE html>
@@ -335,45 +352,56 @@ function buildReminderEmail(user, surveyLink, daysRemaining) {
       <title>We'd Still Love Your Feedback</title>
     </head>
     <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 40px 20px;">
-        <!-- Header -->
-        <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #3B9FE7; font-size: 28px; margin: 0 0 10px 0;">ResidentPulse</h1>
-          <p style="color: #666666; font-size: 14px; margin: 0;">Powered by CAM Ascent</p>
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+        <!-- Header Banner -->
+        <div style="background-color: #3B9FE7; padding: 24px 20px; text-align: center;">
+          <h1 style="color: #ffffff; font-size: 28px; margin: 0 0 4px 0; font-weight: bold;">ResidentPulse</h1>
+          <p style="color: rgba(255,255,255,0.8); font-size: 13px; margin: 0;">Powered by CAM Ascent Analytics</p>
         </div>
 
-        <!-- Greeting -->
-        <h2 style="color: #3B9FE7; font-size: 24px; margin: 0 0 20px 0;">Hi ${firstName},</h2>
+        <div style="padding: 40px 30px;">
+          <!-- Headline -->
+          <h2 style="color: #333333; font-size: 22px; margin: 0 0 24px 0; font-style: italic;">We'd Still Love to Hear From You</h2>
 
-        <!-- Body -->
-        <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 15px 0;">
-          We'd still love to hear from you! Your feedback about <strong>${communityName}</strong> helps improve the management services for your community.
-        </p>
-
-        <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
-          The survey only takes 2-3 minutes and there ${daysRemaining === 1 ? "is <strong>1 day</strong>" : `are <strong>${daysRemaining} days</strong>`} remaining to share your thoughts.
-        </p>
-
-        <!-- CTA Button -->
-        <div style="text-align: center; margin: 40px 0;">
-          <a href="${surveyLink}"
-             style="display: inline-block;
-                    background-color: #1AB06E;
-                    color: #ffffff;
-                    padding: 16px 32px;
-                    text-decoration: none;
-                    border-radius: 8px;
-                    font-weight: bold;
-                    font-size: 16px;">
-            Share Your Feedback
-          </a>
-        </div>
-
-        <!-- Footer -->
-        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eeeeee;">
-          <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0;">
-            Questions? Contact your property manager.
+          <!-- Greeting -->
+          <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">
+            Dear ${firstName},
           </p>
+
+          <!-- Body -->
+          <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">
+            <strong>${mgmtCompany}</strong> is still collecting feedback about your experience at <strong>${communityName}</strong>. Your voice matters — and there ${daysRemaining === 1 ? "is <strong>1 day</strong>" : `are <strong>${daysRemaining} days</strong>`} remaining to share your thoughts.
+          </p>
+
+          <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 8px 0;">
+            The survey only takes a few minutes. <em>Please do not share this unique survey link with others.</em>
+          </p>
+
+          <!-- CTA Button -->
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${surveyLink}"
+               style="display: inline-block;
+                      background-color: #1AB06E;
+                      color: #ffffff;
+                      padding: 16px 40px;
+                      text-decoration: none;
+                      border-radius: 8px;
+                      font-weight: bold;
+                      font-size: 16px;">
+              Take the Survey
+            </a>
+          </div>
+
+          <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0;">
+            Thank you for your time and thoughtful contributions.
+          </p>
+
+          <!-- Footer -->
+          <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+            <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0;">
+              Questions? Contact your property manager.
+            </p>
+          </div>
         </div>
       </div>
     </body>
@@ -388,18 +416,19 @@ function buildReminderEmail(user, surveyLink, daysRemaining) {
  * @param {Object} options - { daysRemaining }
  * @returns {Promise<Object>} Resend response with email ID
  */
-export async function sendReminder(user, token, { daysRemaining }) {
+export async function sendReminder(user, token, { daysRemaining, companyName }) {
   const surveyBaseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
   const surveyLink = `${surveyBaseUrl}/survey?token=${token}`;
 
-  const emailHtml = buildReminderEmail(user, surveyLink, daysRemaining);
+  const emailHtml = buildReminderEmail(user, surveyLink, daysRemaining, companyName);
+  const fromName = companyName || user.management_company || "ResidentPulse";
 
   try {
     const resendClient = getResendClient();
     const { data, error } = await resendClient.emails.send({
-      from: "ResidentPulse <residentpulse@camascent.com>",
+      from: `${fromName} via ResidentPulse <residentpulse@camascent.com>`,
       to: [user.email],
-      subject: `Friendly reminder: we'd love your feedback, ${user.first_name || "Board Member"}`,
+      subject: `Friendly reminder: Your Feedback Matters, ${user.first_name || "Board Member"}`,
       html: emailHtml,
     });
 

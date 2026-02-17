@@ -554,6 +554,10 @@ router.post("/:id/launch", async (req, res) => {
       return res.status(400).json({ error: "Another survey round is already in progress. Wait for it to conclude before launching a new one." });
     }
 
+    // Get client company name for emails
+    const client = await db.get("SELECT company_name FROM clients WHERE id = ?", [req.clientId]);
+    const companyName = client?.company_name || "your management company";
+
     // Get active board members only
     const members = await db.all(
       "SELECT id, email, first_name, last_name, community_name, management_company FROM users WHERE client_id = ? AND active = TRUE",
@@ -603,7 +607,8 @@ router.post("/:id/launch", async (req, res) => {
         // Send email with round info
         await sendInvitation(member, token, {
           closesAt: closesAt.toISOString(),
-          roundNumber: round.round_number
+          roundNumber: round.round_number,
+          companyName,
         });
 
         // Log invitation with round_id

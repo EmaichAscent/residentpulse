@@ -64,6 +64,10 @@ async function sendReminders() {
  * Send reminder emails to non-responders for a specific round
  */
 async function sendRoundReminders(round, dayNumber) {
+  // Get company name for email from field
+  const client = await db.get("SELECT company_name FROM clients WHERE id = ?", [round.client_id]);
+  const companyName = client?.company_name || "your management company";
+
   // Find non-responders: users invited for this round who haven't completed a session
   const nonResponders = await db.all(
     `SELECT DISTINCT u.id, u.email, u.first_name, u.last_name,
@@ -86,7 +90,7 @@ async function sendRoundReminders(round, dayNumber) {
     if (!user.invitation_token) continue;
 
     try {
-      await sendReminder(user, user.invitation_token, { daysRemaining });
+      await sendReminder(user, user.invitation_token, { daysRemaining, companyName });
     } catch (err) {
       console.error(`Failed to send day ${dayNumber} reminder to ${user.email}:`, err.message);
     }
