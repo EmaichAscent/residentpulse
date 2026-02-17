@@ -339,6 +339,42 @@ router.patch("/clients/:id/subscription", async (req, res) => {
     );
   }
 
+  // If upgrading to a paid tier, seed communities from existing board member data
+  const newPlan = await db.get("SELECT name FROM subscription_plans WHERE id = ?", [plan_id]);
+  if (newPlan && newPlan.name !== "free") {
+    try {
+      const distinctNames = await db.all(
+        `SELECT DISTINCT community_name FROM users
+         WHERE client_id = ? AND community_name IS NOT NULL AND TRIM(community_name) != '' AND active = TRUE
+         AND LOWER(TRIM(community_name)) NOT IN (
+           SELECT LOWER(TRIM(community_name)) FROM communities WHERE client_id = ?
+         )`,
+        [clientId, clientId]
+      );
+
+      for (const row of distinctNames) {
+        await db.run(
+          "INSERT INTO communities (client_id, community_name) VALUES (?, ?)",
+          [clientId, row.community_name.trim()]
+        );
+      }
+
+      // Auto-link users to communities
+      if (db.pool) {
+        await db.pool.query(
+          `UPDATE users u SET community_id = c.id
+           FROM communities c
+           WHERE u.client_id = c.client_id AND u.client_id = $1
+             AND LOWER(TRIM(u.community_name)) = LOWER(TRIM(c.community_name))
+             AND u.community_id IS NULL`,
+          [clientId]
+        );
+      }
+    } catch (err) {
+      console.error("Failed to seed communities on upgrade:", err);
+    }
+  }
+
   res.json({ ok: true });
 });
 
