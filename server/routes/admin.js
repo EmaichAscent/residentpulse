@@ -756,6 +756,41 @@ router.post("/alerts/:id/dismiss", async (req, res) => {
   }
 });
 
+// Mark an alert as solved
+router.post("/alerts/:id/solve", async (req, res) => {
+  try {
+    const alertId = Number(req.params.id);
+    const { note } = req.body;
+
+    const alert = await db.get(
+      "SELECT id FROM critical_alerts WHERE id = ? AND client_id = ?",
+      [alertId, req.clientId]
+    );
+    if (!alert) return res.status(404).json({ error: "Alert not found" });
+
+    await db.run(
+      "UPDATE critical_alerts SET solved = TRUE, solved_by = ?, solved_at = CURRENT_TIMESTAMP, solve_note = ? WHERE id = ?",
+      [req.userId, note || null, alertId]
+    );
+
+    await logActivity({
+      actorType: "client_admin",
+      actorId: req.userId,
+      actorEmail: req.userEmail,
+      action: "solve_alert",
+      entityType: "critical_alert",
+      entityId: alertId,
+      clientId: req.clientId,
+      metadata: { note: note || null }
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error solving alert:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Session Finalization ---
 
 // Finalize an incomplete session (generate summary + mark complete)

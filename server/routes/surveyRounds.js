@@ -50,7 +50,13 @@ router.get("/", async (req, res) => {
     const rounds = await db.all(
       `SELECT sr.*,
               (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true) as responses_completed,
-              (SELECT COUNT(DISTINCT il.user_id) FROM invitation_logs il WHERE il.round_id = sr.id AND il.email_status = 'sent') as invitations_sent
+              (SELECT COUNT(DISTINCT il.user_id) FROM invitation_logs il WHERE il.round_id = sr.id AND il.email_status = 'sent') as invitations_sent,
+              (SELECT COUNT(*) FROM critical_alerts ca WHERE ca.round_id = sr.id AND ca.dismissed = FALSE AND COALESCE(ca.solved, FALSE) = FALSE) as active_alert_count,
+              (SELECT COUNT(DISTINCT COALESCE(cm.community_name, u.community_name))
+               FROM critical_alerts ca
+               LEFT JOIN users u ON u.id = ca.user_id
+               LEFT JOIN communities cm ON cm.id = u.community_id
+               WHERE ca.round_id = sr.id AND ca.dismissed = FALSE AND COALESCE(ca.solved, FALSE) = FALSE) as alert_community_count
        FROM survey_rounds sr
        WHERE sr.client_id = ?
        ORDER BY sr.round_number`,
@@ -415,6 +421,12 @@ router.get("/:id/dashboard", async (req, res) => {
     // Insights (concluded rounds only)
     const insights = round.insights_json || null;
 
+    // Interview summary (customer's stated goals)
+    const interviewResult = await db.get(
+      "SELECT interview_summary FROM admin_interviews WHERE client_id = ? AND status = 'completed' ORDER BY completed_at DESC LIMIT 1",
+      [req.clientId]
+    );
+
     res.json({
       round: {
         id: round.id,
@@ -449,6 +461,7 @@ router.get("/:id/dashboard", async (req, res) => {
       alerts,
       word_frequencies: wordFrequencies,
       insights,
+      interview_summary: interviewResult?.interview_summary || null,
     });
   } catch (err) {
     console.error("Error fetching round dashboard:", err);

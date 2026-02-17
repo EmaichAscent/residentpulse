@@ -205,6 +205,16 @@ async function initializeSchema() {
       console.log("Session community_id migration skipped (already applied or file not found)");
     }
 
+    // Run alert solved state migration
+    try {
+      const alertSolvedPath = join(__dirname, "migrations", "add-alert-solved.sql");
+      const alertSolvedSQL = readFileSync(alertSolvedPath, "utf-8");
+      await client.query(alertSolvedSQL);
+      console.log("Alert solved migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Alert solved migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");
   } catch (err) {

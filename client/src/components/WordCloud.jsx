@@ -7,7 +7,7 @@ const WORD_COLORS = [
   "#14B8A6",
 ];
 
-export default function WordCloud({ frequencies, maxWords = 40 }) {
+export default function WordCloud({ frequencies, maxWords = 30 }) {
   if (!frequencies || frequencies.length === 0) {
     return (
       <p className="text-sm text-gray-400 text-center py-6">

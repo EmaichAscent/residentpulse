@@ -12,6 +12,12 @@ import VerifyEmailPage from "./pages/VerifyEmailPage";
 import AdminOnboardingPage from "./pages/AdminOnboardingPage";
 import SuperAdminClientDetailPage from "./pages/SuperAdminClientDetailPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RoundsLanding from "./components/RoundsLanding";
+import RoundDashboard from "./components/RoundDashboard";
+import TrendsView from "./components/TrendsView";
+import CommunityManager from "./components/CommunityManager";
+import UserManager from "./components/UserManager";
+import AccountSettings from "./components/AccountSettings";
 
 export default function App() {
   return (
@@ -62,7 +68,15 @@ export default function App() {
               <AdminPage />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route index element={<Navigate to="rounds" replace />} />
+          <Route path="rounds" element={<RoundsLanding />} />
+          <Route path="rounds/:roundId" element={<RoundDashboard />} />
+          <Route path="trends" element={<TrendsView />} />
+          <Route path="communities" element={<CommunityManager />} />
+          <Route path="members" element={<UserManager />} />
+          <Route path="account" element={<AccountSettings />} />
+        </Route>
       </Routes>
     </div>
   );

@@ -15,10 +15,12 @@ export default function SuperAdminClientDetailPage() {
   const [expandedInterview, setExpandedInterview] = useState(null);
   const [transcriptMessages, setTranscriptMessages] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [expandedAlertRound, setExpandedAlertRound] = useState(null);
   const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
-    Promise.all([loadDetail(), loadInterviews(), loadPlans(), loadActivity()])
+    Promise.all([loadDetail(), loadInterviews(), loadPlans(), loadActivity(), loadAlerts()])
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -45,6 +47,11 @@ export default function SuperAdminClientDetailPage() {
   const loadActivity = async () => {
     const res = await fetch(`/api/superadmin/clients/${id}/activity`, { credentials: "include" });
     if (res.ok) setActivity(await res.json());
+  };
+
+  const loadAlerts = async () => {
+    const res = await fetch(`/api/superadmin/clients/${id}/alerts`, { credentials: "include" });
+    if (res.ok) setAlerts(await res.json());
   };
 
   const loadTranscript = async (interviewId) => {
@@ -160,7 +167,7 @@ export default function SuperAdminClientDetailPage() {
     );
   }
 
-  const { client, subscription, admins, member_count, community_count, survey_rounds, engagement, prompt_supplement } = detail;
+  const { client, subscription, admins, member_count, community_count, survey_rounds, alert_summary, engagement, prompt_supplement } = detail;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -382,6 +389,100 @@ export default function SuperAdminClientDetailPage() {
             </div>
           )}
         </div>
+
+        {/* Warnings */}
+        {alert_summary && alert_summary.total > 0 && (
+          <div className="bg-white rounded-xl border p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Warnings</h2>
+            <div className="grid grid-cols-4 gap-4 mb-4 text-sm">
+              <div className="text-center">
+                <span className="text-2xl font-bold text-gray-900">{alert_summary.total}</span>
+                <span className="text-gray-500 block text-xs">Total</span>
+              </div>
+              <div className="text-center">
+                <span className="text-2xl font-bold text-red-600">{alert_summary.active}</span>
+                <span className="text-gray-500 block text-xs">Active</span>
+              </div>
+              <div className="text-center">
+                <span className="text-2xl font-bold text-green-600">{alert_summary.solved}</span>
+                <span className="text-gray-500 block text-xs">Solved</span>
+              </div>
+              <div className="text-center">
+                <span className="text-2xl font-bold text-gray-400">{alert_summary.dismissed}</span>
+                <span className="text-gray-500 block text-xs">Dismissed</span>
+              </div>
+            </div>
+
+            {/* Group alerts by round */}
+            {(() => {
+              const byRound = {};
+              alerts.forEach((a) => {
+                const key = a.round_number ? `Round ${a.round_number}` : "Unassigned";
+                if (!byRound[key]) byRound[key] = [];
+                byRound[key].push(a);
+              });
+              return Object.entries(byRound).map(([roundLabel, roundAlerts]) => (
+                <div key={roundLabel} className="border rounded-lg mb-2">
+                  <button
+                    onClick={() => setExpandedAlertRound(expandedAlertRound === roundLabel ? null : roundLabel)}
+                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition text-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-900">{roundLabel}</span>
+                      <span className="text-xs text-gray-500">({roundAlerts.length} alert{roundAlerts.length !== 1 ? "s" : ""})</span>
+                      {roundAlerts.some((a) => !a.dismissed && !a.solved) && (
+                        <span className="w-2 h-2 rounded-full bg-red-500" />
+                      )}
+                    </div>
+                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${expandedAlertRound === roundLabel ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {expandedAlertRound === roundLabel && (
+                    <div className="px-4 pb-3 space-y-2">
+                      {roundAlerts.map((alert) => {
+                        const isSolved = alert.solved;
+                        const isDismissed = alert.dismissed;
+                        const memberName = alert.first_name || alert.last_name
+                          ? `${alert.first_name || ""} ${alert.last_name || ""}`.trim()
+                          : alert.user_email;
+                        return (
+                          <div key={alert.id} className={`rounded-lg border p-3 text-sm ${
+                            isSolved ? "bg-green-50 border-green-200" :
+                            isDismissed ? "bg-gray-50 border-gray-200" :
+                            alert.severity === "critical" ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"
+                          }`}>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                                alert.alert_type === "contract_termination" ? "bg-red-100 text-red-700" :
+                                alert.alert_type === "legal_threat" ? "bg-purple-100 text-purple-700" :
+                                alert.alert_type === "safety_concern" ? "bg-orange-100 text-orange-700" :
+                                "bg-gray-100 text-gray-700"
+                              }`}>
+                                {alert.alert_type?.replace(/_/g, " ")}
+                              </span>
+                              {isSolved && <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700">Solved</span>}
+                              {isDismissed && <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">Dismissed</span>}
+                              {!isSolved && !isDismissed && <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-700">Active</span>}
+                            </div>
+                            <p className={`${isSolved ? "text-green-800" : isDismissed ? "text-gray-500" : "text-gray-800"}`}>
+                              <strong>{memberName}</strong>
+                              {alert.alert_community ? ` (${alert.alert_community})` : ""} — {alert.description}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">{formatDateTime(alert.created_at)}</p>
+                            {isSolved && alert.solve_note && (
+                              <p className="text-xs text-green-700 mt-1 italic">Note: {alert.solve_note}</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ));
+            })()}
+          </div>
+        )}
 
         {/* Admin Users */}
         <div className="bg-white rounded-xl border p-6">

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell,
@@ -6,7 +7,9 @@ import {
 import { COLORS, barColor, npsColor, copyInsights } from "../utils/npsHelpers";
 import WordCloud from "./WordCloud";
 
-export default function RoundDashboard({ roundId, onBack }) {
+export default function RoundDashboard() {
+  const { roundId } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showNonResponders, setShowNonResponders] = useState(false);
@@ -16,7 +19,11 @@ export default function RoundDashboard({ roundId, onBack }) {
   const [regenerating, setRegenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [dismissing, setDismissing] = useState(null);
+  const [solving, setSolving] = useState(null);
+  const [solveNote, setSolveNote] = useState("");
   const [finalizing, setFinalizing] = useState(null);
+  const [goalsExpanded, setGoalsExpanded] = useState(false);
+  const [expandedCommunities, setExpandedCommunities] = useState({});
 
   useEffect(() => {
     loadDashboard();
@@ -107,7 +114,9 @@ export default function RoundDashboard({ roundId, onBack }) {
       if (res.ok) {
         setData((prev) => ({
           ...prev,
-          alerts: prev.alerts.filter((a) => a.id !== alertId),
+          alerts: prev.alerts.map((a) =>
+            a.id === alertId ? { ...a, dismissed: true, dismissed_at: new Date().toISOString() } : a
+          ),
         }));
       }
     } catch (err) {
@@ -115,6 +124,35 @@ export default function RoundDashboard({ roundId, onBack }) {
     } finally {
       setDismissing(null);
     }
+  };
+
+  const handleSolveAlert = async (alertId) => {
+    setSolving(alertId);
+    try {
+      const res = await fetch(`/api/admin/alerts/${alertId}/solve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ note: solveNote || null }),
+      });
+      if (res.ok) {
+        setData((prev) => ({
+          ...prev,
+          alerts: prev.alerts.map((a) =>
+            a.id === alertId ? { ...a, solved: true, solved_at: new Date().toISOString(), solve_note: solveNote || null } : a
+          ),
+        }));
+        setSolveNote("");
+      }
+    } catch (err) {
+      console.error("Failed to solve alert:", err);
+    } finally {
+      setSolving(null);
+    }
+  };
+
+  const toggleCommunity = (name) => {
+    setExpandedCommunities((prev) => ({ ...prev, [name]: !prev[name] }));
   };
 
   const handleFinalize = async (sessionId) => {
@@ -145,7 +183,7 @@ export default function RoundDashboard({ roundId, onBack }) {
     return <p className="text-red-500 text-center py-10">Failed to load round data.</p>;
   }
 
-  const { round, nps, response_rate, sessions, non_responders, community_cohorts, is_paid_tier, community_analytics, alerts, word_frequencies, insights } = data;
+  const { round, nps, response_rate, sessions, non_responders, community_cohorts, is_paid_tier, community_analytics, alerts, word_frequencies, insights, interview_summary } = data;
 
   const formatCurrency = (val) => val != null ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(val) : "$0";
   const formatPropertyType = (t) => ({ condo: "Condo", townhome: "Townhome", single_family: "Single Family", mixed: "Mixed", other: "Other" }[t] || t);
@@ -167,7 +205,14 @@ export default function RoundDashboard({ roundId, onBack }) {
     cohort: c.cohort,
   }));
 
-  const undismissedAlerts = alerts.filter((a) => !a.dismissed);
+  // Group alerts by community for warnings section
+  const alertsByCommunity = {};
+  alerts.forEach((a) => {
+    const community = a.alert_community || "Unknown";
+    if (!alertsByCommunity[community]) alertsByCommunity[community] = [];
+    alertsByCommunity[community].push(a);
+  });
+  const activeAlertCount = alerts.filter((a) => !a.dismissed && !a.solved).length;
 
   return (
     <div className="space-y-6">
@@ -175,7 +220,7 @@ export default function RoundDashboard({ roundId, onBack }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={onBack}
+            onClick={() => navigate("/admin/rounds")}
             className="text-gray-400 hover:text-gray-600 transition"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -224,36 +269,6 @@ export default function RoundDashboard({ roundId, onBack }) {
           )
         )}
       </div>
-
-      {/* Critical Alerts for this round */}
-      {undismissedAlerts.length > 0 && (
-        <div className="space-y-2">
-          {undismissedAlerts.map((alert) => (
-            <div key={alert.id} className={`rounded-lg border p-3 ${
-              alert.severity === "critical" ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"
-            }`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2">
-                  <svg className={`w-4 h-4 flex-shrink-0 mt-0.5 ${alert.severity === "critical" ? "text-red-500" : "text-amber-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                  </svg>
-                  <p className={`text-sm ${alert.severity === "critical" ? "text-red-800" : "text-amber-800"}`}>
-                    <strong>{alert.first_name || alert.last_name ? `${alert.first_name || ""} ${alert.last_name || ""}`.trim() : alert.user_email}</strong>
-                    {alert.alert_community ? ` (${alert.alert_community})` : ""} — {alert.description}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleDismissAlert(alert.id)}
-                  disabled={dismissing === alert.id}
-                  className="text-xs text-gray-400 hover:text-gray-600 flex-shrink-0"
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Response Rate + NPS */}
       <div className="grid grid-cols-2 gap-4">
@@ -315,6 +330,153 @@ export default function RoundDashboard({ roundId, onBack }) {
           )}
         </div>
       </div>
+
+      {/* Warnings Section — grouped by community */}
+      {alerts.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Warnings</p>
+            {activeAlertCount > 0 && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                {activeAlertCount} active
+              </span>
+            )}
+          </div>
+          <div className="space-y-2">
+            {Object.entries(alertsByCommunity).map(([community, communityAlerts]) => {
+              const communityActive = communityAlerts.filter((a) => !a.dismissed && !a.solved).length;
+              const isExpanded = expandedCommunities[community];
+              return (
+                <div key={community} className="border border-gray-100 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => toggleCommunity(community)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900">{community}</span>
+                      <span className="text-xs text-gray-500">({communityAlerts.length} alert{communityAlerts.length !== 1 ? "s" : ""})</span>
+                      {communityActive > 0 && (
+                        <span className="w-2 h-2 rounded-full bg-red-500" />
+                      )}
+                    </div>
+                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-3 space-y-2">
+                      {communityAlerts.map((alert) => {
+                        const isActive = !alert.dismissed && !alert.solved;
+                        const isSolved = alert.solved;
+                        const isDismissed = alert.dismissed;
+                        const memberName = alert.first_name || alert.last_name
+                          ? `${alert.first_name || ""} ${alert.last_name || ""}`.trim()
+                          : alert.user_email;
+
+                        return (
+                          <div key={alert.id} className={`rounded-lg border p-3 ${
+                            isSolved ? "bg-green-50 border-green-200" :
+                            isDismissed ? "bg-gray-50 border-gray-200" :
+                            alert.severity === "critical" ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"
+                          }`}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                                    alert.alert_type === "contract_termination" ? "bg-red-100 text-red-700" :
+                                    alert.alert_type === "legal_threat" ? "bg-purple-100 text-purple-700" :
+                                    alert.alert_type === "safety_concern" ? "bg-orange-100 text-orange-700" :
+                                    "bg-gray-100 text-gray-700"
+                                  }`}>
+                                    {alert.alert_type?.replace(/_/g, " ")}
+                                  </span>
+                                  {isSolved && <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700">Solved</span>}
+                                  {isDismissed && <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">Dismissed</span>}
+                                </div>
+                                <p className={`text-sm ${isSolved ? "text-green-800" : isDismissed ? "text-gray-500" : "text-gray-800"}`}>
+                                  <strong>{memberName}</strong> — {alert.description}
+                                </p>
+                                <p className="text-xs text-gray-400 mt-1">{formatDate(alert.created_at)}</p>
+                                {isSolved && alert.solve_note && (
+                                  <p className="text-xs text-green-700 mt-1 italic">Note: {alert.solve_note}</p>
+                                )}
+                              </div>
+                              {isActive && (
+                                <div className="flex flex-col gap-1 flex-shrink-0">
+                                  {solving === alert.id ? (
+                                    <div className="space-y-1">
+                                      <textarea
+                                        value={solveNote}
+                                        onChange={(e) => setSolveNote(e.target.value)}
+                                        placeholder="Optional note..."
+                                        className="text-xs border border-gray-300 rounded p-1.5 w-36 h-14 resize-none"
+                                      />
+                                      <div className="flex gap-1">
+                                        <button
+                                          onClick={() => handleSolveAlert(alert.id)}
+                                          className="text-xs font-semibold px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700"
+                                        >
+                                          Confirm
+                                        </button>
+                                        <button
+                                          onClick={() => { setSolving(null); setSolveNote(""); }}
+                                          className="text-xs px-2 py-1 rounded text-gray-500 hover:text-gray-700"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <button
+                                        onClick={() => setSolving(alert.id)}
+                                        className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition"
+                                      >
+                                        Mark Solved
+                                      </button>
+                                      <button
+                                        onClick={() => handleDismissAlert(alert.id)}
+                                        disabled={dismissing === alert.id}
+                                        className="text-xs text-gray-400 hover:text-gray-600"
+                                      >
+                                        Dismiss
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Your Stated Goals (from onboarding interview) */}
+      {interview_summary && (
+        <div className="bg-blue-50/60 rounded-xl border border-blue-100 p-5">
+          <button
+            onClick={() => setGoalsExpanded(!goalsExpanded)}
+            className="w-full flex items-center justify-between"
+          >
+            <span className="text-sm font-semibold text-gray-700">Your Stated Goals</span>
+            <svg className={`w-4 h-4 text-gray-400 transition-transform ${goalsExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {goalsExpanded && (
+            <p className="mt-3 text-sm text-gray-600 italic leading-relaxed whitespace-pre-line">
+              {interview_summary}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Community Cohorts */}
       {community_cohorts.length > 0 && (

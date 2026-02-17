@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useOutletContext } from "react-router-dom";
 
 function AutocompleteInput({ value, onChange, options, placeholder, className }) {
   const [open, setOpen] = useState(false);
@@ -97,7 +98,9 @@ function TrendArrow({ sessions, email }) {
   );
 }
 
-export default function UserManager({ sessions, companyName }) {
+export default function UserManager() {
+  const { user } = useOutletContext();
+  const companyName = user?.company_name;
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);

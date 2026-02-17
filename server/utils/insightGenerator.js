@@ -24,10 +24,24 @@ const STOP_WORDS = new Set([
   "something", "anything", "everything", "nothing", "someone", "anyone", "everyone",
   "yeah", "yes", "okay", "sure", "right", "good", "great", "bad", "need", "want",
   "time", "way", "been", "because", "since", "through", "down", "around",
+  // Conversational fillers
+  "feel", "felt", "keep", "keeps", "kept", "seems", "seem", "see", "always", "never",
+  "probably", "actually", "definitely", "basically", "especially", "recently", "usually",
+  "kind", "able", "try", "trying", "tried", "done", "put", "give", "given", "gave",
+  "told", "tell", "asked", "ask", "look", "looking", "looked", "hope", "hoping",
+  "hear", "heard", "thought", "believe", "guess", "mean", "means", "new", "old",
+  "big", "small", "long", "many", "first", "last", "next", "another", "enough",
+  "little", "bit", "start", "started", "end", "already", "often", "per",
+  // Generic nouns
+  "area", "areas", "issue", "issues", "people", "place", "part", "point",
+  "year", "years", "month", "months", "week", "weeks", "work", "day", "days",
+  "number", "fact", "case", "example", "situation", "matter", "side",
   // Domain-specific (too generic for property management context)
   "management", "board", "property", "community", "association", "hoa", "condo",
   "company", "manager", "member", "members", "resident", "residents", "building",
-  "score", "nps", "survey", "interview", "feedback"
+  "score", "nps", "survey", "interview", "feedback",
+  "service", "services", "maintenance", "meeting", "meetings", "email", "phone",
+  "staff", "office", "unit", "units", "fee", "fees"
 ]);
 
 /**
@@ -93,6 +107,28 @@ ${s.summary}`;
     ? Math.round(((promoters - detractors) / npsScores.length) * 100)
     : "N/A";
 
+  // Fetch critical alerts for this round (all statuses)
+  const criticalAlerts = await db.all(
+    `SELECT ca.alert_type, ca.severity, ca.description, ca.dismissed, COALESCE(ca.solved, FALSE) as solved,
+            COALESCE(cm.community_name, u.community_name) as community_name,
+            u.first_name, u.last_name
+     FROM critical_alerts ca
+     LEFT JOIN users u ON u.id = ca.user_id
+     LEFT JOIN communities cm ON cm.id = u.community_id
+     WHERE ca.round_id = ? AND ca.client_id = ?`,
+    [roundId, clientId]
+  );
+
+  let alertContext = "";
+  if (criticalAlerts.length > 0) {
+    alertContext = "\n\n--- CRITICAL ALERTS FLAGGED DURING THIS ROUND ---\n\n" +
+      criticalAlerts.map((a) => {
+        const name = [a.first_name, a.last_name].filter(Boolean).join(" ") || "Unknown";
+        const status = a.solved ? "solved" : a.dismissed ? "dismissed" : "active";
+        return `- [${a.alert_type?.replace(/_/g, " ")}] from ${name} at ${a.community_name || "Unknown"}: ${a.description} (Status: ${status})`;
+      }).join("\n");
+  }
+
   const baseContext = `Company: ${client?.company_name || "Unknown"}
 ${supplement?.value ? `Company Context: ${supplement.value}\n` : ""}Total Respondents: ${sessions.length}
 NPS Score: ${npsScore} (Promoters: ${promoters}, Passives: ${passives}, Detractors: ${detractors})
@@ -100,7 +136,7 @@ Average NPS Rating: ${avgNps}
 ${prevRound?.insights_json ? `\nPrevious Round Context: Insights were generated previously. Build on trends, don't repeat.\n` : ""}
 --- RESPONDENT SUMMARIES ---
 
-${sessionContext}`;
+${sessionContext}${alertContext}`;
 
   // Run 3 independent analysis passes in parallel
   const [findings, actions, callouts] = await Promise.all([
@@ -264,10 +300,11 @@ export async function generateWordFrequencies(roundId, clientId) {
     }
   }
 
-  // Keep top 60 words
+  // Filter out single mentions (not a trend) and keep top 40 words
   const sorted = Object.entries(wordCounts)
+    .filter(([, count]) => count > 1)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 60)
+    .slice(0, 40)
     .map(([word, count]) => ({ word, count }));
 
   await db.run(
@@ -296,8 +333,9 @@ export function computeLiveWordFrequencies(messages) {
   }
 
   return Object.entries(wordCounts)
+    .filter(([, count]) => count > 1)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 60)
+    .slice(0, 40)
     .map(([word, count]) => ({ word, count }));
 }
 

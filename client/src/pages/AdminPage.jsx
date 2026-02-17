@@ -1,17 +1,12 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import UserManager from "../components/UserManager";
-import AccountSettings from "../components/AccountSettings";
-import RoundsLanding from "../components/RoundsLanding";
-import TrendsView from "../components/TrendsView";
-import RoundDashboard from "../components/RoundDashboard";
-import CommunityManager from "../components/CommunityManager";
+import { useNavigate, useLocation, Outlet } from "react-router-dom";
 
 export default function AdminPage() {
-  const [tab, setTab] = useState("rounds");
-  const [selectedRoundId, setSelectedRoundId] = useState(null);
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const activeTab = location.pathname.replace("/admin/", "").split("/")[0] || "rounds";
 
   useEffect(() => {
     checkAuth();
@@ -55,19 +50,14 @@ export default function AdminPage() {
     }
   };
 
-  const handleSelectRound = (roundId) => {
-    setSelectedRoundId(roundId);
-    setTab("rounds");
-  };
-
   const isPaidTier = user?.plan_name && user.plan_name !== "free";
 
   const TABS = [
-    { key: "rounds", label: "Rounds" },
-    { key: "trends", label: "Trends" },
-    ...(isPaidTier ? [{ key: "communities", label: "Communities" }] : []),
-    { key: "users", label: "Board Members" },
-    { key: "account", label: "Account" },
+    { path: "rounds", label: "Rounds" },
+    { path: "trends", label: "Trends" },
+    ...(isPaidTier ? [{ path: "communities", label: "Communities" }] : []),
+    { path: "members", label: "Board Members" },
+    { path: "account", label: "Account" },
   ];
 
   return (
@@ -109,13 +99,10 @@ export default function AdminPage() {
       <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1">
         {TABS.map((t) => (
           <button
-            key={t.key}
-            onClick={() => {
-              setTab(t.key);
-              if (t.key !== "rounds") setSelectedRoundId(null);
-            }}
+            key={t.path}
+            onClick={() => navigate(`/admin/${t.path}`)}
             className={`flex-1 py-3 text-sm font-medium rounded-lg transition ${
-              tab === t.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              activeTab === t.path ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
             }`}
           >
             {t.label}
@@ -123,25 +110,8 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {/* Content */}
-      {tab === "rounds" && (
-        selectedRoundId ? (
-          <RoundDashboard
-            roundId={selectedRoundId}
-            onBack={() => setSelectedRoundId(null)}
-          />
-        ) : (
-          <RoundsLanding
-            user={user}
-            onSelectRound={handleSelectRound}
-            onNavigate={setTab}
-          />
-        )
-      )}
-      {tab === "trends" && <TrendsView />}
-      {tab === "communities" && <CommunityManager />}
-      {tab === "users" && <UserManager companyName={user?.company_name} />}
-      {tab === "account" && <AccountSettings />}
+      {/* Child routes render here */}
+      <Outlet context={{ user, isPaidTier }} />
       </div>
     </div>
   );

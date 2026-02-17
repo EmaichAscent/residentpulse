@@ -536,6 +536,17 @@ router.get("/clients/:id/detail", async (req, res) => {
       [clientId]
     );
 
+    // Alert summary
+    const alertSummary = await db.get(
+      `SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE dismissed = FALSE AND COALESCE(solved, FALSE) = FALSE) as active,
+        COUNT(*) FILTER (WHERE COALESCE(solved, FALSE) = TRUE) as solved,
+        COUNT(*) FILTER (WHERE dismissed = TRUE) as dismissed
+       FROM critical_alerts WHERE client_id = ?`,
+      [clientId]
+    );
+
     // Engagement warning
     const lastLogin = admins.reduce((latest, a) => {
       if (!a.last_login_at) return latest;
@@ -555,6 +566,12 @@ router.get("/clients/:id/detail", async (req, res) => {
       latest_interview: latestInterview,
       prompt_supplement: promptSupplement?.value || null,
       survey_rounds: surveyRounds,
+      alert_summary: {
+        total: alertSummary?.total || 0,
+        active: alertSummary?.active || 0,
+        solved: alertSummary?.solved || 0,
+        dismissed: alertSummary?.dismissed || 0
+      },
       engagement: {
         last_login: lastLogin,
         days_since_login: daysSinceLogin,
@@ -564,6 +581,29 @@ router.get("/clients/:id/detail", async (req, res) => {
   } catch (err) {
     console.error("Client detail error:", err);
     res.status(500).json({ error: "Failed to load client details" });
+  }
+});
+
+// Get all alerts for a client (all rounds, all statuses)
+router.get("/clients/:id/alerts", async (req, res) => {
+  try {
+    const clientId = Number(req.params.id);
+    const alerts = await db.all(
+      `SELECT ca.*, sr.round_number,
+              u.first_name, u.last_name, u.email as user_email,
+              COALESCE(cm.community_name, u.community_name) as alert_community
+       FROM critical_alerts ca
+       LEFT JOIN users u ON u.id = ca.user_id
+       LEFT JOIN communities cm ON cm.id = u.community_id
+       LEFT JOIN survey_rounds sr ON sr.id = ca.round_id
+       WHERE ca.client_id = ?
+       ORDER BY ca.created_at DESC`,
+      [clientId]
+    );
+    res.json(alerts);
+  } catch (err) {
+    console.error("Error fetching client alerts:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
