@@ -14,7 +14,7 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
 
   useEffect(() => {
     loadRounds();
-  }, []);
+  }, [cadence]);
 
   const loadRounds = async () => {
     try {
@@ -184,22 +184,24 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
               <button
                 onClick={() => onCadenceChange(2)}
                 disabled={cadenceUpdating || cadence === 2}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition ${
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
                   cadence === 2
-                    ? "bg-white text-gray-900 shadow-sm"
+                    ? "text-white shadow-sm"
                     : "text-gray-500 hover:text-gray-700"
                 } disabled:opacity-50`}
+                style={cadence === 2 ? { backgroundColor: "var(--cam-green)" } : {}}
               >
                 2x/yr
               </button>
               <button
                 onClick={() => onCadenceChange(4)}
                 disabled={cadenceUpdating || cadence === 4}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition ${
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
                   cadence === 4
-                    ? "bg-white text-gray-900 shadow-sm"
+                    ? "text-white shadow-sm"
                     : "text-gray-500 hover:text-gray-700"
                 } disabled:opacity-50`}
+                style={cadence === 4 ? { backgroundColor: "var(--cam-green)" } : {}}
               >
                 4x/yr
               </button>
