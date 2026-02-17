@@ -14,6 +14,39 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // Get all survey rounds for this client
 router.get("/", async (req, res) => {
   try {
+    // Auto-fill missing planned rounds if cadence demands more
+    const subscription = await db.get(
+      `SELECT cs.survey_cadence FROM client_subscriptions cs WHERE cs.client_id = ? AND cs.status = 'active'`,
+      [req.clientId]
+    );
+    const cadence = subscription?.survey_cadence || 2;
+
+    const existingRounds = await db.all(
+      "SELECT id, round_number, status, launched_at FROM survey_rounds WHERE client_id = ? ORDER BY round_number",
+      [req.clientId]
+    );
+
+    if (existingRounds.length > 0 && existingRounds.length < cadence) {
+      const maxRoundNum = Math.max(...existingRounds.map(r => r.round_number));
+      const lastLaunched = existingRounds.filter(r => r.launched_at).sort((a, b) => new Date(b.launched_at) - new Date(a.launched_at))[0];
+      const baseDate = lastLaunched ? new Date(lastLaunched.launched_at) : new Date();
+      const intervalMonths = cadence === 4 ? 3 : 6;
+      const now = new Date();
+
+      for (let i = existingRounds.length; i < cadence; i++) {
+        const nextDate = new Date(baseDate);
+        nextDate.setMonth(nextDate.getMonth() + intervalMonths * i);
+        const finalDate = nextDate <= now
+          ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i - existingRounds.length + 1))
+          : nextDate;
+
+        await db.run(
+          "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status) VALUES (?, ?, ?, 'planned')",
+          [req.clientId, maxRoundNum + (i - existingRounds.length + 1), finalDate.toISOString()]
+        );
+      }
+    }
+
     const rounds = await db.all(
       `SELECT sr.*,
               (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true) as responses_completed,

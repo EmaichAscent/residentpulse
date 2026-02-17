@@ -183,25 +183,25 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
             <div className="flex bg-gray-100 rounded-lg p-0.5">
               <button
                 onClick={() => onCadenceChange(2)}
-                disabled={cadenceUpdating || cadence === 2}
+                disabled={cadenceUpdating}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
                   cadence === 2
-                    ? "text-white shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                } disabled:opacity-50`}
-                style={cadence === 2 ? { backgroundColor: "#10B981" } : {}}
+                    ? "text-white shadow-sm cursor-default"
+                    : "text-gray-500 hover:text-gray-700 cursor-pointer"
+                } ${cadenceUpdating ? "opacity-50" : ""}`}
+                style={cadence === 2 ? { backgroundColor: "var(--cam-green)" } : {}}
               >
                 2x/yr
               </button>
               <button
                 onClick={() => onCadenceChange(4)}
-                disabled={cadenceUpdating || cadence === 4}
+                disabled={cadenceUpdating}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
                   cadence === 4
-                    ? "text-white shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                } disabled:opacity-50`}
-                style={cadence === 4 ? { backgroundColor: "#10B981" } : {}}
+                    ? "text-white shadow-sm cursor-default"
+                    : "text-gray-500 hover:text-gray-700 cursor-pointer"
+                } ${cadenceUpdating ? "opacity-50" : ""}`}
+                style={cadence === 4 ? { backgroundColor: "var(--cam-green)" } : {}}
               >
                 4x/yr
               </button>
