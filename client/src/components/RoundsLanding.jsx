@@ -232,7 +232,7 @@ export default function RoundsLanding() {
                 <p className={`font-semibold ${memberCount > 0 ? "text-gray-900" : "text-gray-400"}`}>Schedule Your First Round</p>
                 {memberCount > 0 ? (
                   <div className="mt-2">
-                    <SurveySchedule />
+                    <SurveySchedule embedded />
                   </div>
                 ) : (
                   <p className="text-sm text-gray-400 mt-0.5">Add members first to unlock scheduling.</p>
