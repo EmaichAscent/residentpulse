@@ -159,7 +159,6 @@ export default function AdminOnboardingPage() {
       setConfirmResult(data);
     } catch (err) {
       console.error("Confirm error:", err);
-    } finally {
       setConfirming(false);
     }
   };
@@ -473,6 +472,15 @@ export default function AdminOnboardingPage() {
       {/* Step: Confirmation */}
       {step === "confirm" && (
         <div className="flex-1 overflow-y-auto">
+          {confirming && (
+            <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-xl shadow-xl p-8 max-w-sm w-full mx-4 text-center">
+                <div className="w-10 h-10 border-3 border-gray-200 rounded-full animate-spin mx-auto mb-4" style={{ borderTopColor: "var(--cam-blue)", borderWidth: "3px" }} />
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Building your profile...</h3>
+                <p className="text-sm text-gray-500">Our AI is generating a personalized context for your board member interviews. This takes a few seconds.</p>
+              </div>
+            </div>
+          )}
           <div className="max-w-lg mx-auto px-4 py-6">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
               <h2 className="text-base font-semibold text-gray-900 mb-1">Does this look right?</h2>

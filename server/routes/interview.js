@@ -22,7 +22,7 @@ You have already received their structured data (company size, years in business
 5. Anything unique about their company culture or approach that the AI should be aware of
 
 Guidelines:
-- Your very first message should let the user know you'll be asking approximately 5-10 questions, that they can end the interview at any time and complete it later if needed, and that there's a Finish button at the bottom they can use whenever they're ready to wrap up
+- Greet the admin by name if provided in the context below. Your very first message should welcome them, let them know you'll be asking approximately 5-10 questions, that they can end the interview at any time and complete it later using the Finish button at the bottom, and that the more detail they share, the better their board member survey results will be
 - Keep every response to 1-2 short sentences. Never exceed 2 sentences. No filler, no preamble, no restating what they said
 - Ask 5-8 questions total, one at a time
 - Ask follow-up questions only where more detail would genuinely improve results
@@ -40,7 +40,7 @@ Focus this shorter conversation on:
 5. Any new concerns or focus areas
 
 Guidelines:
-- Your very first message should let the user know this will be a quick check-in of about 3-5 questions, that they can end anytime using the Finish button at the bottom, and pick up later if needed
+- Greet the admin by name if provided in the context below. Your very first message should welcome them back, let them know this will be a quick check-in of about 3-5 questions, that they can end anytime using the Finish button at the bottom, and that the more they share the better the upcoming round will be
 - Keep every response to 1-2 short sentences. Never exceed 2 sentences. No filler, no preamble, no restating what they said
 - Reference what they told you last time where relevant — show you remember
 - This should be shorter than the initial interview (3-5 questions typically)
@@ -189,6 +189,8 @@ router.post("/:id/structured", async (req, res) => {
 
     // Build context for the AI
     let contextIntro = `The admin has provided the following about their company:\n`;
+    contextIntro += `- Admin email: ${req.userEmail}\n`;
+    if (req.session?.user?.company_name) contextIntro += `- Company name: ${req.session.user.company_name}\n`;
     if (company_size) contextIntro += `- Company size: ${company_size}\n`;
     if (years_in_business) contextIntro += `- Years in business: ${years_in_business}\n`;
     if (geographic_area) contextIntro += `- Geographic area: ${geographic_area}\n`;
@@ -295,6 +297,8 @@ router.post("/:id/message", async (req, res) => {
 
     // Add structured data context
     let contextIntro = `\n\nCURRENT STRUCTURED DATA:\n`;
+    contextIntro += `- Admin email: ${req.userEmail}\n`;
+    if (req.session?.user?.company_name) contextIntro += `- Company name: ${req.session.user.company_name}\n`;
     if (interview.company_size) contextIntro += `- Company size: ${interview.company_size}\n`;
     if (interview.years_in_business) contextIntro += `- Years in business: ${interview.years_in_business}\n`;
     if (interview.geographic_area) contextIntro += `- Geographic area: ${interview.geographic_area}\n`;
@@ -426,11 +430,14 @@ router.patch("/:id/confirm", async (req, res) => {
       );
     }
 
-    // Mark onboarding as completed
+    // Mark onboarding as completed (DB + session)
     await db.run(
       "UPDATE client_admins SET onboarding_completed = TRUE WHERE id = ?",
       [req.userId]
     );
+    if (req.session?.user) {
+      req.session.user.onboarding_completed = true;
+    }
 
     await logActivity({
       actorType: "client_admin",
