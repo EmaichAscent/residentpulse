@@ -410,35 +410,47 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
                 </div>
               </div>
 
-              {round.status === "planned" && (
-                <>
-                  {confirmLaunch === round.id ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">Launch now?</span>
+              {round.status === "planned" && (() => {
+                // Allow launch only within 30 days of scheduled date
+                const daysUntil = round.scheduled_date
+                  ? Math.ceil((new Date(round.scheduled_date + "T00:00:00") - new Date()) / (1000 * 60 * 60 * 24))
+                  : 0;
+                const tooEarly = daysUntil > 30;
+
+                return (
+                  <>
+                    {confirmLaunch === round.id ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">Launch now?</span>
+                        <button
+                          onClick={() => handleLaunch(round.id)}
+                          disabled={launching === round.id}
+                          className="text-xs px-3 py-1.5 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
+                        >
+                          {launching === round.id ? "Launching..." : "Confirm"}
+                        </button>
+                        <button
+                          onClick={() => setConfirmLaunch(null)}
+                          className="text-xs px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : tooEarly ? (
+                      <span className="text-xs text-gray-400 text-right leading-tight">
+                        Available in {daysUntil - 30} day{daysUntil - 30 !== 1 ? "s" : ""}
+                      </span>
+                    ) : (
                       <button
-                        onClick={() => handleLaunch(round.id)}
-                        disabled={launching === round.id}
-                        className="text-xs px-3 py-1.5 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
+                        onClick={() => handlePreLaunchCheck(round.id)}
+                        className="text-sm px-4 py-2 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90"
                       >
-                        {launching === round.id ? "Launching..." : "Confirm"}
+                        Confirm & Launch
                       </button>
-                      <button
-                        onClick={() => setConfirmLaunch(null)}
-                        className="text-xs px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handlePreLaunchCheck(round.id)}
-                      className="text-sm px-4 py-2 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90"
-                    >
-                      Confirm & Launch
-                    </button>
-                  )}
-                </>
-              )}
+                    )}
+                  </>
+                );
+              })()}
             </div>
           );
         })}
