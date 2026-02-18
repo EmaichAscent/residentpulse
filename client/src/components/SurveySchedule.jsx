@@ -156,35 +156,55 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
           </>
         )}
 
-        <div className={`bg-amber-50 border border-amber-200 rounded-lg p-3 ${embedded ? "mb-3" : "mb-4"}`}>
-          <p className={`text-amber-800 ${embedded ? "text-xs" : "text-sm"}`}>
-            {embedded
-              ? "All current board members will be invited when you launch."
-              : "Make sure your board member list is up to date before scheduling. Once you confirm and launch a round, all current board members will receive a survey invitation."
-            }
-          </p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">First Launch Date</label>
-          <div className={embedded ? "flex items-end gap-2" : "flex items-end gap-3"}>
-            <div className="flex-1">
+        {embedded ? (
+          <>
+            <p className="text-xs text-gray-500 mb-3">All current board members will be invited when you launch.</p>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">First Launch Date</label>
               <input
                 type="date"
                 value={firstDate}
                 onChange={(e) => setFirstDate(e.target.value)}
-                className="input-field"
+                className="input-field-sm"
               />
             </div>
             <button
               onClick={handleSchedule}
               disabled={!firstDate || scheduling}
-              className={`${embedded ? "btn-primary-sm" : "btn-primary"} whitespace-nowrap`}
+              className="btn-primary-sm w-full mt-3"
             >
-              {scheduling ? "Scheduling..." : "Schedule Rounds"}
+              {scheduling ? "Scheduling..." : "Schedule First Survey"}
             </button>
-          </div>
-        </div>
+          </>
+        ) : (
+          <>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+              <p className="text-sm text-amber-800">
+                Make sure your board member list is up to date before scheduling. Once you confirm and launch a round, all current board members will receive a survey invitation.
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">First Launch Date</label>
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <input
+                    type="date"
+                    value={firstDate}
+                    onChange={(e) => setFirstDate(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+                <button
+                  onClick={handleSchedule}
+                  disabled={!firstDate || scheduling}
+                  className="btn-primary whitespace-nowrap"
+                >
+                  {scheduling ? "Scheduling..." : "Schedule Rounds"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
         {error && <p className="text-red-600 text-sm mt-3">{error}</p>}
       </Wrapper>
