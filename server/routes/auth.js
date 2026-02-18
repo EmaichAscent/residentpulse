@@ -117,6 +117,7 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
     role: "client_admin",
     client_id: admin.client_id,
     company_name: admin.company_name,
+    first_name: admin.first_name || null,
     onboarding_completed: admin.onboarding_completed || false,
     plan_name: admin.plan_name || "free"
   };
@@ -136,6 +137,7 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
       role: "client_admin",
       client_id: admin.client_id,
       company_name: admin.company_name,
+      first_name: admin.first_name || null,
       onboarding_completed: admin.onboarding_completed || false
     }
   });
@@ -234,7 +236,7 @@ router.get("/status", async (req, res) => {
   // For client admins, refresh onboarding_completed and plan from DB (may have changed during session)
   if (req.session.user.role === "client_admin") {
     const admin = await db.get(
-      `SELECT ca.onboarding_completed, sp.name as plan_name
+      `SELECT ca.onboarding_completed, ca.first_name, sp.name as plan_name
        FROM client_admins ca
        LEFT JOIN client_subscriptions cs ON cs.client_id = ca.client_id AND cs.status = 'active'
        LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
@@ -243,6 +245,7 @@ router.get("/status", async (req, res) => {
     );
     if (admin) {
       req.session.user.onboarding_completed = admin.onboarding_completed || false;
+      req.session.user.first_name = admin.first_name || null;
       req.session.user.plan_name = admin.plan_name || "free";
     }
   }

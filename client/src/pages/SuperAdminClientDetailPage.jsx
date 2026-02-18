@@ -307,7 +307,7 @@ export default function SuperAdminClientDetailPage() {
                         </span>
                         <span className="text-gray-400 ml-2">{formatDate(iv.completed_at || iv.created_at)}</span>
                         <span className="text-gray-400 ml-2">{iv.message_count} messages</span>
-                        <span className="text-gray-400 ml-2">by {iv.admin_email}</span>
+                        <span className="text-gray-400 ml-2">by {iv.admin_first_name ? `${iv.admin_first_name} ${iv.admin_last_name || ""}`.trim() : iv.admin_email}</span>
                       </div>
                       <span className={`px-2 py-0.5 text-xs rounded-full ${
                         iv.status === "completed" ? "bg-green-100 text-green-700"
@@ -491,6 +491,7 @@ export default function SuperAdminClientDetailPage() {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b">
+                  <th className="text-left py-2 font-medium text-gray-500">Name</th>
                   <th className="text-left py-2 font-medium text-gray-500">Email</th>
                   <th className="text-left py-2 font-medium text-gray-500">Created</th>
                   <th className="text-left py-2 font-medium text-gray-500">Last Login</th>
@@ -502,7 +503,8 @@ export default function SuperAdminClientDetailPage() {
                   const stale = !a.last_login_at || (Date.now() - new Date(a.last_login_at).getTime()) > 30 * 86400000;
                   return (
                     <tr key={a.id} className={`border-b last:border-0 ${stale ? "bg-amber-50/50" : ""}`}>
-                      <td className="py-2 font-medium">{a.email}</td>
+                      <td className="py-2 font-medium">{a.first_name ? `${a.first_name} ${a.last_name || ""}`.trim() : "—"}</td>
+                      <td className="py-2">{a.email}</td>
                       <td className="py-2 text-gray-500">{formatDate(a.created_at)}</td>
                       <td className={`py-2 ${stale ? "text-amber-600 font-medium" : "text-gray-500"}`}>
                         {formatDateTime(a.last_login_at)}

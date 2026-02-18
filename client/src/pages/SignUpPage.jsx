@@ -15,6 +15,8 @@ export default function SignUpPage() {
   const [phoneNumber, setPhoneNumber] = useState("");
 
   // Admin fields
+  const [adminFirstName, setAdminFirstName] = useState("");
+  const [adminLastName, setAdminLastName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -68,6 +70,8 @@ export default function SignUpPage() {
           state,
           zip,
           phone_number: phoneNumber,
+          admin_first_name: adminFirstName,
+          admin_last_name: adminLastName,
           admin_email: adminEmail,
           password,
           plan_id: selectedPlanId,
@@ -311,6 +315,35 @@ export default function SignUpPage() {
             {/* Section 3: Admin Account */}
             <div className="mb-6">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Admin Account</h2>
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label htmlFor="adminFirstName" className="block text-sm font-medium text-gray-700 mb-1">
+                    First Name
+                  </label>
+                  <input
+                    id="adminFirstName"
+                    type="text"
+                    value={adminFirstName}
+                    onChange={(e) => setAdminFirstName(e.target.value)}
+                    className="input-field"
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="adminLastName" className="block text-sm font-medium text-gray-700 mb-1">
+                    Last Name
+                  </label>
+                  <input
+                    id="adminLastName"
+                    type="text"
+                    value={adminLastName}
+                    onChange={(e) => setAdminLastName(e.target.value)}
+                    className="input-field"
+                    required
+                  />
+                </div>
+              </div>
 
               <div className="mb-4">
                 <label htmlFor="adminEmail" className="block text-sm font-medium text-gray-700 mb-1">

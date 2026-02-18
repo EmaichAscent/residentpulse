@@ -269,7 +269,7 @@ export default function AdminOnboardingPage() {
             </div>
           ) : (
             <button
-              onClick={() => navigate("/admin")}
+              onClick={() => navigate("/admin/rounds")}
               className="btn-primary-sm px-8"
             >
               Go to Dashboard

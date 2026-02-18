@@ -19,8 +19,6 @@ export default function AdminPage() {
 
       if (!data.authenticated || data.user.role !== "client_admin") {
         navigate("/admin/login");
-      } else if (!data.user.onboarding_completed && !data.user.impersonating) {
-        navigate("/admin/onboarding");
       } else {
         setUser(data.user);
       }

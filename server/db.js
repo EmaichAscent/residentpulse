@@ -66,6 +66,10 @@ async function initializeSchema() {
       )
     `);
 
+    // Add first_name/last_name to client_admins
+    await client.query(`ALTER TABLE client_admins ADD COLUMN IF NOT EXISTS first_name TEXT`);
+    await client.query(`ALTER TABLE client_admins ADD COLUMN IF NOT EXISTS last_name TEXT`);
+
     // Create sessions table
     await client.query(`
       CREATE TABLE IF NOT EXISTS sessions (

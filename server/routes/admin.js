@@ -610,7 +610,7 @@ router.post("/board-members/invite", async (req, res) => {
 // Get admin users for current client
 router.get("/users", async (req, res) => {
   const users = await db.all(
-    "SELECT id, email, created_at FROM client_admins WHERE client_id = ? ORDER BY created_at",
+    "SELECT id, email, first_name, last_name, created_at FROM client_admins WHERE client_id = ? ORDER BY created_at",
     [req.clientId]
   );
   res.json(users);

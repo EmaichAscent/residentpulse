@@ -33,7 +33,7 @@ router.get("/plans", async (req, res) => {
 router.post("/register", signupLimiter, async (req, res) => {
   const {
     company_name, address_line1, address_line2, city, state, zip,
-    phone_number, admin_email, password, plan_id
+    phone_number, admin_first_name, admin_last_name, admin_email, password, plan_id
   } = req.body;
 
   // Validate required fields
@@ -80,8 +80,8 @@ router.post("/register", signupLimiter, async (req, res) => {
 
     // Create admin user
     await db.run(
-      "INSERT INTO client_admins (client_id, email, password_hash, email_verified, email_verification_token, email_verification_expires) VALUES (?, ?, ?, ?, ?, ?)",
-      [clientId, email, passwordHash, false, verificationToken, expires.toISOString()]
+      "INSERT INTO client_admins (client_id, email, password_hash, email_verified, email_verification_token, email_verification_expires, first_name, last_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [clientId, email, passwordHash, false, verificationToken, expires.toISOString(), admin_first_name || null, admin_last_name || null]
     );
 
     // Create subscription

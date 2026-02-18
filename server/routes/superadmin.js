@@ -502,7 +502,7 @@ router.get("/clients/:id/detail", async (req, res) => {
 
     // Admins with last login
     const admins = await db.all(
-      "SELECT id, email, created_at, last_login_at, onboarding_completed FROM client_admins WHERE client_id = ?",
+      "SELECT id, email, first_name, last_name, created_at, last_login_at, onboarding_completed FROM client_admins WHERE client_id = ?",
       [clientId]
     );
 
@@ -613,7 +613,7 @@ router.get("/clients/:id/interviews", async (req, res) => {
     const interviews = await db.all(
       `SELECT ai.id, ai.interview_type, ai.status, ai.generated_prompt, ai.interview_summary,
               ai.admin_confirmed, ai.created_at, ai.completed_at,
-              ca.email as admin_email,
+              ca.email as admin_email, ca.first_name as admin_first_name, ca.last_name as admin_last_name,
               (SELECT COUNT(*) FROM admin_interview_messages aim WHERE aim.interview_id = ai.id) as message_count
        FROM admin_interviews ai
        LEFT JOIN client_admins ca ON ca.id = ai.admin_id

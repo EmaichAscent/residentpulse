@@ -16,11 +16,25 @@ export default function RoundsLanding() {
   const [cadenceMessage, setCadenceMessage] = useState(null);
   const [memberCount, setMemberCount] = useState(0);
   const [memberLimit, setMemberLimit] = useState(null);
+  const [interviewCompleted, setInterviewCompleted] = useState(false);
 
   useEffect(() => {
     loadRounds();
     loadAccount();
+    loadInterviewStatus();
   }, []);
+
+  const loadInterviewStatus = async () => {
+    try {
+      const res = await fetch("/api/admin/interview/status", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setInterviewCompleted(data.hasCompletedInterview);
+      }
+    } catch (err) {
+      console.error("Failed to load interview status:", err);
+    }
+  };
 
   const loadAccount = async () => {
     try {
@@ -117,55 +131,162 @@ export default function RoundsLanding() {
   const completedRounds = rounds.filter((r) => r.status === "concluded");
   const plannedRounds = rounds.filter((r) => r.status === "planned");
 
-  // No rounds at all — show welcome + scheduling
+  // Build welcome greeting
+  const welcomeName = user?.first_name
+    ? `${user.first_name}${user.company_name ? ` — ${user.company_name}` : ""}`
+    : user?.company_name || null;
+
+  // No rounds at all — show launch checklist + philosophy
   if (rounds.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <div className="px-8 py-10 text-center" style={{ backgroundColor: "var(--cam-blue)" }}>
-            <h2 className="text-3xl font-bold text-white mb-2">
-              Welcome{user?.email ? `, ${user.email}` : ""}{user?.company_name ? ` — ${user.company_name}` : ""}!
-            </h2>
-            <p className="text-white/80 text-lg max-w-xl mx-auto">
-              You're all set to start collecting meaningful feedback from your board members.
-            </p>
-          </div>
-          <div className="px-8 py-6">
-            <div className="mb-6 max-w-xl mx-auto">
-              <h3 className="text-lg font-bold text-gray-900 mb-3">Our Philosophy: Consistency Is Key</h3>
-              <p className="text-gray-700 text-sm leading-relaxed mb-3">
-                ResidentPulse is built around regular, ongoing engagement with your board members. Each survey round runs for 30 days, and each member participates once per round — a brief, conversational experience guided by a specialized AI partner trained in community management.
-              </p>
-              <p className="text-gray-700 text-sm leading-relaxed mb-3">
-                This isn't a one-time survey. It's a continuous feedback loop that tracks sentiment over time, surfaces emerging concerns early, and gives you actionable data to improve service delivery. The more consistently you run rounds, the more powerful the insights become.
-              </p>
-              <p className="text-gray-700 text-sm leading-relaxed">
-                Your role is simple: set your schedule, add your members, and launch. The AI handles the interviews, and ResidentPulse handles the analysis. Minimal ongoing work, maximum impact.
-              </p>
-            </div>
+        {/* Welcome Header */}
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900">
+            Welcome{welcomeName ? `, ${welcomeName}` : ""}!
+          </h2>
+          <p className="text-gray-500 mt-1">Let's get your first survey round live.</p>
+        </div>
 
-            <div className="border-t border-gray-200 pt-6">
-              <p className="text-sm font-semibold text-gray-900 mb-3 text-center">Get started in two steps:</p>
-              <div className="flex items-center justify-center gap-4">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ backgroundColor: "var(--cam-blue)" }}>1</span>
-                  Set your survey schedule below
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ backgroundColor: "var(--cam-blue)" }}>2</span>
-                  <button
-                    onClick={() => navigate("/admin/members")}
-                    className="font-semibold hover:underline"
-                    style={{ color: "var(--cam-blue)" }}
-                  >
-                    Add your board members
-                  </button>
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left Column — Launch Checklist */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-5">Get Live in 3 Steps</h3>
+
+            {/* Step 1: AI Interview */}
+            <div className="flex gap-4 mb-6">
+              <div className="flex-shrink-0 mt-0.5">
+                {interviewCompleted ? (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: "var(--cam-green)" }}>
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: "var(--cam-blue)" }}>
+                    1
+                  </div>
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-gray-900">Tell Us About Your Business</p>
+                {interviewCompleted ? (
+                  <p className="text-sm text-green-600 font-medium mt-0.5">Completed</p>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-500 mt-0.5">A quick conversation with our AI so we can personalize your board member interviews.</p>
+                    <button
+                      onClick={() => navigate("/admin/onboarding")}
+                      className="mt-2 px-4 py-1.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90"
+                      style={{ backgroundColor: "var(--cam-blue)" }}
+                    >
+                      Start Interview
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            <div className="mt-6">
-              <SurveySchedule />
+            {/* Step 2: Add Members */}
+            <div className="flex gap-4 mb-6">
+              <div className="flex-shrink-0 mt-0.5">
+                {memberCount > 0 ? (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: "var(--cam-green)" }}>
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: "var(--cam-blue)" }}>
+                    2
+                  </div>
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-gray-900">Add Your Members</p>
+                {memberCount > 0 ? (
+                  <p className="text-sm text-green-600 font-medium mt-0.5">{memberCount} member{memberCount !== 1 ? "s" : ""} added</p>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-500 mt-0.5">Load your board members so they can receive survey invitations.</p>
+                    <button
+                      onClick={() => navigate("/admin/members")}
+                      className="mt-2 px-4 py-1.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90"
+                      style={{ backgroundColor: "var(--cam-blue)" }}
+                    >
+                      Add Members
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Step 3: Schedule First Round */}
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 mt-0.5">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${memberCount > 0 ? "text-white" : "bg-gray-200 text-gray-400"}`} style={memberCount > 0 ? { backgroundColor: "var(--cam-blue)" } : {}}>
+                  3
+                </div>
+              </div>
+              <div className="flex-1">
+                <p className={`font-semibold ${memberCount > 0 ? "text-gray-900" : "text-gray-400"}`}>Schedule Your First Round</p>
+                {memberCount > 0 ? (
+                  <div className="mt-2">
+                    <SurveySchedule />
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 mt-0.5">Add members first to unlock scheduling.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column — Philosophy */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-5">How ResidentPulse Works</h3>
+
+            <div className="space-y-5">
+              <div className="flex gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: "rgba(59, 159, 231, 0.1)" }}>
+                  <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900 text-sm">AI-Powered Interviews</p>
+                  <p className="text-sm text-gray-600 mt-0.5 leading-relaxed">
+                    Each board member has a brief, personalized conversation with our AI trained in community management. No generic surveys — real dialogue that surfaces what matters.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: "rgba(26, 176, 110, 0.1)" }}>
+                  <svg className="w-5 h-5" style={{ color: "var(--cam-green)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900 text-sm">Consistency Is Key</p>
+                  <p className="text-sm text-gray-600 mt-0.5 leading-relaxed">
+                    30-day rounds, one per member. The more consistently you run rounds, the more powerful your insights become. Track sentiment trends over time.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: "rgba(59, 159, 231, 0.1)" }}>
+                  <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900 text-sm">Minimal Effort, Maximum Impact</p>
+                  <p className="text-sm text-gray-600 mt-0.5 leading-relaxed">
+                    Set your schedule, add members, launch. The AI handles the interviews, and ResidentPulse handles the analysis. We handle the rest.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
