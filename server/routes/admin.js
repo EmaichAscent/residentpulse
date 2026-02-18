@@ -1014,7 +1014,7 @@ router.get("/communities", async (req, res) => {
      LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
      WHERE c.client_id = ?
      GROUP BY c.id
-     ORDER BY c.community_name`,
+     ORDER BY c.status ASC, c.community_name`,
     [req.clientId]
   );
 
@@ -1044,7 +1044,7 @@ router.get("/communities", async (req, res) => {
            LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
            WHERE c.client_id = ?
            GROUP BY c.id
-           ORDER BY c.community_name`,
+           ORDER BY c.status ASC, c.community_name`,
           [req.clientId]
         );
       }
@@ -1061,7 +1061,7 @@ router.post("/communities", async (req, res) => {
   try {
     if (!(await requirePaidTier(req, res))) return;
 
-    const { community_name, contract_value, community_manager_name, property_type, number_of_units } = req.body;
+    const { community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month } = req.body;
     if (!community_name?.trim()) return res.status(400).json({ error: "Community name is required" });
 
     const validTypes = ["condo", "townhome", "single_family", "mixed", "other"];
@@ -1087,9 +1087,9 @@ router.post("/communities", async (req, res) => {
     }
 
     await db.run(
-      `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [req.clientId, community_name.trim(), contract_value || null, community_manager_name || null, propType, number_of_units || null]
+      `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.clientId, community_name.trim(), contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false]
     );
 
     const created = await db.get(
@@ -1254,27 +1254,38 @@ router.put("/communities/:id", async (req, res) => {
   const community = await db.get("SELECT id FROM communities WHERE id = ? AND client_id = ?", [id, req.clientId]);
   if (!community) return res.status(404).json({ error: "Community not found" });
 
-  const { community_name, contract_value, community_manager_name, property_type, number_of_units } = req.body;
+  const { community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month } = req.body;
   const validTypes = ["condo", "townhome", "single_family", "mixed", "other"];
   const propType = validTypes.includes(property_type) ? property_type : null;
 
   await db.run(
-    `UPDATE communities SET community_name = ?, contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    [community_name, contract_value || null, community_manager_name || null, propType, number_of_units || null, id]
+    `UPDATE communities SET community_name = ?, contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, contract_renewal_date = ?, contract_month_to_month = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [community_name, contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false, id]
   );
 
   const updated = await db.get("SELECT * FROM communities WHERE id = ?", [id]);
   res.json(updated);
 });
 
-// Delete a community
+// Deactivate/reactivate a community (toggle)
 router.delete("/communities/:id", async (req, res) => {
   const { id } = req.params;
-  const community = await db.get("SELECT id FROM communities WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  const community = await db.get("SELECT id, status FROM communities WHERE id = ? AND client_id = ?", [id, req.clientId]);
   if (!community) return res.status(404).json({ error: "Community not found" });
 
-  await db.run("DELETE FROM communities WHERE id = ?", [id]);
-  res.json({ ok: true });
+  if (community.status === "deactivated") {
+    await db.run(
+      "UPDATE communities SET status = 'active', deactivated_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [id]
+    );
+    res.json({ ok: true, status: "active" });
+  } else {
+    await db.run(
+      "UPDATE communities SET status = 'deactivated', deactivated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [id]
+    );
+    res.json({ ok: true, status: "deactivated" });
+  }
 });
 
 export default router;

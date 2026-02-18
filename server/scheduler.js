@@ -18,6 +18,19 @@ async function concludeExpiredRounds() {
       "UPDATE survey_rounds SET status = 'concluded', concluded_at = CURRENT_TIMESTAMP WHERE id = ?",
       [round.id]
     );
+
+    // Snapshot all client communities for historical dashboard data
+    await db.run(
+      `INSERT INTO round_community_snapshots
+        (round_id, community_id, community_name, contract_value, community_manager_name,
+         property_type, number_of_units, contract_renewal_date, contract_month_to_month, status)
+       SELECT $1, c.id, c.community_name, c.contract_value, c.community_manager_name,
+              c.property_type, c.number_of_units, c.contract_renewal_date, c.contract_month_to_month, c.status
+       FROM communities c WHERE c.client_id = $2
+       ON CONFLICT (round_id, community_id) DO NOTHING`,
+      [round.id, round.client_id]
+    );
+
     console.log(`Auto-concluded round ${round.round_number} for client ${round.client_id}`);
 
     // Generate AI insights asynchronously
@@ -77,6 +90,7 @@ async function sendRoundReminders(round, dayNumber) {
      JOIN users u ON u.id = il.user_id
      LEFT JOIN communities c ON c.id = u.community_id
      WHERE il.round_id = ? AND il.email_status = 'sent'
+       AND (u.community_id IS NULL OR c.status = 'active')
        AND NOT EXISTS (
          SELECT 1 FROM sessions s
          WHERE s.round_id = ? AND s.user_id = u.id AND s.completed = true

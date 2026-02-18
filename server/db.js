@@ -229,6 +229,16 @@ async function initializeSchema() {
       console.log("Email tracking migration skipped (already applied or file not found)");
     }
 
+    // Run community deactivation + snapshots migration
+    try {
+      const deactivationPath = join(__dirname, "migrations", "add-community-deactivation-and-snapshots.sql");
+      const deactivationSQL = readFileSync(deactivationPath, "utf-8");
+      await client.query(deactivationSQL);
+      console.log("Community deactivation and snapshots migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Community deactivation and snapshots migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");
   } catch (err) {

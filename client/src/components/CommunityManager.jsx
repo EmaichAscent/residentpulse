@@ -21,7 +21,7 @@ export default function CommunityManager() {
 
   // Add form state
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "" });
+  const [form, setForm] = useState({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "", contract_renewal_date: "", contract_month_to_month: false });
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -29,6 +29,9 @@ export default function CommunityManager() {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [editSaving, setEditSaving] = useState(false);
+
+  // Deactivation toggle
+  const [showDeactivated, setShowDeactivated] = useState(false);
 
   useEffect(() => {
     fetchCommunities();
@@ -43,9 +46,11 @@ export default function CommunityManager() {
       .finally(() => setLoading(false));
   };
 
-  // --- Search ---
+  // --- Filter: deactivation + search ---
+  const deactivatedCount = communities.filter((c) => c.status === "deactivated").length;
+  const visibleCommunities = showDeactivated ? communities : communities.filter((c) => c.status !== "deactivated");
   const filtered = search.trim()
-    ? communities.filter((c) => {
+    ? visibleCommunities.filter((c) => {
         const q = search.toLowerCase();
         return (
           c.community_name?.toLowerCase().includes(q) ||
@@ -53,7 +58,7 @@ export default function CommunityManager() {
           c.property_type?.toLowerCase().includes(q)
         );
       })
-    : communities;
+    : visibleCommunities;
 
   // --- Sample CSV ---
   const downloadSampleCSV = () => {
@@ -87,7 +92,7 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setCommunities((prev) => [...prev, { ...data, member_count: 0 }]);
-      setForm({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "" });
+      setForm({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "", contract_renewal_date: "", contract_month_to_month: false });
       setShowForm(false);
     } catch (err) {
       setFormError(err.message);
@@ -152,6 +157,8 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
       community_manager_name: c.community_manager_name || "",
       property_type: c.property_type || "",
       number_of_units: c.number_of_units || "",
+      contract_renewal_date: c.contract_renewal_date ? c.contract_renewal_date.split("T")[0] : "",
+      contract_month_to_month: c.contract_month_to_month || false,
     });
   };
 
@@ -174,13 +181,24 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
     }
   };
 
-  // --- Delete ---
-  const handleDelete = async (id, name) => {
-    if (!confirm(`Remove "${name}" community data? Board members will not be affected.`)) return;
+  // --- Deactivate / Reactivate toggle ---
+  const handleToggleStatus = async (c) => {
+    const isActive = c.status !== "deactivated";
+    const msg = isActive
+      ? `Deactivate "${c.community_name}"? Members won't be contacted in future rounds.`
+      : `Reactivate "${c.community_name}"? Members will be included in future rounds.`;
+    if (!confirm(msg)) return;
     try {
-      await fetch(`/api/admin/communities/${id}`, { method: "DELETE" });
-      setCommunities((prev) => prev.filter((c) => c.id !== id));
-      if (editingId === id) setEditingId(null);
+      const res = await fetch(`/api/admin/communities/${c.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setCommunities((prev) =>
+        prev.map((comm) =>
+          comm.id === c.id
+            ? { ...comm, status: data.status, deactivated_at: data.status === "deactivated" ? new Date().toISOString() : null }
+            : comm
+        )
+      );
     } catch {
       // silently fail
     }
@@ -194,6 +212,14 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
   const formatPropertyType = (val) => {
     if (!val) return "\u2014";
     return PROPERTY_TYPES.find((t) => t.value === val)?.label || val;
+  };
+
+  const formatRenewal = (c) => {
+    if (c.contract_month_to_month) return "Month-to-month";
+    if (!c.contract_renewal_date) return "\u2014";
+    const d = c.contract_renewal_date.split("T")[0];
+    const [y, m, day] = d.split("-");
+    return new Date(Number(y), Number(m) - 1, Number(day)).toLocaleDateString();
   };
 
   return (
@@ -221,7 +247,7 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
           </label>
           <button
             onClick={() => {
-              if (!showForm) setForm({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "" });
+              if (!showForm) setForm({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "", contract_renewal_date: "", contract_month_to_month: false });
               setShowForm(!showForm);
               setFormError("");
             }}
@@ -234,6 +260,17 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
             Add Community
           </button>
         </div>
+        {deactivatedCount > 0 && (
+          <label className="flex items-center gap-2 mt-2 text-sm text-gray-500 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showDeactivated}
+              onChange={(e) => setShowDeactivated(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Show deactivated ({deactivatedCount})
+          </label>
+        )}
         <p className="text-xs text-gray-500 mt-2">
           Import community data to unlock revenue-at-risk analysis, manager performance, and property type insights.{" "}
           <button onClick={downloadSampleCSV} className="font-medium hover:underline" style={{ color: "var(--cam-blue)" }}>
@@ -371,6 +408,26 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
                 className="input-field-sm"
               />
             </div>
+            <div className="grid grid-cols-2 gap-3 items-center">
+              <input
+                type="date"
+                value={form.contract_renewal_date}
+                onChange={(e) => setForm({ ...form, contract_renewal_date: e.target.value })}
+                className="input-field-sm"
+                disabled={form.contract_month_to_month}
+                placeholder="Contract renewal date"
+                title="Contract renewal date"
+              />
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={form.contract_month_to_month}
+                  onChange={(e) => setForm({ ...form, contract_month_to_month: e.target.checked, contract_renewal_date: e.target.checked ? "" : form.contract_renewal_date })}
+                  className="rounded border-gray-300"
+                />
+                Month-to-month
+              </label>
+            </div>
             {formError && <p className="text-red-600 text-sm">{formError}</p>}
             <div className="flex gap-2">
               <button
@@ -410,6 +467,7 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
                 <th className="px-5 py-3">Manager</th>
                 <th className="px-5 py-3">Type</th>
                 <th className="px-5 py-3">Units</th>
+                <th className="px-5 py-3">Renewal</th>
                 <th className="px-5 py-3">Board Members</th>
                 <th className="px-5 py-3 w-20"></th>
               </tr>
@@ -418,7 +476,7 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
               {filtered.map((c) =>
                 editingId === c.id ? (
                   <tr key={c.id} className="bg-blue-50">
-                    <td className="px-5 py-2" colSpan={6}>
+                    <td className="px-5 py-2" colSpan={7}>
                       <div className="grid grid-cols-5 gap-2 py-1">
                         <input
                           type="text"
@@ -459,6 +517,25 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
                           className="input-field-sm"
                         />
                       </div>
+                      <div className="grid grid-cols-5 gap-2 mt-2">
+                        <input
+                          type="date"
+                          value={editForm.contract_renewal_date}
+                          onChange={(e) => setEditForm({ ...editForm, contract_renewal_date: e.target.value })}
+                          className="input-field-sm"
+                          disabled={editForm.contract_month_to_month}
+                          title="Contract renewal date"
+                        />
+                        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none col-span-4">
+                          <input
+                            type="checkbox"
+                            checked={editForm.contract_month_to_month}
+                            onChange={(e) => setEditForm({ ...editForm, contract_month_to_month: e.target.checked, contract_renewal_date: e.target.checked ? "" : editForm.contract_renewal_date })}
+                            className="rounded border-gray-300"
+                          />
+                          Month-to-month
+                        </label>
+                      </div>
                       <div className="flex gap-2 mt-2">
                         <button
                           onClick={handleSaveEdit}
@@ -479,12 +556,18 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
                     <td></td>
                   </tr>
                 ) : (
-                  <tr key={c.id} className="hover:bg-gray-50 transition">
-                    <td className="px-5 py-3 font-medium text-gray-900">{c.community_name}</td>
+                  <tr key={c.id} className={`hover:bg-gray-50 transition ${c.status === "deactivated" ? "opacity-50" : ""}`}>
+                    <td className="px-5 py-3 font-medium text-gray-900">
+                      {c.community_name}
+                      {c.status === "deactivated" && (
+                        <span className="ml-2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 uppercase">Inactive</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3 text-gray-700">{formatCurrency(c.contract_value)}</td>
                     <td className="px-5 py-3 text-gray-500">{c.community_manager_name || "\u2014"}</td>
                     <td className="px-5 py-3 text-gray-500">{formatPropertyType(c.property_type)}</td>
                     <td className="px-5 py-3 text-gray-500">{c.number_of_units || "\u2014"}</td>
+                    <td className="px-5 py-3 text-gray-500">{formatRenewal(c)}</td>
                     <td className="px-5 py-3 text-gray-500">{c.member_count || 0}</td>
                     <td className="px-5 py-3">
                       <div className="flex gap-1">
@@ -493,11 +576,19 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
                             <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
                           </svg>
                         </button>
-                        <button onClick={() => handleDelete(c.id, c.community_name)} className="p-1 text-gray-300 hover:text-red-500 transition" title="Remove community">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                            <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.519.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
-                          </svg>
-                        </button>
+                        {c.status === "deactivated" ? (
+                          <button onClick={() => handleToggleStatus(c)} className="p-1 text-gray-300 hover:text-green-500 transition" title="Reactivate community">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                              <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H4.598a.75.75 0 00-.75.75v3.634a.75.75 0 001.5 0v-2.033l.312.311a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm-10.624-2.85a5.5 5.5 0 019.201-2.465l.312.31H11.77a.75.75 0 000 1.5h3.634a.75.75 0 00.75-.75V3.535a.75.75 0 00-1.5 0v2.033l-.312-.31A7 7 0 002.63 8.387a.75.75 0 001.449.39z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        ) : (
+                          <button onClick={() => handleToggleStatus(c)} className="p-1 text-gray-300 hover:text-red-500 transition" title="Deactivate community">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                              <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -507,7 +598,8 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
           </table>
           <div className="px-5 py-3 bg-gray-50 text-xs text-gray-400">
             {filtered.length} communit{filtered.length !== 1 ? "ies" : "y"}
-            {search.trim() && ` (${communities.length} total)`}
+            {search.trim() && ` (${visibleCommunities.length} shown)`}
+            {deactivatedCount > 0 && !showDeactivated && ` \u00b7 ${deactivatedCount} deactivated hidden`}
           </div>
         </div>
       )}

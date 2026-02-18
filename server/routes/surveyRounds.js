@@ -222,6 +222,12 @@ router.get("/:id/dashboard", async (req, res) => {
     );
     if (!round) return res.status(404).json({ error: "Round not found" });
 
+    // Check if snapshots exist for this round (concluded rounds with post-migration data)
+    const hasSnapshots = await db.get(
+      "SELECT 1 FROM round_community_snapshots WHERE round_id = ? LIMIT 1", [roundId]
+    );
+    const useSnapshots = !!(hasSnapshots && round.status === "concluded");
+
     // Build filter conditions for sessions
     let sessionFilterSQL = "";
     const sessionParams = [roundId, req.clientId];
@@ -231,12 +237,22 @@ router.get("/:id/dashboard", async (req, res) => {
       sessionParams.push(filterCommunityId);
     }
     if (filterManager) {
-      sessionFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
-      sessionParams.push(filterManager, req.clientId);
+      if (useSnapshots) {
+        sessionFilterSQL += " AND s.community_id IN (SELECT community_id FROM round_community_snapshots WHERE community_manager_name = ? AND round_id = ?)";
+        sessionParams.push(filterManager, roundId);
+      } else {
+        sessionFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
+        sessionParams.push(filterManager, req.clientId);
+      }
     }
     if (filterPropertyType) {
-      sessionFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
-      sessionParams.push(filterPropertyType, req.clientId);
+      if (useSnapshots) {
+        sessionFilterSQL += " AND s.community_id IN (SELECT community_id FROM round_community_snapshots WHERE property_type = ? AND round_id = ?)";
+        sessionParams.push(filterPropertyType, roundId);
+      } else {
+        sessionFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
+        sessionParams.push(filterPropertyType, req.clientId);
+      }
     }
 
     // All sessions for this round (with optional filters)
@@ -260,12 +276,22 @@ router.get("/:id/dashboard", async (req, res) => {
       invitedParams.push(filterCommunityId);
     }
     if (filterManager) {
-      invitedFilterSQL += " AND u.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
-      invitedParams.push(filterManager, req.clientId);
+      if (useSnapshots) {
+        invitedFilterSQL += " AND u.community_id IN (SELECT community_id FROM round_community_snapshots WHERE community_manager_name = ? AND round_id = ?)";
+        invitedParams.push(filterManager, roundId);
+      } else {
+        invitedFilterSQL += " AND u.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
+        invitedParams.push(filterManager, req.clientId);
+      }
     }
     if (filterPropertyType) {
-      invitedFilterSQL += " AND u.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
-      invitedParams.push(filterPropertyType, req.clientId);
+      if (useSnapshots) {
+        invitedFilterSQL += " AND u.community_id IN (SELECT community_id FROM round_community_snapshots WHERE property_type = ? AND round_id = ?)";
+        invitedParams.push(filterPropertyType, roundId);
+      } else {
+        invitedFilterSQL += " AND u.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
+        invitedParams.push(filterPropertyType, req.clientId);
+      }
     }
 
     const invitedUsers = await db.all(
@@ -322,11 +348,17 @@ router.get("/:id/dashboard", async (req, res) => {
     const isPaidTier = planResult && planResult.plan_name !== "free";
 
     if (isPaidTier && communityCohorts.length > 0) {
-      const communityData = await db.all(
-        `SELECT id, community_name, contract_value, community_manager_name, property_type, number_of_units
-         FROM communities WHERE client_id = ?`,
-        [req.clientId]
-      );
+      const communityData = useSnapshots
+        ? await db.all(
+            `SELECT community_id as id, community_name, contract_value, community_manager_name, property_type, number_of_units
+             FROM round_community_snapshots WHERE round_id = ? AND status = 'active'`,
+            [roundId]
+          )
+        : await db.all(
+            `SELECT id, community_name, contract_value, community_manager_name, property_type, number_of_units
+             FROM communities WHERE client_id = ? AND status = 'active'`,
+            [req.clientId]
+          );
 
       // Build lookup by normalized name
       const communityLookup = {};
@@ -430,10 +462,15 @@ router.get("/:id/dashboard", async (req, res) => {
     // Filter options for paid tier (return available values for dropdowns)
     let filterOptions = null;
     if (isPaidTier) {
-      const allCommunities = await db.all(
-        "SELECT id, community_name, community_manager_name, property_type FROM communities WHERE client_id = ? ORDER BY community_name",
-        [req.clientId]
-      );
+      const allCommunities = useSnapshots
+        ? await db.all(
+            "SELECT community_id as id, community_name, community_manager_name, property_type FROM round_community_snapshots WHERE round_id = ? AND status = 'active' ORDER BY community_name",
+            [roundId]
+          )
+        : await db.all(
+            "SELECT id, community_name, community_manager_name, property_type FROM communities WHERE client_id = ? AND status = 'active' ORDER BY community_name",
+            [req.clientId]
+          );
       const managers = [...new Set(allCommunities.map(c => c.community_manager_name).filter(Boolean))].sort();
       const propertyTypes = [...new Set(allCommunities.map(c => c.property_type).filter(Boolean))].sort();
       filterOptions = {
@@ -469,12 +506,22 @@ router.get("/:id/dashboard", async (req, res) => {
         wfParams.push(filterCommunityId);
       }
       if (filterManager) {
-        wfFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
-        wfParams.push(filterManager, req.clientId);
+        if (useSnapshots) {
+          wfFilterSQL += " AND s.community_id IN (SELECT community_id FROM round_community_snapshots WHERE community_manager_name = ? AND round_id = ?)";
+          wfParams.push(filterManager, roundId);
+        } else {
+          wfFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
+          wfParams.push(filterManager, req.clientId);
+        }
       }
       if (filterPropertyType) {
-        wfFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
-        wfParams.push(filterPropertyType, req.clientId);
+        if (useSnapshots) {
+          wfFilterSQL += " AND s.community_id IN (SELECT community_id FROM round_community_snapshots WHERE property_type = ? AND round_id = ?)";
+          wfParams.push(filterPropertyType, roundId);
+        } else {
+          wfFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
+          wfParams.push(filterPropertyType, req.clientId);
+        }
       }
       const userMessages = await db.all(
         `SELECT m.content
@@ -555,6 +602,18 @@ router.post("/:id/close", async (req, res) => {
     await db.run(
       "UPDATE survey_rounds SET status = 'concluded', concluded_at = CURRENT_TIMESTAMP WHERE id = ?",
       [roundId]
+    );
+
+    // Snapshot all client communities for historical dashboard data
+    await db.run(
+      `INSERT INTO round_community_snapshots
+        (round_id, community_id, community_name, contract_value, community_manager_name,
+         property_type, number_of_units, contract_renewal_date, contract_month_to_month, status)
+       SELECT $1, c.id, c.community_name, c.contract_value, c.community_manager_name,
+              c.property_type, c.number_of_units, c.contract_renewal_date, c.contract_month_to_month, c.status
+       FROM communities c WHERE c.client_id = $2
+       ON CONFLICT (round_id, community_id) DO NOTHING`,
+      [roundId, req.clientId]
     );
 
     await logActivity({
@@ -654,7 +713,8 @@ router.post("/:id/launch", async (req, res) => {
               u.management_company
        FROM users u
        LEFT JOIN communities c ON c.id = u.community_id
-       WHERE u.client_id = ? AND u.active = TRUE`,
+       WHERE u.client_id = ? AND u.active = TRUE
+         AND (u.community_id IS NULL OR c.status = 'active')`,
       [req.clientId]
     );
 
