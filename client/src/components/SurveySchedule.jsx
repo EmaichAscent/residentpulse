@@ -413,7 +413,7 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
               {round.status === "planned" && (() => {
                 // Allow launch only within 30 days of scheduled date
                 const daysUntil = round.scheduled_date
-                  ? Math.ceil((new Date(round.scheduled_date + "T00:00:00") - new Date()) / (1000 * 60 * 60 * 24))
+                  ? Math.ceil((new Date(round.scheduled_date) - new Date()) / (1000 * 60 * 60 * 24))
                   : 0;
                 const tooEarly = daysUntil > 30;
 
