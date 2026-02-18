@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Outlet } from "react-router-dom";
 
 export default function AdminPage() {
   const [user, setUser] = useState(null);
+  const [bounceCount, setBounceCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -11,6 +12,23 @@ export default function AdminPage() {
   useEffect(() => {
     checkAuth();
   }, []);
+
+  // Refresh bounce count when navigating between tabs
+  useEffect(() => {
+    if (user) loadBounceCount();
+  }, [user, activeTab]);
+
+  const loadBounceCount = async () => {
+    try {
+      const res = await fetch("/api/admin/board-members/bounce-count", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setBounceCount(data.bounce_count || 0);
+      }
+    } catch {
+      // silently fail
+    }
+  };
 
   const checkAuth = async () => {
     try {
@@ -99,12 +117,17 @@ export default function AdminPage() {
           <button
             key={t.path}
             onClick={() => navigate(`/admin/${t.path}`)}
-            className={`flex-1 py-3 text-sm font-medium rounded-lg transition ${
+            className={`flex-1 py-3 text-sm font-medium rounded-lg transition relative ${
               activeTab === t.path ? "text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
             }`}
             style={activeTab === t.path ? { backgroundColor: "var(--cam-green)" } : {}}
           >
             {t.label}
+            {t.path === "members" && bounceCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-red-500 rounded-full">
+                {bounceCount}
+              </span>
+            )}
           </button>
         ))}
       </div>

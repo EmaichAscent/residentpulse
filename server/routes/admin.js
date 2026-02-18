@@ -288,10 +288,28 @@ router.get("/board-members", async (req, res) => {
        ORDER BY il2.sent_at DESC LIMIT 1
      ) il ON TRUE
      WHERE u.client_id = $1 AND u.active = TRUE
-     ORDER BY u.email`,
+     ORDER BY
+       CASE WHEN il.delivery_status IN ('bounced', 'complained') THEN 0 ELSE 1 END,
+       u.email`,
     [req.clientId]
   );
   res.json(users);
+});
+
+// Bounce count for active round (lightweight, for tab badge)
+router.get("/board-members/bounce-count", async (req, res) => {
+  const result = await db.get(
+    `SELECT COUNT(DISTINCT il.user_id) as bounce_count
+     FROM invitation_logs il
+     JOIN survey_rounds sr ON sr.id = il.round_id AND sr.status = 'in_progress' AND sr.client_id = $1
+     WHERE il.client_id = $1 AND il.delivery_status IN ('bounced', 'complained')
+     AND il.sent_at = (
+       SELECT MAX(il2.sent_at) FROM invitation_logs il2
+       WHERE il2.user_id = il.user_id AND il2.round_id = il.round_id
+     )`,
+    [req.clientId]
+  );
+  res.json({ bounce_count: parseInt(result?.bounce_count) || 0 });
 });
 
 // Add board member
