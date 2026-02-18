@@ -264,7 +264,7 @@ export default function UserManager() {
     if (!enrollPrompt) return;
     setEnrolling(true);
     try {
-      const res = await fetch(`/api/admin/board-members/${enrollPrompt.userId}/enroll`, {
+      const res = await fetch(`/api/admin/users/${enrollPrompt.userId}/enroll`, {
         method: "POST",
         credentials: "include",
       });
@@ -281,7 +281,7 @@ export default function UserManager() {
   const handleResend = async (userId) => {
     setResending(userId);
     try {
-      const res = await fetch(`/api/admin/board-members/${userId}/enroll`, {
+      const res = await fetch(`/api/admin/users/${userId}/enroll`, {
         method: "POST",
         credentials: "include",
       });
