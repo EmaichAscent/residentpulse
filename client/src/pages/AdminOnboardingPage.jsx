@@ -29,6 +29,7 @@ export default function AdminOnboardingPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const interviewType = searchParams.get("type") === "re_interview" ? "re_interview" : "initial";
+  const launchRoundId = searchParams.get("launch_round");
 
   const [step, setStep] = useState("form");
   const [interviewId, setInterviewId] = useState(null);
@@ -39,6 +40,8 @@ export default function AdminOnboardingPage() {
   const [confirmResult, setConfirmResult] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [user, setUser] = useState(null);
+  const [launchingRound, setLaunchingRound] = useState(false);
+  const [launchError, setLaunchError] = useState(null);
 
   const [companySize, setCompanySize] = useState("");
   const [yearsInBusiness, setYearsInBusiness] = useState("");
@@ -207,6 +210,27 @@ export default function AdminOnboardingPage() {
     );
   }
 
+  const handleLaunchRound = async () => {
+    setLaunchingRound(true);
+    setLaunchError(null);
+    try {
+      const res = await fetch(`/api/admin/survey-rounds/${launchRoundId}/launch`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        navigate(`/admin/rounds/${launchRoundId}`);
+      } else {
+        setLaunchError(data.error);
+      }
+    } catch {
+      setLaunchError("Failed to launch round");
+    } finally {
+      setLaunchingRound(false);
+    }
+  };
+
   // Success screen
   if (confirmResult) {
     return (
@@ -218,16 +242,40 @@ export default function AdminOnboardingPage() {
             </svg>
           </div>
           <h2 className="text-lg font-bold text-gray-900 mb-2">Profile Complete!</h2>
-          <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+          <p className="text-sm text-gray-600 mb-4 leading-relaxed">
             Your company profile has been saved. Our AI interviewer will now use this context
-            to have more relevant, personalized conversations with your board members.
+            to have more relevant, personalized conversations with your members.
           </p>
-          <button
-            onClick={() => navigate("/admin")}
-            className="btn-primary-sm px-8"
-          >
-            Go to Dashboard
-          </button>
+          {launchError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{launchError}</p>
+            </div>
+          )}
+          {launchRoundId ? (
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={handleLaunchRound}
+                disabled={launchingRound}
+                className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
+                style={{ backgroundColor: "var(--cam-green)" }}
+              >
+                {launchingRound ? "Launching..." : "Launch Round Now"}
+              </button>
+              <button
+                onClick={() => navigate("/admin/rounds")}
+                className="px-6 py-2.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+              >
+                Not Now
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => navigate("/admin")}
+              className="btn-primary-sm px-8"
+            >
+              Go to Dashboard
+            </button>
+          )}
         </div>
       </div>
     );
@@ -329,7 +377,7 @@ export default function AdminOnboardingPage() {
               <form onSubmit={handleFormSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Company Size</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Number of Employees</label>
                     <select
                       value={companySize}
                       onChange={(e) => setCompanySize(e.target.value)}

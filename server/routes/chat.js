@@ -44,10 +44,10 @@ router.post("/", async (req, res) => {
   const priorSessions = await db.all(
     `SELECT s.nps_score, s.summary, s.created_at
      FROM sessions s
-     WHERE s.email = ? AND s.id != ? AND s.completed = TRUE AND s.summary IS NOT NULL
+     WHERE s.email = ? AND s.id != ? AND s.completed = TRUE AND s.summary IS NOT NULL AND s.client_id = ?
      ORDER BY s.created_at DESC
      LIMIT 5`,
-    [session.email, Number(session_id)]
+    [session.email, Number(session_id), session.client_id]
   );
 
   if (priorSessions.length > 0) {

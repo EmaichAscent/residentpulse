@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 
-export default function ReInterviewDialog({ lastInterviewDate, onSkip, onClose }) {
+export default function ReInterviewDialog({ lastInterviewDate, interviewSummary, roundId, onSkip, onClose }) {
   const navigate = useNavigate();
 
   const monthsAgo = lastInterviewDate
@@ -19,14 +19,21 @@ export default function ReInterviewDialog({ lastInterviewDate, onSkip, onClose }
         </h3>
         <p className="text-sm text-gray-600 mb-4">
           It's been {timeText} since your last check-in. Would you like to update your company
-          profile before launching this round? This helps us ask better questions to your board members.
+          profile before launching this round? This helps us ask better questions.
         </p>
+
+        {interviewSummary && (
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Your Current Profile</p>
+            <p className="text-sm text-gray-700 italic">{interviewSummary}</p>
+          </div>
+        )}
 
         <div className="flex gap-3">
           <button
             onClick={() => {
               onClose();
-              navigate("/admin/onboarding?type=re_interview");
+              navigate(`/admin/onboarding?type=re_interview${roundId ? `&launch_round=${roundId}` : ""}`);
             }}
             className="flex-1 btn-primary"
           >

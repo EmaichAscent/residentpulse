@@ -22,6 +22,7 @@ You have already received their structured data (company size, years in business
 5. Anything unique about their company culture or approach that the AI should be aware of
 
 Guidelines:
+- Your very first message should let the user know you'll be asking approximately 5-10 questions, that they can end the interview at any time and complete it later if needed, and that there's a Finish button at the bottom they can use whenever they're ready to wrap up
 - Keep every response to 1-2 short sentences. Never exceed 2 sentences. No filler, no preamble, no restating what they said
 - Ask 5-8 questions total, one at a time
 - Ask follow-up questions only where more detail would genuinely improve results
@@ -39,6 +40,7 @@ Focus this shorter conversation on:
 5. Any new concerns or focus areas
 
 Guidelines:
+- Your very first message should let the user know this will be a quick check-in of about 3-5 questions, that they can end anytime using the Finish button at the bottom, and pick up later if needed
 - Keep every response to 1-2 short sentences. Never exceed 2 sentences. No filler, no preamble, no restating what they said
 - Reference what they told you last time where relevant — show you remember
 - This should be shorter than the initial interview (3-5 questions typically)
@@ -62,7 +64,7 @@ Do NOT include any preamble or explanation — output ONLY the prompt supplement
 router.get("/status", async (req, res) => {
   try {
     const completedInterview = await db.get(
-      "SELECT id, completed_at FROM admin_interviews WHERE client_id = ? AND status = 'completed' ORDER BY completed_at DESC LIMIT 1",
+      "SELECT id, completed_at, interview_summary FROM admin_interviews WHERE client_id = ? AND status = 'completed' ORDER BY completed_at DESC LIMIT 1",
       [req.clientId]
     );
 
@@ -79,6 +81,7 @@ router.get("/status", async (req, res) => {
     res.json({
       hasCompletedInterview: !!completedInterview,
       lastInterviewDate: completedInterview?.completed_at || null,
+      interviewSummary: completedInterview?.interview_summary || null,
       activeInterviewId: activeInterview?.id || null,
       onboardingCompleted: admin?.onboarding_completed || false
     });

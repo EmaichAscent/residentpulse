@@ -123,13 +123,15 @@ export default function InterviewChat({ interviewId, onComplete, onEndEarly, ini
           </button>
         </form>
         {onEndEarly && (
-          <div className="px-4 pb-3 -mt-1">
+          <div className="border-t border-gray-200 bg-white px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-500">Ready to wrap up?</span>
             <button
               onClick={onEndEarly}
               disabled={loading}
-              className="w-full py-1.5 text-xs font-medium text-gray-400 hover:text-gray-600 transition disabled:opacity-50"
+              className="px-5 py-2 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: "var(--cam-green)" }}
             >
-              End interview early
+              Finish Interview
             </button>
           </div>
         )}

@@ -215,6 +215,16 @@ async function initializeSchema() {
       console.log("Alert solved migration skipped (already applied or file not found)");
     }
 
+    // Run email tracking migration (Resend webhook delivery status)
+    try {
+      const emailTrackingPath = join(__dirname, "migrations", "add-email-tracking.sql");
+      const emailTrackingSQL = readFileSync(emailTrackingPath, "utf-8");
+      await client.query(emailTrackingSQL);
+      console.log("Email tracking migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Email tracking migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");
   } catch (err) {

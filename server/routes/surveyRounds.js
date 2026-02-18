@@ -211,13 +211,35 @@ router.get("/:id/dashboard", async (req, res) => {
   try {
     const roundId = Number(req.params.id);
 
+    // Optional filters (paid tier only — applied below)
+    const filterCommunityId = req.query.community_id ? Number(req.query.community_id) : null;
+    const filterManager = req.query.manager || null;
+    const filterPropertyType = req.query.property_type || null;
+
     const round = await db.get(
       "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ?",
       [roundId, req.clientId]
     );
     if (!round) return res.status(404).json({ error: "Round not found" });
 
-    // All sessions for this round
+    // Build filter conditions for sessions
+    let sessionFilterSQL = "";
+    const sessionParams = [roundId, req.clientId];
+
+    if (filterCommunityId) {
+      sessionFilterSQL += " AND s.community_id = ?";
+      sessionParams.push(filterCommunityId);
+    }
+    if (filterManager) {
+      sessionFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
+      sessionParams.push(filterManager, req.clientId);
+    }
+    if (filterPropertyType) {
+      sessionFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
+      sessionParams.push(filterPropertyType, req.clientId);
+    }
+
+    // All sessions for this round (with optional filters)
     const sessions = await db.all(
       `SELECT s.id, s.email, s.nps_score, s.completed, s.summary,
               COALESCE(sc.community_name, s.community_name) as community_name,
@@ -225,20 +247,35 @@ router.get("/:id/dashboard", async (req, res) => {
        FROM sessions s
        LEFT JOIN users u ON u.id = s.user_id
        LEFT JOIN communities sc ON sc.id = s.community_id
-       WHERE s.round_id = ? AND s.client_id = ?
+       WHERE s.round_id = ? AND s.client_id = ?${sessionFilterSQL}
        ORDER BY s.created_at DESC`,
-      [roundId, req.clientId]
+      sessionParams
     );
 
-    // Invited users (from invitation_logs)
+    // Invited users (from invitation_logs) — same filters applied
+    let invitedFilterSQL = "";
+    const invitedParams = [roundId];
+    if (filterCommunityId) {
+      invitedFilterSQL += " AND u.community_id = ?";
+      invitedParams.push(filterCommunityId);
+    }
+    if (filterManager) {
+      invitedFilterSQL += " AND u.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
+      invitedParams.push(filterManager, req.clientId);
+    }
+    if (filterPropertyType) {
+      invitedFilterSQL += " AND u.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
+      invitedParams.push(filterPropertyType, req.clientId);
+    }
+
     const invitedUsers = await db.all(
       `SELECT DISTINCT u.id, u.first_name, u.last_name, u.email,
               COALESCE(c.community_name, u.community_name) as community_name
        FROM invitation_logs il
        JOIN users u ON u.id = il.user_id
        LEFT JOIN communities c ON c.id = u.community_id
-       WHERE il.round_id = ? AND il.email_status = 'sent'`,
-      [roundId]
+       WHERE il.round_id = ? AND il.email_status = 'sent'${invitedFilterSQL}`,
+      invitedParams
     );
 
     // Non-responders: invited but no completed session
@@ -390,6 +427,22 @@ router.get("/:id/dashboard", async (req, res) => {
       };
     }
 
+    // Filter options for paid tier (return available values for dropdowns)
+    let filterOptions = null;
+    if (isPaidTier) {
+      const allCommunities = await db.all(
+        "SELECT id, community_name, community_manager_name, property_type FROM communities WHERE client_id = ? ORDER BY community_name",
+        [req.clientId]
+      );
+      const managers = [...new Set(allCommunities.map(c => c.community_manager_name).filter(Boolean))].sort();
+      const propertyTypes = [...new Set(allCommunities.map(c => c.property_type).filter(Boolean))].sort();
+      filterOptions = {
+        communities: allCommunities.map(c => ({ id: c.id, name: c.community_name })),
+        managers,
+        property_types: propertyTypes,
+      };
+    }
+
     // Critical alerts for this round
     const alerts = await db.all(
       `SELECT ca.*, u.first_name, u.last_name, u.email as user_email,
@@ -402,18 +455,33 @@ router.get("/:id/dashboard", async (req, res) => {
       [roundId, req.clientId]
     );
 
-    // Word frequencies (stored for concluded, computed live for active)
+    // Word frequencies (stored for concluded unless filtered, computed live for active or filtered)
+    const hasFilters = filterCommunityId || filterManager || filterPropertyType;
     let wordFrequencies = null;
-    if (round.word_frequencies) {
+    if (round.word_frequencies && !hasFilters) {
       wordFrequencies = round.word_frequencies;
-    } else if (round.status === "in_progress") {
-      // Compute live from user messages
+    } else if (round.status === "in_progress" || hasFilters) {
+      // Compute live from user messages (with same filters)
+      const wfParams = [roundId, req.clientId];
+      let wfFilterSQL = "";
+      if (filterCommunityId) {
+        wfFilterSQL += " AND s.community_id = ?";
+        wfParams.push(filterCommunityId);
+      }
+      if (filterManager) {
+        wfFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
+        wfParams.push(filterManager, req.clientId);
+      }
+      if (filterPropertyType) {
+        wfFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
+        wfParams.push(filterPropertyType, req.clientId);
+      }
       const userMessages = await db.all(
         `SELECT m.content
          FROM messages m
          JOIN sessions s ON s.id = m.session_id
-         WHERE s.round_id = ? AND s.client_id = ? AND m.role = 'user'`,
-        [roundId, req.clientId]
+         WHERE s.round_id = ? AND s.client_id = ? AND m.role = 'user'${wfFilterSQL}`,
+        wfParams
       );
       wordFrequencies = computeLiveWordFrequencies(userMessages);
     }
@@ -458,6 +526,7 @@ router.get("/:id/dashboard", async (req, res) => {
       community_cohorts: communityCohorts,
       is_paid_tier: isPaidTier,
       community_analytics: communityAnalytics,
+      filter_options: filterOptions,
       alerts,
       word_frequencies: wordFrequencies,
       insights,
@@ -632,16 +701,16 @@ router.post("/:id/launch", async (req, res) => {
         );
 
         // Send email with round info
-        await sendInvitation(member, token, {
+        const emailResult = await sendInvitation(member, token, {
           closesAt: closesAt.toISOString(),
           roundNumber: round.round_number,
           companyName,
         });
 
-        // Log invitation with round_id
+        // Log invitation with round_id and Resend email ID
         await db.run(
-          "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, round_id) VALUES (?, ?, ?, ?, ?)",
-          [member.id, req.clientId, req.userId, "sent", roundId]
+          "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, round_id, resend_email_id) VALUES (?, ?, ?, ?, ?, ?)",
+          [member.id, req.clientId, req.userId, "sent", roundId, emailResult?.id || null]
         );
 
         sentCount++;

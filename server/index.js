@@ -15,6 +15,7 @@ import signupRoutes from "./routes/signup.js";
 import superadminRoutes from "./routes/superadmin.js";
 import surveyRoundsRoutes from "./routes/surveyRounds.js";
 import interviewRoutes from "./routes/interview.js";
+import webhookRoutes from "./routes/webhooks.js";
 import { startScheduler } from "./scheduler.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -69,6 +70,9 @@ app.use("/api/admin/interview", interviewRoutes);
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/users", userRoutes);
+
+// Webhook routes (no auth — verified by signature)
+app.use("/api/webhooks", webhookRoutes);
 
 // Serve static files from client build in production
 if (process.env.NODE_ENV === "production") {

@@ -1,7 +1,10 @@
 import { Router } from "express";
+import crypto from "crypto";
 import multer from "multer";
 import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
+import { sendInvitation } from "../utils/emailService.js";
+import { logActivity } from "../utils/activityLog.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -168,6 +171,9 @@ router.put("/:id", requireClientAdmin, async (req, res) => {
     return res.status(409).json({ error: "Another user with this email already exists" });
   }
 
+  const oldEmail = existing.email?.toLowerCase();
+  const emailChanged = oldEmail !== trimmedEmail;
+
   await db.run(
     "UPDATE users SET first_name = ?, last_name = ?, email = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     [
@@ -180,6 +186,25 @@ router.put("/:id", requireClientAdmin, async (req, res) => {
     ]
   );
   const updated = await db.get("SELECT * FROM users WHERE id = ?", [id]);
+
+  // If email changed, check for an active round so we can prompt re-enrollment
+  if (emailChanged) {
+    const activeRound = await db.get(
+      "SELECT id, round_number FROM survey_rounds WHERE client_id = ? AND status = 'in_progress' LIMIT 1",
+      [req.clientId]
+    );
+    if (activeRound) {
+      // Check if user already has an active session for this round
+      const existingSession = await db.get(
+        "SELECT id FROM sessions WHERE user_id = ? AND round_id = ? AND client_id = ?",
+        [id, activeRound.id, req.clientId]
+      );
+      if (!existingSession) {
+        return res.json({ ...updated, emailChanged: true, activeRound: { id: activeRound.id, round_number: activeRound.round_number } });
+      }
+    }
+  }
+
   res.json(updated);
 });
 
@@ -195,6 +220,72 @@ router.delete("/:id", requireClientAdmin, async (req, res) => {
 
   await db.run("UPDATE users SET active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
   res.json({ ok: true });
+});
+
+// Enroll a member in the active round (e.g. after email correction)
+router.post("/:id/enroll", requireClientAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const member = await db.get("SELECT * FROM users WHERE id = ? AND client_id = ? AND active = TRUE", [id, req.clientId]);
+  if (!member) return res.status(404).json({ error: "Member not found" });
+
+  const activeRound = await db.get(
+    "SELECT id, round_number, closes_at FROM survey_rounds WHERE client_id = ? AND status = 'in_progress' LIMIT 1",
+    [req.clientId]
+  );
+  if (!activeRound) return res.status(400).json({ error: "No active round" });
+
+  // Check not already invited for this round
+  const existingInvite = await db.get(
+    "SELECT id FROM invitation_logs WHERE user_id = ? AND round_id = ? AND client_id = ? AND email_status = 'sent'",
+    [id, activeRound.id, req.clientId]
+  );
+  if (existingInvite) return res.status(409).json({ error: "Already enrolled in this round" });
+
+  try {
+    const token = crypto.randomUUID();
+    const expiresAt = activeRound.closes_at || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    await db.run(
+      "UPDATE users SET invitation_token = ?, invitation_token_expires = ?, last_invited_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [token, expiresAt, id]
+    );
+
+    // Get company name for email template
+    const client = await db.get("SELECT company_name FROM clients WHERE id = ?", [req.clientId]);
+
+    const emailResult = await sendInvitation(member, token, {
+      closesAt: expiresAt,
+      roundNumber: activeRound.round_number,
+      companyName: client?.company_name || "",
+    });
+
+    await db.run(
+      "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, round_id, resend_email_id) VALUES (?, ?, ?, ?, ?, ?)",
+      [id, req.clientId, req.userId, "sent", activeRound.id, emailResult?.id || null]
+    );
+
+    // Update members_invited count on the round
+    await db.run(
+      "UPDATE survey_rounds SET members_invited = members_invited + 1 WHERE id = ?",
+      [activeRound.id]
+    );
+
+    await logActivity({
+      actorType: "client_admin",
+      actorId: req.userId,
+      actorEmail: req.userEmail,
+      action: "enroll_member",
+      entityType: "user",
+      entityId: id,
+      clientId: req.clientId,
+      metadata: { round_id: activeRound.id, round_number: activeRound.round_number, email: member.email }
+    });
+
+    res.json({ ok: true, round_number: activeRound.round_number });
+  } catch (err) {
+    console.error(`Failed to enroll member ${id}:`, err);
+    res.status(500).json({ error: "Failed to send invitation" });
+  }
 });
 
 // Simple CSV line parser that handles quoted fields

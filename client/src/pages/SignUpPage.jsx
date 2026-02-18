@@ -185,7 +185,7 @@ export default function SignUpPage() {
 
               <div className="mb-4">
                 <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 mb-1">
-                  Company Name
+                  Your Management Company Name
                 </label>
                 <input
                   id="companyName"

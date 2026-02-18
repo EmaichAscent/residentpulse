@@ -272,13 +272,22 @@ router.patch("/account/cadence", async (req, res) => {
 
 // Get board members (users table) for current client
 router.get("/board-members", async (req, res) => {
+  // Include latest delivery status for the active round (if any)
   const users = await db.all(
     `SELECT u.id, u.first_name, u.last_name, u.email,
             COALESCE(c.community_name, u.community_name) as community_name,
-            u.management_company, u.active, u.updated_at
+            u.management_company, u.active, u.updated_at,
+            il.delivery_status, il.email_status as invite_status
      FROM users u
      LEFT JOIN communities c ON c.id = u.community_id
-     WHERE u.client_id = ? AND u.active = TRUE
+     LEFT JOIN LATERAL (
+       SELECT il2.delivery_status, il2.email_status
+       FROM invitation_logs il2
+       JOIN survey_rounds sr ON sr.id = il2.round_id AND sr.status = 'in_progress'
+       WHERE il2.user_id = u.id AND il2.client_id = $1
+       ORDER BY il2.sent_at DESC LIMIT 1
+     ) il ON TRUE
+     WHERE u.client_id = $1 AND u.active = TRUE
      ORDER BY u.email`,
     [req.clientId]
   );
@@ -543,12 +552,12 @@ router.post("/board-members/invite", async (req, res) => {
         );
 
         // Send email via Resend
-        await sendInvitation(user, token);
+        const emailResult = await sendInvitation(user, token);
 
-        // Log invitation
+        // Log invitation with Resend email ID
         await db.run(
-          "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status) VALUES (?, ?, ?, ?)",
-          [userId, req.clientId, req.userId, "sent"]
+          "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, resend_email_id) VALUES (?, ?, ?, ?, ?)",
+          [userId, req.clientId, req.userId, "sent", emailResult?.id || null]
         );
 
         results.push({

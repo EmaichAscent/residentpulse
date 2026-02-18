@@ -62,13 +62,19 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
       const data = await res.json();
 
       if (data.hasCompletedInterview && data.lastInterviewDate) {
-        setReInterviewPrompt({ roundId, lastInterviewDate: data.lastInterviewDate });
+        const daysSince = Math.floor((Date.now() - new Date(data.lastInterviewDate).getTime()) / (1000 * 60 * 60 * 24));
+        if (daysSince < 60) {
+          // Recent interview — skip dialog, launch directly
+          handleLaunch(roundId);
+          return;
+        }
+        setReInterviewPrompt({ roundId, lastInterviewDate: data.lastInterviewDate, interviewSummary: data.interviewSummary });
         return;
       }
     } catch {
       // If check fails, just proceed with launch
     }
-    setConfirmLaunch(roundId);
+    handleLaunch(roundId);
   };
 
   const handleLaunch = async (roundId) => {
@@ -305,7 +311,9 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
       {reInterviewPrompt && (
         <ReInterviewDialog
           lastInterviewDate={reInterviewPrompt.lastInterviewDate}
-          onSkip={() => setConfirmLaunch(reInterviewPrompt.roundId)}
+          interviewSummary={reInterviewPrompt.interviewSummary}
+          roundId={reInterviewPrompt.roundId}
+          onSkip={() => { setReInterviewPrompt(null); handleLaunch(reInterviewPrompt.roundId); }}
           onClose={() => setReInterviewPrompt(null)}
         />
       )}

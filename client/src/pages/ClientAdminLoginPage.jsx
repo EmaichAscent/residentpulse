@@ -88,7 +88,7 @@ export default function ClientAdminLoginPage() {
             board member satisfaction — so you can improve service, prevent
             surprises at renewal time, and prove your value with data.
           </p>
-          <p className="lg:hidden text-white/80 text-sm mb-4">
+          <p className="lg:hidden text-white/80 text-base mb-4">
             Direct insight into board member satisfaction — improve service,
             prevent surprises, and prove your value with data.
           </p>
@@ -171,12 +171,12 @@ export default function ClientAdminLoginPage() {
         {/* Right: Login Card */}
         <div className="w-full max-w-md">
           <div className="bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl p-8">
-            <h2 className="text-xl font-bold text-gray-900 mb-1">Welcome back</h2>
-            <p className="text-sm text-gray-500 mb-6">Sign in to your admin dashboard</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-1">Welcome back</h2>
+            <p className="text-base text-gray-500 mb-6">Sign in to your admin dashboard</p>
 
             <form onSubmit={handleSubmit}>
               <div className="mb-4">
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="email" className="block text-base font-medium text-gray-700 mb-2">
                   Email
                 </label>
                 <input
@@ -192,7 +192,7 @@ export default function ClientAdminLoginPage() {
               </div>
 
               <div className="mb-6">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="password" className="block text-base font-medium text-gray-700 mb-2">
                   Password
                 </label>
                 <input

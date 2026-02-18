@@ -24,15 +24,21 @@ export default function RoundDashboard() {
   const [finalizing, setFinalizing] = useState(null);
   const [goalsExpanded, setGoalsExpanded] = useState(false);
   const [expandedCommunities, setExpandedCommunities] = useState({});
+  const [filters, setFilters] = useState({ community_id: "", manager: "", property_type: "" });
 
   useEffect(() => {
     loadDashboard();
-  }, [roundId]);
+  }, [roundId, filters]);
 
   const loadDashboard = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/survey-rounds/${roundId}/dashboard`, { credentials: "include" });
+      const params = new URLSearchParams();
+      if (filters.community_id) params.set("community_id", filters.community_id);
+      if (filters.manager) params.set("manager", filters.manager);
+      if (filters.property_type) params.set("property_type", filters.property_type);
+      const qs = params.toString();
+      const res = await fetch(`/api/admin/survey-rounds/${roundId}/dashboard${qs ? `?${qs}` : ""}`, { credentials: "include" });
       if (res.ok) {
         setData(await res.json());
       }
@@ -183,7 +189,7 @@ export default function RoundDashboard() {
     return <p className="text-red-500 text-center py-10">Failed to load round data.</p>;
   }
 
-  const { round, nps, response_rate, sessions, non_responders, community_cohorts, is_paid_tier, community_analytics, alerts, word_frequencies, insights, interview_summary } = data;
+  const { round, nps, response_rate, sessions, non_responders, community_cohorts, is_paid_tier, community_analytics, filter_options, alerts, word_frequencies, insights, interview_summary } = data;
 
   const formatCurrency = (val) => val != null ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(val) : "$0";
   const formatPropertyType = (t) => ({ condo: "Condo", townhome: "Townhome", single_family: "Single Family", mixed: "Mixed", other: "Other" }[t] || t);
@@ -269,6 +275,57 @@ export default function RoundDashboard() {
           )
         )}
       </div>
+
+      {/* Dashboard Filters (paid tier only) */}
+      {is_paid_tier && filter_options && (filter_options.communities.length > 0 || filter_options.managers.length > 0 || filter_options.property_types.length > 0) && (
+        <div className="flex gap-3 flex-wrap items-center">
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Filter:</span>
+          {filter_options.communities.length > 0 && (
+            <select
+              value={filters.community_id}
+              onChange={(e) => setFilters({ ...filters, community_id: e.target.value })}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-300"
+            >
+              <option value="">All Communities</option>
+              {filter_options.communities.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
+          {filter_options.managers.length > 0 && (
+            <select
+              value={filters.manager}
+              onChange={(e) => setFilters({ ...filters, manager: e.target.value })}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-300"
+            >
+              <option value="">All Managers</option>
+              {filter_options.managers.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          )}
+          {filter_options.property_types.length > 0 && (
+            <select
+              value={filters.property_type}
+              onChange={(e) => setFilters({ ...filters, property_type: e.target.value })}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-300"
+            >
+              <option value="">All Property Types</option>
+              {filter_options.property_types.map((t) => (
+                <option key={t} value={t}>{formatPropertyType(t)}</option>
+              ))}
+            </select>
+          )}
+          {(filters.community_id || filters.manager || filters.property_type) && (
+            <button
+              onClick={() => setFilters({ community_id: "", manager: "", property_type: "" })}
+              className="text-xs font-medium px-2 py-1 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Response Rate + NPS */}
       <div className="grid grid-cols-2 gap-4">
@@ -482,7 +539,7 @@ export default function RoundDashboard() {
       {community_cohorts.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">
-            Community Cohorts
+            Community Scores
           </p>
           <p className="text-xs text-gray-400 mb-4">Median NPS per community</p>
           <ResponsiveContainer width="100%" height={Math.max(180, community_cohorts.length * 40)}>

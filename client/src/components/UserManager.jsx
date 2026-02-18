@@ -115,6 +115,8 @@ export default function UserManager() {
   const [editForm, setEditForm] = useState({});
   const [editError, setEditError] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [enrollPrompt, setEnrollPrompt] = useState(null);
+  const [enrolling, setEnrolling] = useState(false);
   const [communityNames, setCommunityNames] = useState([]);
 
   const fetchUsers = () => {
@@ -244,12 +246,34 @@ export default function UserManager() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setUsers((prev) => prev.map((u) => (u.id === editingId ? data : u)));
+      const { emailChanged, activeRound, ...userData } = data;
+      setUsers((prev) => prev.map((u) => (u.id === editingId ? userData : u)));
       setEditingId(null);
+      if (emailChanged && activeRound) {
+        setEnrollPrompt({ userId: userData.id, name: `${userData.first_name || ""} ${userData.last_name || ""}`.trim() || userData.email, roundNumber: activeRound.round_number });
+      }
     } catch (err) {
       setEditError(err.message);
     } finally {
       setEditSaving(false);
+    }
+  };
+
+  const handleEnroll = async () => {
+    if (!enrollPrompt) return;
+    setEnrolling(true);
+    try {
+      const res = await fetch(`/api/admin/board-members/${enrollPrompt.userId}/enroll`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setEnrollPrompt(null);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setEnrolling(false);
     }
   };
 
@@ -279,6 +303,9 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
       })
     : users;
 
+  // Show email delivery column if any user has invitation status (active round exists)
+  const hasActiveRound = useMemo(() => users.some((u) => u.invite_status), [users]);
+
   // Unique community names for autocomplete (merged from board members + communities table)
   const communityOptions = useMemo(() => {
     const names = new Set(users.map((u) => u.community_name).filter(Boolean));
@@ -300,7 +327,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search board members..."
+            placeholder="Search members..."
             className="input-field-sm flex-1"
           />
           <label className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg cursor-pointer transition hover:opacity-90 disabled:opacity-50 whitespace-nowrap" style={{ backgroundColor: "var(--cam-blue)" }}>
@@ -323,7 +350,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
               <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
             </svg>
-            Add User
+            Add Member
           </button>
         </div>
         <p className="text-xs text-gray-500 mt-2">
@@ -357,10 +384,35 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
         </div>
       )}
 
+      {/* Enroll Prompt (after email correction) */}
+      {enrollPrompt && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between gap-4">
+          <p className="text-sm text-amber-800">
+            Email updated. Enroll <strong>{enrollPrompt.name}</strong> in the current round (Round {enrollPrompt.roundNumber})?
+          </p>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              onClick={handleEnroll}
+              disabled={enrolling}
+              className="px-4 py-2 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: "var(--cam-green)" }}
+            >
+              {enrolling ? "Sending..." : "Send Invitation"}
+            </button>
+            <button
+              onClick={() => setEnrollPrompt(null)}
+              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition"
+            >
+              Not Now
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Add User Form */}
       {showForm && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Add New User</p>
+          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Add New Member</p>
           <form onSubmit={handleAddUser} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <input
@@ -441,6 +493,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                 <th className="px-5 py-3">Email</th>
                 <th className="px-5 py-3">Community</th>
                 <th className="px-5 py-3">Company</th>
+                {hasActiveRound && <th className="px-5 py-3 w-24">Invite</th>}
                 <th className="px-5 py-3 w-20"></th>
               </tr>
             </thead>
@@ -451,7 +504,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                     <td className="px-5 py-3 text-center">
                       <TrendArrow sessions={sessions} email={u.email} />
                     </td>
-                    <td className="px-5 py-2" colSpan={4}>
+                    <td className="px-5 py-2" colSpan={hasActiveRound ? 5 : 4}>
                       <div className="space-y-2">
                         <div className="grid grid-cols-2 gap-2">
                           <input
@@ -526,6 +579,31 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                     <td className="px-5 py-3 text-gray-700">{u.email}</td>
                     <td className="px-5 py-3 text-gray-500">{u.community_name || "—"}</td>
                     <td className="px-5 py-3 text-gray-500">{u.management_company || "—"}</td>
+                    {hasActiveRound && (
+                      <td className="px-5 py-3">
+                        {u.delivery_status === "delivered" ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-green-700">
+                            <span className="w-2 h-2 rounded-full bg-green-500" />Delivered
+                          </span>
+                        ) : u.delivery_status === "bounced" ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-red-700">
+                            <span className="w-2 h-2 rounded-full bg-red-500" />Bounced
+                          </span>
+                        ) : u.delivery_status === "complained" ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-red-700">
+                            <span className="w-2 h-2 rounded-full bg-red-500" />Complained
+                          </span>
+                        ) : u.invite_status === "sent" ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+                            <span className="w-2 h-2 rounded-full bg-amber-400" />Sent
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                            <span className="w-2 h-2 rounded-full bg-gray-300" />Not invited
+                          </span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-5 py-3">
                       <div className="flex gap-1">
                         <button
@@ -554,7 +632,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
             </tbody>
           </table>
           <div className="px-5 py-3 bg-gray-50 text-xs text-gray-400">
-            {filtered.length} user{filtered.length !== 1 ? "s" : ""}
+            {filtered.length} member{filtered.length !== 1 ? "s" : ""}
             {search.trim() && ` (${users.length} total)`}
           </div>
         </div>
