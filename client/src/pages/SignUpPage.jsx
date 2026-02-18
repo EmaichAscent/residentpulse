@@ -90,11 +90,22 @@ export default function SignUpPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-brand-gradient">
+      <div className="min-h-screen relative">
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url('/hero-community.jpg')" }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-900/85 via-gray-900/75 to-gray-800/80" />
+        </div>
+        <div className="relative flex flex-col items-center justify-center min-h-screen px-4">
         <div className="max-w-md w-full">
           <div className="text-center mb-8">
-            <img src="/CAMAscent.png" alt="CAM Ascent" className="w-80 mx-auto mb-6 object-contain drop-shadow-lg" />
-            <h1 className="text-2xl font-bold text-white tracking-wide">ResidentPulse</h1>
+            <h1 className="text-4xl font-extrabold text-white tracking-tight mb-2">ResidentPulse</h1>
+            <a href="https://camascent.com" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 text-white/70 hover:text-white/90 transition-colors">
+              <span className="text-base font-medium">Powered by</span>
+              <img src="/CAMAscent.png" alt="CAM Ascent" className="h-8 object-contain" />
+              <span className="text-base font-semibold">CAM Ascent Analytical Insights</span>
+            </a>
           </div>
           <div className="bg-white shadow-2xl rounded-2xl p-8">
             <div className="text-center">
@@ -121,18 +132,32 @@ export default function SignUpPage() {
             </div>
           </div>
         </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 bg-brand-gradient">
+    <div className="min-h-screen relative">
+      {/* Hero background image with overlay — matches login page */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/hero-community.jpg')" }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900/85 via-gray-900/75 to-gray-800/80" />
+      </div>
+
+      <div className="relative flex flex-col items-center justify-center min-h-screen px-4 py-8">
       <div className="max-w-2xl w-full">
-        {/* Logo */}
+        {/* Branding */}
         <div className="text-center mb-8">
-          <img src="/CAMAscent.png" alt="CAM Ascent" className="w-80 mx-auto mb-6 object-contain drop-shadow-lg" />
-          <h1 className="text-2xl font-bold text-white tracking-wide">ResidentPulse</h1>
-          <p className="text-white/70 mt-1 text-sm">Create Your Account</p>
+          <h1 className="text-4xl font-extrabold text-white tracking-tight mb-2">ResidentPulse</h1>
+          <a href="https://camascent.com" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 mb-4 text-white/70 hover:text-white/90 transition-colors">
+            <span className="text-base font-medium">Powered by</span>
+            <img src="/CAMAscent.png" alt="CAM Ascent" className="h-8 object-contain" />
+            <span className="text-base font-semibold">CAM Ascent Analytical Insights</span>
+          </a>
+          <p className="text-white/70 text-sm">Create Your Account</p>
         </div>
 
         {/* Form Card */}
@@ -361,6 +386,7 @@ export default function SignUpPage() {
             </div>
           </form>
         </div>
+      </div>
       </div>
     </div>
   );

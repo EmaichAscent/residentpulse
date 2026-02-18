@@ -60,6 +60,10 @@ function buildInvitationEmail(user, surveyLink, roundInfo) {
             <strong>A Few Minutes, A Real Impact:</strong> We respect your time, so this survey is designed to be brief. Your participation helps measure performance, identify opportunities for growth, and highlight successes.
           </p>
 
+          <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">
+            <strong>What to Expect:</strong> Your feedback will be collected through a brief, conversational interview with a specialized AI trained in community management. It will ask you a few thoughtful questions — typically 5 to 10 — and you can end the conversation at any time. It's quick, easy, and your responses go directly toward improving your community experience.
+          </p>
+
           <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 8px 0;">
             To get started, click the button below. <em>Please do not share this unique survey link with others.</em>
           </p>
@@ -373,8 +377,12 @@ function buildReminderEmail(user, surveyLink, daysRemaining, companyName) {
             <strong>${mgmtCompany}</strong> is still collecting feedback about your experience at <strong>${communityName}</strong>. Your voice matters — and there ${daysRemaining === 1 ? "is <strong>1 day</strong>" : `are <strong>${daysRemaining} days</strong>`} remaining to share your thoughts.
           </p>
 
+          <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0;">
+            The survey is a brief, conversational interview with a specialized AI trained in community management. It will ask you a few thoughtful questions and you can end it whenever you're ready. It only takes a few minutes.
+          </p>
+
           <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 8px 0;">
-            The survey only takes a few minutes. <em>Please do not share this unique survey link with others.</em>
+            <em>Please do not share this unique survey link with others.</em>
           </p>
 
           <!-- CTA Button -->

@@ -122,27 +122,50 @@ export default function RoundsLanding() {
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <div className="bg-brand-gradient px-8 py-10 text-center">
+          <div className="px-8 py-10 text-center" style={{ backgroundColor: "var(--cam-blue)" }}>
             <h2 className="text-3xl font-bold text-white mb-2">
-              Welcome{user?.company_name ? `, ${user.company_name}` : ""}!
+              Welcome{user?.email ? `, ${user.email}` : ""}{user?.company_name ? ` — ${user.company_name}` : ""}!
             </h2>
             <p className="text-white/80 text-lg max-w-xl mx-auto">
-              Get started by setting up your survey schedule and adding board members.
+              You're all set to start collecting meaningful feedback from your board members.
             </p>
           </div>
           <div className="px-8 py-6">
-            <SurveySchedule />
-            <div className="mt-4 text-center">
-              <button
-                onClick={() => navigate("/admin/members")}
-                className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-lg transition hover:opacity-90 text-white"
-                style={{ backgroundColor: "var(--cam-blue)" }}
-              >
-                Add Board Members
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
+            <div className="mb-6 max-w-xl mx-auto">
+              <h3 className="text-lg font-bold text-gray-900 mb-3">Our Philosophy: Consistency Is Key</h3>
+              <p className="text-gray-700 text-sm leading-relaxed mb-3">
+                ResidentPulse is built around regular, ongoing engagement with your board members. Each survey round runs for 30 days, and each member participates once per round — a brief, conversational experience guided by a specialized AI partner trained in community management.
+              </p>
+              <p className="text-gray-700 text-sm leading-relaxed mb-3">
+                This isn't a one-time survey. It's a continuous feedback loop that tracks sentiment over time, surfaces emerging concerns early, and gives you actionable data to improve service delivery. The more consistently you run rounds, the more powerful the insights become.
+              </p>
+              <p className="text-gray-700 text-sm leading-relaxed">
+                Your role is simple: set your schedule, add your members, and launch. The AI handles the interviews, and ResidentPulse handles the analysis. Minimal ongoing work, maximum impact.
+              </p>
+            </div>
+
+            <div className="border-t border-gray-200 pt-6">
+              <p className="text-sm font-semibold text-gray-900 mb-3 text-center">Get started in two steps:</p>
+              <div className="flex items-center justify-center gap-4">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ backgroundColor: "var(--cam-blue)" }}>1</span>
+                  Set your survey schedule below
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ backgroundColor: "var(--cam-blue)" }}>2</span>
+                  <button
+                    onClick={() => navigate("/admin/members")}
+                    className="font-semibold hover:underline"
+                    style={{ color: "var(--cam-blue)" }}
+                  >
+                    Add your board members
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <SurveySchedule />
             </div>
           </div>
         </div>
