@@ -117,6 +117,7 @@ export default function UserManager() {
   const [editSaving, setEditSaving] = useState(false);
   const [enrollPrompt, setEnrollPrompt] = useState(null);
   const [enrolling, setEnrolling] = useState(false);
+  const [resending, setResending] = useState(null);
   const [communityNames, setCommunityNames] = useState([]);
 
   const fetchUsers = () => {
@@ -274,6 +275,23 @@ export default function UserManager() {
       alert(err.message);
     } finally {
       setEnrolling(false);
+    }
+  };
+
+  const handleResend = async (userId) => {
+    setResending(userId);
+    try {
+      const res = await fetch(`/api/admin/board-members/${userId}/enroll`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      fetchUsers();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setResending(null);
     }
   };
 
@@ -586,13 +604,33 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                             <span className="w-2 h-2 rounded-full bg-green-500" />Delivered
                           </span>
                         ) : u.delivery_status === "bounced" ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-red-700">
-                            <span className="w-2 h-2 rounded-full bg-red-500" />Bounced
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1 text-xs text-red-700">
+                              <span className="w-2 h-2 rounded-full bg-red-500" />Bounced
+                            </span>
+                            <button
+                              onClick={() => handleResend(u.id)}
+                              disabled={resending === u.id}
+                              className="text-xs font-medium hover:underline disabled:opacity-50"
+                              style={{ color: "var(--cam-blue)" }}
+                            >
+                              {resending === u.id ? "Sending..." : "Resend"}
+                            </button>
+                          </div>
                         ) : u.delivery_status === "complained" ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-red-700">
-                            <span className="w-2 h-2 rounded-full bg-red-500" />Complained
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1 text-xs text-red-700">
+                              <span className="w-2 h-2 rounded-full bg-red-500" />Complained
+                            </span>
+                            <button
+                              onClick={() => handleResend(u.id)}
+                              disabled={resending === u.id}
+                              className="text-xs font-medium hover:underline disabled:opacity-50"
+                              style={{ color: "var(--cam-blue)" }}
+                            >
+                              {resending === u.id ? "Sending..." : "Resend"}
+                            </button>
+                          </div>
                         ) : u.invite_status === "sent" ? (
                           <span className="inline-flex items-center gap-1 text-xs text-amber-700">
                             <span className="w-2 h-2 rounded-full bg-amber-400" />Sent

@@ -234,12 +234,13 @@ router.post("/:id/enroll", requireClientAdmin, async (req, res) => {
   );
   if (!activeRound) return res.status(400).json({ error: "No active round" });
 
-  // Check not already invited for this round
+  // Check not already invited for this round (allow resend if bounced/complained)
   const existingInvite = await db.get(
-    "SELECT id FROM invitation_logs WHERE user_id = ? AND round_id = ? AND client_id = ? AND email_status = 'sent'",
+    "SELECT id, delivery_status FROM invitation_logs WHERE user_id = ? AND round_id = ? AND client_id = ? AND email_status = 'sent' ORDER BY sent_at DESC LIMIT 1",
     [id, activeRound.id, req.clientId]
   );
-  if (existingInvite) return res.status(409).json({ error: "Already enrolled in this round" });
+  const isResend = existingInvite && (existingInvite.delivery_status === "bounced" || existingInvite.delivery_status === "complained");
+  if (existingInvite && !isResend) return res.status(409).json({ error: "Already enrolled in this round" });
 
   try {
     const token = crypto.randomUUID();
@@ -264,11 +265,13 @@ router.post("/:id/enroll", requireClientAdmin, async (req, res) => {
       [id, req.clientId, req.userId, "sent", activeRound.id, emailResult?.id || null]
     );
 
-    // Update members_invited count on the round
-    await db.run(
-      "UPDATE survey_rounds SET members_invited = members_invited + 1 WHERE id = ?",
-      [activeRound.id]
-    );
+    // Update members_invited count on the round (skip if resending to existing member)
+    if (!isResend) {
+      await db.run(
+        "UPDATE survey_rounds SET members_invited = members_invited + 1 WHERE id = ?",
+        [activeRound.id]
+      );
+    }
 
     await logActivity({
       actorType: "client_admin",
