@@ -110,6 +110,11 @@ export default function RoundsLanding() {
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
+    // For date-only strings (YYYY-MM-DD), parse as local date to avoid timezone shift
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [y, m, d] = dateStr.split("-");
+      return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
     return new Date(dateStr).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -232,7 +237,7 @@ export default function RoundsLanding() {
                 <p className={`font-semibold ${memberCount > 0 ? "text-gray-900" : "text-gray-400"}`}>Schedule Your First Round</p>
                 {memberCount > 0 ? (
                   <div className="mt-2">
-                    <SurveySchedule embedded />
+                    <SurveySchedule embedded onScheduled={loadRounds} />
                   </div>
                 ) : (
                   <p className="text-sm text-gray-400 mt-0.5">Add members first to unlock scheduling.</p>

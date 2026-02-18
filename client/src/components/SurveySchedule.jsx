@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import ReInterviewDialog from "./ReInterviewDialog";
 
-export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, cadenceUpdating, cadenceMessage, embedded }) {
+export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, cadenceUpdating, cadenceMessage, embedded, onScheduled }) {
+  const navigate = useNavigate();
   const [rounds, setRounds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [firstDate, setFirstDate] = useState("");
@@ -9,6 +11,8 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
   const [launching, setLaunching] = useState(null);
   const [launchResult, setLaunchResult] = useState(null);
   const [confirmLaunch, setConfirmLaunch] = useState(null);
+  const [confirmClose, setConfirmClose] = useState(null);
+  const [closingRound, setClosingRound] = useState(null);
   const [error, setError] = useState(null);
   const [reInterviewPrompt, setReInterviewPrompt] = useState(null);
 
@@ -45,6 +49,7 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
       const data = await res.json();
       if (res.ok) {
         setRounds(data);
+        if (onScheduled) onScheduled();
       } else {
         setError(data.error);
       }
@@ -104,11 +109,40 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
+    // For date-only strings (YYYY-MM-DD), parse as local date to avoid timezone shift
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [y, m, d] = dateStr.split("-");
+      return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
     return new Date(dateStr).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric"
     });
+  };
+
+  const daysRemaining = (closesAt) => {
+    if (!closesAt) return null;
+    const diff = new Date(closesAt) - new Date();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  };
+
+  const handleCloseRound = async (roundId) => {
+    setClosingRound(roundId);
+    try {
+      const res = await fetch(`/api/admin/survey-rounds/${roundId}/close`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        setConfirmClose(null);
+        await loadRounds();
+      }
+    } catch (err) {
+      console.error("Failed to close round:", err);
+    } finally {
+      setClosingRound(null);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -275,70 +309,139 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
       )}
 
       <div className="space-y-3">
-        {rounds.map((round) => (
-          <div key={round.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-            {/* Round number circle */}
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${getCircleColor(round.status)}`}>
-              {round.round_number}
-            </div>
+        {rounds.map((round) => {
+          if (round.status === "in_progress") {
+            const responded = round.responses_completed || 0;
+            const invited = round.members_invited || 0;
+            const progress = invited > 0 ? Math.round((responded / invited) * 100) : 0;
+            const days = daysRemaining(round.closes_at);
 
-            {/* Round info */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-medium text-gray-900">Round {round.round_number}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getStatusColor(round.status)}`}>
-                  {getStatusLabel(round.status)}
-                </span>
-              </div>
-              <div className="text-sm text-gray-500">
-                {round.status === "planned" && (
-                  <span>Scheduled for {formatDate(round.scheduled_date)}</span>
-                )}
-                {round.status === "in_progress" && (
-                  <span>
-                    Closes {formatDate(round.closes_at)} &middot; {round.responses_completed || 0}/{round.members_invited || 0} responses
-                  </span>
-                )}
-                {round.status === "concluded" && (
-                  <span>
-                    Concluded {formatDate(round.concluded_at)} &middot; {round.responses_completed || 0}/{round.members_invited || 0} responses
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Action button */}
-            {round.status === "planned" && (
-              <>
-                {confirmLaunch === round.id ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">Launch now?</span>
-                    <button
-                      onClick={() => handleLaunch(round.id)}
-                      disabled={launching === round.id}
-                      className="text-xs px-3 py-1.5 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
-                    >
-                      {launching === round.id ? "Launching..." : "Confirm"}
-                    </button>
-                    <button
-                      onClick={() => setConfirmLaunch(null)}
-                      className="text-xs px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
-                    >
-                      Cancel
-                    </button>
+            return (
+              <div key={round.id} className="bg-gray-50 rounded-lg overflow-hidden">
+                <div className="p-4 flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${getCircleColor(round.status)}`}>
+                    {round.round_number}
                   </div>
-                ) : (
-                  <button
-                    onClick={() => handlePreLaunchCheck(round.id)}
-                    className="text-sm px-4 py-2 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90"
-                  >
-                    Confirm & Launch
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        ))}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium text-gray-900">Round {round.round_number}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getStatusColor(round.status)}`}>
+                        {getStatusLabel(round.status)}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Launched {formatDate(round.launched_at)} &middot; Closes {formatDate(round.closes_at)}
+                      {days !== null && ` (${days} day${days !== 1 ? "s" : ""} remaining)`}
+                    </div>
+                  </div>
+                </div>
+                <div className="px-4 pb-4">
+                  <div className="mb-3">
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-600 font-medium">{responded} of {invited} responses</span>
+                      <span className="text-gray-500">{progress}%</span>
+                    </div>
+                    <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${progress}%`, backgroundColor: "var(--cam-blue)" }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => navigate(`/admin/rounds/${round.id}`)}
+                      className="flex-1 py-2 text-sm font-semibold text-white rounded-lg transition hover:opacity-90"
+                      style={{ backgroundColor: "var(--cam-blue)" }}
+                    >
+                      View Dashboard
+                    </button>
+                    {confirmClose === round.id ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleCloseRound(round.id)}
+                          disabled={closingRound === round.id}
+                          className="py-2 px-3 text-sm font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600 disabled:opacity-50"
+                        >
+                          {closingRound === round.id ? "Closing..." : "Yes, Close"}
+                        </button>
+                        <button
+                          onClick={() => setConfirmClose(null)}
+                          className="py-2 px-3 text-sm font-semibold text-gray-600 bg-gray-200 rounded-lg hover:bg-gray-300"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmClose(round.id)}
+                        className="py-2 px-3 text-sm font-medium text-gray-500 border border-gray-300 rounded-lg hover:bg-gray-50"
+                      >
+                        Close Early
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div key={round.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${getCircleColor(round.status)}`}>
+                {round.round_number}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-medium text-gray-900">Round {round.round_number}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getStatusColor(round.status)}`}>
+                    {getStatusLabel(round.status)}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-500">
+                  {round.status === "planned" && (
+                    <span>Scheduled for {formatDate(round.scheduled_date)}</span>
+                  )}
+                  {round.status === "concluded" && (
+                    <span>
+                      Concluded {formatDate(round.concluded_at)} &middot; {round.responses_completed || 0}/{round.members_invited || 0} responses
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {round.status === "planned" && (
+                <>
+                  {confirmLaunch === round.id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">Launch now?</span>
+                      <button
+                        onClick={() => handleLaunch(round.id)}
+                        disabled={launching === round.id}
+                        className="text-xs px-3 py-1.5 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
+                      >
+                        {launching === round.id ? "Launching..." : "Confirm"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmLaunch(null)}
+                        className="text-xs px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handlePreLaunchCheck(round.id)}
+                      className="text-sm px-4 py-2 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90"
+                    >
+                      Confirm & Launch
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {reInterviewPrompt && (
