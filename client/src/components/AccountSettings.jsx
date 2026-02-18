@@ -260,7 +260,7 @@ export default function AccountSettings() {
           </button>
         </div>
 
-        <AdminUserList users={adminUsers} onRemove={handleRemoveUser} />
+        <AdminUserList users={adminUsers} onRemove={handleRemoveUser} onUpdate={loadData} />
       </div>
 
       {/* Subscription */}

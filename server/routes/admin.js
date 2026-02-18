@@ -618,7 +618,7 @@ router.get("/users", async (req, res) => {
 
 // Add admin user to current client
 router.post("/users", async (req, res) => {
-  const { email } = req.body;
+  const { email, first_name, last_name } = req.body;
 
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
@@ -638,8 +638,8 @@ router.post("/users", async (req, res) => {
 
   // Create admin user
   await db.run(
-    "INSERT INTO client_admins (client_id, email, password_hash) VALUES (?, ?, ?)",
-    [req.clientId, cleanEmail, passwordHash]
+    "INSERT INTO client_admins (client_id, email, password_hash, first_name, last_name) VALUES (?, ?, ?, ?, ?)",
+    [req.clientId, cleanEmail, passwordHash, first_name || null, last_name || null]
   );
 
   res.json({
@@ -648,6 +648,24 @@ router.post("/users", async (req, res) => {
     temp_password: tempPassword,
     message: "Admin user created successfully. Share these credentials with the new admin."
   });
+});
+
+// Update admin user name
+router.patch("/users/:id", async (req, res) => {
+  const { id } = req.params;
+  const { first_name, last_name } = req.body;
+
+  const user = await db.get("SELECT id FROM client_admins WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  if (!user) {
+    return res.status(404).json({ error: "Admin user not found" });
+  }
+
+  await db.run(
+    "UPDATE client_admins SET first_name = ?, last_name = ? WHERE id = ?",
+    [first_name || null, last_name || null, id]
+  );
+
+  res.json({ ok: true });
 });
 
 // Remove admin user from current client

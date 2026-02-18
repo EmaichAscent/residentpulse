@@ -1,6 +1,8 @@
 import { useState } from "react";
 
 export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -16,7 +18,7 @@ export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
       const response = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, first_name: firstName, last_name: lastName }),
         credentials: "include"
       });
 
@@ -31,6 +33,8 @@ export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
 
       // Reset form after 5 seconds
       setTimeout(() => {
+        setFirstName("");
+        setLastName("");
         setEmail("");
         setSuccess(null);
         onClose();
@@ -72,6 +76,8 @@ export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
             <button
               onClick={() => {
                 setSuccess(null);
+                setFirstName("");
+                setLastName("");
                 setEmail("");
                 onClose();
               }}
@@ -82,8 +88,36 @@ export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  First Name
+                </label>
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="input-field"
+                  placeholder="Jane"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="input-field"
+                  placeholder="Doe"
+                />
+              </div>
+            </div>
+
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Email Address *
               </label>
               <input
@@ -93,7 +127,6 @@ export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
                 className="input-field"
                 placeholder="newadmin@example.com"
                 required
-                autoFocus
               />
               <p className="text-xs text-gray-500 mt-2">
                 A temporary password will be generated and displayed after creation.
