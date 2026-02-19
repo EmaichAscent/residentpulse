@@ -438,9 +438,9 @@ export default function RoundsLanding() {
                       {formatDate(round.launched_at)} — {formatDate(round.concluded_at)} &middot; {responded}/{invited} responses ({rate}%)
                     </p>
                   </div>
-                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
+                  <span className="text-sm font-semibold px-4 py-1.5 rounded-lg text-white flex-shrink-0" style={{ backgroundColor: "var(--cam-green)" }}>
+                    View Results
+                  </span>
                 </div>
               );
             })}
