@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
+import HelpPanel from "../components/HelpPanel";
 
 export default function AdminPage() {
   const [user, setUser] = useState(null);
@@ -135,6 +136,7 @@ export default function AdminPage() {
       {/* Child routes render here */}
       <Outlet context={{ user, isPaidTier }} />
       </div>
+      <HelpPanel />
     </div>
   );
 }
