@@ -231,188 +231,84 @@ export default function SignUpPage() {
             </div>
 
             {/* Section 2: Company Information */}
-            <div className="mb-8">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Company Information</h2>
+            <div className="mb-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-3">Company Information</h2>
 
-              <div className="mb-4">
-                <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 mb-1">
-                  Your Management Company Name
-                </label>
-                <input
-                  id="companyName"
-                  type="text"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="input-field"
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label htmlFor="addressLine1" className="block text-sm font-medium text-gray-700 mb-1">
-                  Address Line 1
-                </label>
-                <input
-                  id="addressLine1"
-                  type="text"
-                  value={addressLine1}
-                  onChange={(e) => setAddressLine1(e.target.value)}
-                  className="input-field"
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label htmlFor="addressLine2" className="block text-sm font-medium text-gray-700 mb-1">
-                  Address Line 2 <span className="text-gray-400">(optional)</span>
-                </label>
-                <input
-                  id="addressLine2"
-                  type="text"
-                  value={addressLine2}
-                  onChange={(e) => setAddressLine2(e.target.value)}
-                  className="input-field"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="grid grid-cols-2 gap-3 mb-2.5">
                 <div>
-                  <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
-                    City
+                  <label htmlFor="companyName" className="block text-xs font-medium text-gray-700 mb-0.5">
+                    Management Company Name
                   </label>
-                  <input
-                    id="city"
-                    type="text"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="input-field"
-                    required
-                  />
+                  <input id="companyName" type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="input-field text-sm py-1.5" required />
                 </div>
                 <div>
-                  <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-1">
-                    State
+                  <label htmlFor="phoneNumber" className="block text-xs font-medium text-gray-700 mb-0.5">
+                    Phone Number
                   </label>
-                  <input
-                    id="state"
-                    type="text"
-                    value={state}
-                    onChange={(e) => setState(e.target.value)}
-                    className="input-field"
-                    maxLength={2}
-                    required
-                  />
-                </div>
-                <div>
-                  <label htmlFor="zip" className="block text-sm font-medium text-gray-700 mb-1">
-                    ZIP Code
-                  </label>
-                  <input
-                    id="zip"
-                    type="text"
-                    value={zip}
-                    onChange={(e) => setZip(e.target.value)}
-                    className="input-field"
-                    maxLength={10}
-                    required
-                  />
+                  <input id="phoneNumber" type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="input-field text-sm py-1.5" required />
                 </div>
               </div>
 
-              <div>
-                <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone Number
-                </label>
-                <input
-                  id="phoneNumber"
-                  type="tel"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  className="input-field"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-3 mb-2.5">
+                <div>
+                  <label htmlFor="addressLine1" className="block text-xs font-medium text-gray-700 mb-0.5">
+                    Address Line 1
+                  </label>
+                  <input id="addressLine1" type="text" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} className="input-field text-sm py-1.5" required />
+                </div>
+                <div>
+                  <label htmlFor="addressLine2" className="block text-xs font-medium text-gray-700 mb-0.5">
+                    Address Line 2 <span className="text-gray-400">(optional)</span>
+                  </label>
+                  <input id="addressLine2" type="text" value={addressLine2} onChange={(e) => setAddressLine2(e.target.value)} className="input-field text-sm py-1.5" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label htmlFor="city" className="block text-xs font-medium text-gray-700 mb-0.5">City</label>
+                  <input id="city" type="text" value={city} onChange={(e) => setCity(e.target.value)} className="input-field text-sm py-1.5" required />
+                </div>
+                <div>
+                  <label htmlFor="state" className="block text-xs font-medium text-gray-700 mb-0.5">State</label>
+                  <input id="state" type="text" value={state} onChange={(e) => setState(e.target.value)} className="input-field text-sm py-1.5" maxLength={2} required />
+                </div>
+                <div>
+                  <label htmlFor="zip" className="block text-xs font-medium text-gray-700 mb-0.5">ZIP Code</label>
+                  <input id="zip" type="text" value={zip} onChange={(e) => setZip(e.target.value)} className="input-field text-sm py-1.5" maxLength={10} required />
+                </div>
               </div>
             </div>
 
             {/* Section 3: Admin Account */}
-            <div className="mb-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Admin Account</h2>
+            <div className="mb-5">
+              <h2 className="text-lg font-bold text-gray-900 mb-3">Admin Account</h2>
 
-              <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="grid grid-cols-2 gap-3 mb-2.5">
                 <div>
-                  <label htmlFor="adminFirstName" className="block text-sm font-medium text-gray-700 mb-1">
-                    First Name
-                  </label>
-                  <input
-                    id="adminFirstName"
-                    type="text"
-                    value={adminFirstName}
-                    onChange={(e) => setAdminFirstName(e.target.value)}
-                    className="input-field"
-                    required
-                  />
+                  <label htmlFor="adminFirstName" className="block text-xs font-medium text-gray-700 mb-0.5">First Name</label>
+                  <input id="adminFirstName" type="text" value={adminFirstName} onChange={(e) => setAdminFirstName(e.target.value)} className="input-field text-sm py-1.5" required />
                 </div>
                 <div>
-                  <label htmlFor="adminLastName" className="block text-sm font-medium text-gray-700 mb-1">
-                    Last Name
-                  </label>
-                  <input
-                    id="adminLastName"
-                    type="text"
-                    value={adminLastName}
-                    onChange={(e) => setAdminLastName(e.target.value)}
-                    className="input-field"
-                    required
-                  />
+                  <label htmlFor="adminLastName" className="block text-xs font-medium text-gray-700 mb-0.5">Last Name</label>
+                  <input id="adminLastName" type="text" value={adminLastName} onChange={(e) => setAdminLastName(e.target.value)} className="input-field text-sm py-1.5" required />
                 </div>
               </div>
 
-              <div className="mb-4">
-                <label htmlFor="adminEmail" className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
-                </label>
-                <input
-                  id="adminEmail"
-                  type="email"
-                  value={adminEmail}
-                  onChange={(e) => setAdminEmail(e.target.value)}
-                  className="input-field"
-                  placeholder="admin@yourcompany.com"
-                  required
-                />
+              <div className="mb-2.5">
+                <label htmlFor="adminEmail" className="block text-xs font-medium text-gray-700 mb-0.5">Email</label>
+                <input id="adminEmail" type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} className="input-field text-sm py-1.5" placeholder="admin@yourcompany.com" required />
               </div>
 
-              <div className="mb-4">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                  Password
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="input-field"
-                  placeholder="••••••••"
-                  required
-                  minLength={8}
-                />
-                <p className="text-xs text-gray-500 mt-1">Must be at least 8 characters</p>
-              </div>
-
-              <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                  Confirm Password
-                </label>
-                <input
-                  id="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="input-field"
-                  placeholder="••••••••"
-                  required
-                  minLength={8}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-0.5">Password</label>
+                  <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input-field text-sm py-1.5" placeholder="Min 8 characters" required minLength={8} />
+                </div>
+                <div>
+                  <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-0.5">Confirm Password</label>
+                  <input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="input-field text-sm py-1.5" placeholder="••••••••" required minLength={8} />
+                </div>
               </div>
             </div>
 
