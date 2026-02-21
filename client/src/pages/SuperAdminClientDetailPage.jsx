@@ -170,7 +170,7 @@ export default function SuperAdminClientDetailPage() {
         navigate("/superadmin/clients");
       } else {
         const data = await res.json();
-        alert("Delete failed: " + (data.error || "Unknown error"));
+        alert("Delete failed: " + (data.detail || data.error || "Unknown error"));
       }
     } catch (err) {
       alert("Delete failed: " + err.message);

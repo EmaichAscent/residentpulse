@@ -771,7 +771,7 @@ router.delete("/clients/:id", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error("Client delete error:", err);
-    res.status(500).json({ error: "Failed to delete client" });
+    res.status(500).json({ error: "Failed to delete client", detail: err.message });
   }
 });
 
