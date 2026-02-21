@@ -22,6 +22,9 @@ import TrendsView from "./components/TrendsView";
 import CommunityManager from "./components/CommunityManager";
 import UserManager from "./components/UserManager";
 import AccountSettings from "./components/AccountSettings";
+import SuperAdminDashboard from "./components/SuperAdminDashboard";
+import SuperAdminClients from "./components/SuperAdminClients";
+import SuperAdminSettings from "./components/SuperAdminSettings";
 
 export default function App() {
   return (
@@ -42,7 +45,12 @@ export default function App() {
               <SuperAdminPage />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<SuperAdminDashboard />} />
+          <Route path="clients" element={<SuperAdminClients />} />
+          <Route path="settings" element={<SuperAdminSettings />} />
+        </Route>
         <Route
           path="/superadmin/clients/:id"
           element={

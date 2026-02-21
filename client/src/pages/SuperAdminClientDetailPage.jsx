@@ -184,7 +184,7 @@ export default function SuperAdminClientDetailPage() {
       <header className="shadow-sm" style={{ backgroundColor: "var(--cam-blue)" }}>
         <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
           <div>
-            <button onClick={() => navigate("/superadmin")} className="text-sm text-white/70 hover:text-white mb-1 block">
+            <button onClick={() => navigate("/superadmin/clients")} className="text-sm text-white/70 hover:text-white mb-1 block">
               &larr; Back to Clients
             </button>
             <h1 className="text-xl font-bold text-white">{client.company_name}</h1>

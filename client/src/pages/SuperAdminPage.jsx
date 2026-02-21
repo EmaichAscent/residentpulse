@@ -1,20 +1,14 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import ClientList from "../components/ClientList";
-import AddClientModal from "../components/AddClientModal";
-import PromptEditor from "../components/PromptEditor";
-import SuperAdminDashboard from "../components/SuperAdminDashboard";
+import { useEffect } from "react";
+import { useNavigate, useLocation, Outlet } from "react-router-dom";
 
 export default function SuperAdminPage() {
-  const [tab, setTab] = useState("dashboard");
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showAddModal, setShowAddModal] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const activeTab = location.pathname.replace("/superadmin/", "").split("/")[0] || "dashboard";
 
   useEffect(() => {
     checkAuth();
-    loadClients();
   }, []);
 
   const checkAuth = async () => {
@@ -30,19 +24,6 @@ export default function SuperAdminPage() {
     }
   };
 
-  const loadClients = async () => {
-    try {
-      const response = await fetch("/api/superadmin/clients", { credentials: "include" });
-      if (!response.ok) throw new Error("Failed to load clients");
-      const data = await response.json();
-      setClients(data);
-    } catch (err) {
-      console.error("Error loading clients:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleLogout = async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
@@ -51,6 +32,12 @@ export default function SuperAdminPage() {
       console.error("Logout failed:", err);
     }
   };
+
+  const TABS = [
+    { path: "dashboard", label: "Dashboard" },
+    { path: "clients", label: "Clients" },
+    { path: "settings", label: "Settings" },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -69,71 +56,22 @@ export default function SuperAdminPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1">
-          <button
-            onClick={() => setTab("dashboard")}
-            className={`flex-1 py-3 text-lg font-medium rounded-lg transition ${
-              tab === "dashboard" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={() => setTab("clients")}
-            className={`flex-1 py-3 text-lg font-medium rounded-lg transition ${
-              tab === "clients" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Clients
-          </button>
-          <button
-            onClick={() => setTab("settings")}
-            className={`flex-1 py-3 text-lg font-medium rounded-lg transition ${
-              tab === "settings" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Settings
-          </button>
+          {TABS.map((t) => (
+            <button
+              key={t.path}
+              onClick={() => navigate(`/superadmin/${t.path}`)}
+              className={`flex-1 py-3 text-lg font-medium rounded-lg transition ${
+                activeTab === t.path ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        {/* Content */}
-        {tab === "dashboard" && <SuperAdminDashboard />}
-
-        {tab === "clients" && (
-          <div>
-            <div className="mb-4">
-              <button onClick={() => setShowAddModal(true)} className="btn-primary">
-                Add Client
-              </button>
-            </div>
-
-            {loading ? (
-              <p className="text-gray-400 text-center py-10">Loading clients...</p>
-            ) : (
-              <ClientList clients={clients} />
-            )}
-          </div>
-        )}
-
-        {tab === "settings" && (
-          <div>
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Base System Prompt</h2>
-              <p className="text-sm text-gray-500">
-                This is the global system prompt used when interviewing board members.
-                Client-specific supplements from onboarding interviews are appended automatically.
-              </p>
-            </div>
-            <PromptEditor isSuperAdmin={true} />
-          </div>
-        )}
+        {/* Child routes render here */}
+        <Outlet />
       </div>
-
-      {/* Modals */}
-      <AddClientModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onAdd={loadClients}
-      />
     </div>
   );
 }
