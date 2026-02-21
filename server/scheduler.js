@@ -186,6 +186,14 @@ async function cleanupAbandonedSignups() {
 
   for (const client of abandoned) {
     await db.run("DELETE FROM sessions WHERE client_id = ?", [client.id]);
+    await db.run("DELETE FROM critical_alerts WHERE client_id = ?", [client.id]);
+    await db.run("DELETE FROM invitation_logs WHERE client_id = ?", [client.id]);
+    await db.run("DELETE FROM admin_interviews WHERE client_id = ?", [client.id]);
+    await db.run("DELETE FROM survey_rounds WHERE client_id = ?", [client.id]);
+    await db.run("DELETE FROM communities WHERE client_id = ?", [client.id]);
+    await db.run("DELETE FROM settings WHERE client_id = ?", [client.id]);
+    await db.run("DELETE FROM client_subscriptions WHERE client_id = ?", [client.id]);
+    await db.run("DELETE FROM client_admins WHERE client_id = ?", [client.id]);
     await db.run("DELETE FROM clients WHERE id = ?", [client.id]);
     console.log(`Auto-deleted abandoned signup: client ${client.id} (${client.company_name})`);
   }

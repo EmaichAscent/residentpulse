@@ -755,10 +755,16 @@ router.delete("/clients/:id", async (req, res) => {
       return res.status(400).json({ error: "Only pending clients can be deleted" });
     }
 
-    // Sessions use ON DELETE SET NULL, so delete them explicitly first
-    // (messages cascade from sessions)
+    // Delete all dependent rows explicitly (CASCADE not reliable on all FKs)
     await db.run("DELETE FROM sessions WHERE client_id = ?", [id]);
-    // Delete client row — all other tables cascade
+    await db.run("DELETE FROM critical_alerts WHERE client_id = ?", [id]);
+    await db.run("DELETE FROM invitation_logs WHERE client_id = ?", [id]);
+    await db.run("DELETE FROM admin_interviews WHERE client_id = ?", [id]);
+    await db.run("DELETE FROM survey_rounds WHERE client_id = ?", [id]);
+    await db.run("DELETE FROM communities WHERE client_id = ?", [id]);
+    await db.run("DELETE FROM settings WHERE client_id = ?", [id]);
+    await db.run("DELETE FROM client_subscriptions WHERE client_id = ?", [id]);
+    await db.run("DELETE FROM client_admins WHERE client_id = ?", [id]);
     await db.run("DELETE FROM clients WHERE id = ? AND status = 'pending'", [id]);
 
     // Log with null client_id since client is gone
