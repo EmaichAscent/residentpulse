@@ -2,7 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
-import { sendInvitation } from "../utils/emailService.js";
+import { sendInvitation, notifyRoundLaunched, notifyRoundConcluded } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
 import { generateRoundInsights, computeLiveWordFrequencies } from "../utils/insightGenerator.js";
 
@@ -675,6 +675,16 @@ router.post("/:id/close", async (req, res) => {
       console.error(`Failed to generate insights for round ${roundId}:`, err.message)
     );
 
+    // Notify admins asynchronously
+    const completedCount = await db.get(
+      "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE",
+      [roundId, req.clientId]
+    );
+    notifyRoundConcluded({
+      clientId: req.clientId, roundNumber: round.round_number,
+      totalResponses: completedCount?.count || 0, totalInvited: round.members_invited || 0, db
+    }).catch(err => console.error("Failed to send round conclusion notifications:", err.message));
+
     res.json({ ok: true, message: "Round closed. AI insights are being generated." });
   } catch (err) {
     console.error("Error closing round:", err);
@@ -848,6 +858,12 @@ router.post("/:id/launch", async (req, res) => {
       clientId: req.clientId,
       metadata: { sent: sentCount, failed: failedCount, round_number: round.round_number }
     });
+
+    // Notify admins asynchronously
+    notifyRoundLaunched({
+      clientId: req.clientId, roundNumber: round.round_number,
+      membersInvited: sentCount, closesAt: closesAt.toISOString(), db
+    }).catch(err => console.error("Failed to send round launch notifications:", err.message));
 
     res.json({
       ok: true,

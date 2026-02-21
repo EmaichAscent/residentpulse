@@ -38,7 +38,7 @@ async function initializeSchema() {
         state TEXT,
         zip TEXT,
         phone_number TEXT,
-        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'inactive')),
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'inactive', 'pending')),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )

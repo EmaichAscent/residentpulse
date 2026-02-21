@@ -14,10 +14,10 @@ router.get("/validate", async (req, res) => {
   const email = (req.query.email || "").trim().toLowerCase();
   if (!email) return res.status(400).json({ valid: false, error: "Email is required" });
 
-  const user = await db.get("SELECT * FROM users WHERE LOWER(email) = ?", [email]);
+  const user = await db.get("SELECT id, first_name, client_id FROM users WHERE LOWER(email) = ?", [email]);
   if (!user) return res.json({ valid: false });
 
-  res.json({ valid: true, user });
+  res.json({ valid: true, user: { id: user.id, first_name: user.first_name, client_id: user.client_id } });
 });
 
 // List all users (admin) - filtered by client

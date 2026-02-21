@@ -2,7 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
-import { hashPassword, generatePassword } from "../utils/password.js";
+import { hashPassword, generatePassword, comparePassword } from "../utils/password.js";
 import { sendInvitation, sendNewAdminEmail } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
 import { generateSummary } from "../utils/summaryGenerator.js";
@@ -268,6 +268,41 @@ router.patch("/account/cadence", async (req, res) => {
   }
 
   res.json({ ok: true, message, survey_cadence });
+});
+
+// Delete entire client account (requires password confirmation)
+router.delete("/account", async (req, res) => {
+  const { password } = req.body;
+  if (!password) {
+    return res.status(400).json({ error: "Password is required to delete your account" });
+  }
+
+  // Verify password
+  const admin = await db.get("SELECT password_hash FROM client_admins WHERE id = ? AND client_id = ?", [req.userId, req.clientId]);
+  if (!admin) return res.status(404).json({ error: "Admin user not found" });
+
+  const valid = await comparePassword(password, admin.password_hash);
+  if (!valid) return res.status(401).json({ error: "Incorrect password" });
+
+  // Log activity before deletion (activity_log uses ON DELETE SET NULL, so it persists)
+  await logActivity({
+    actorType: "client_admin",
+    actorId: req.userId,
+    actorEmail: req.userEmail,
+    action: "delete_account",
+    entityType: "client",
+    entityId: req.clientId,
+    clientId: req.clientId,
+    metadata: { reason: "self_service_deletion" }
+  });
+
+  // Delete client — CASCADE rules handle cleanup of all child tables
+  await db.run("DELETE FROM clients WHERE id = ?", [req.clientId]);
+
+  // Destroy session
+  req.session.destroy(() => {
+    res.json({ ok: true });
+  });
 });
 
 // Get board members (users table) for current client

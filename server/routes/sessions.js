@@ -1,6 +1,7 @@
 import { Router } from "express";
 import db from "../db.js";
 import { generateSummary } from "../utils/summaryGenerator.js";
+import { notifyNewResponse } from "../utils/emailService.js";
 
 const router = Router();
 
@@ -155,6 +156,29 @@ router.patch("/:id/complete", async (req, res) => {
   generateSummary(id).catch((err) =>
     console.error("Summary generation failed:", err.message)
   );
+
+  // Notify admins of new response asynchronously
+  try {
+    const session = await db.get(
+      "SELECT s.client_id, s.round_id, s.first_name, s.last_name, COALESCE(c.community_name, s.community_name) as community_name FROM sessions s LEFT JOIN communities c ON c.id = s.community_id WHERE s.id = ?",
+      [id]
+    );
+    if (session?.client_id && session?.round_id) {
+      const round = await db.get("SELECT round_number, members_invited FROM survey_rounds WHERE id = ?", [session.round_id]);
+      const completed = await db.get(
+        "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE",
+        [session.round_id, session.client_id]
+      );
+      const respondentName = [session.first_name, session.last_name].filter(Boolean).join(" ") || "A board member";
+      notifyNewResponse({
+        clientId: session.client_id, roundNumber: round?.round_number || 0,
+        respondentName, communityName: session.community_name || "",
+        totalResponses: completed?.count || 0, totalInvited: round?.members_invited || 0, db
+      }).catch(err => console.error("Failed to send new response notification:", err.message));
+    }
+  } catch (err) {
+    console.error("Failed to prepare response notification:", err.message);
+  }
 });
 
 export default router;

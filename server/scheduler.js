@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import db from "./db.js";
-import { sendReminder } from "./utils/emailService.js";
+import { sendReminder, notifyRoundConcluded } from "./utils/emailService.js";
 import { generateRoundInsights } from "./utils/insightGenerator.js";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -32,6 +32,17 @@ async function concludeExpiredRounds() {
     );
 
     console.log(`Auto-concluded round ${round.round_number} for client ${round.client_id}`);
+
+    // Notify admins of round conclusion
+    const completedCount = await db.get(
+      "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE",
+      [round.id, round.client_id]
+    );
+    const roundDetails = await db.get("SELECT members_invited FROM survey_rounds WHERE id = ?", [round.id]);
+    notifyRoundConcluded({
+      clientId: round.client_id, roundNumber: round.round_number,
+      totalResponses: completedCount?.count || 0, totalInvited: roundDetails?.members_invited || 0, db
+    }).catch(err => console.error(`Failed to send conclusion notifications for round ${round.id}:`, err.message));
 
     // Generate AI insights asynchronously
     generateRoundInsights(round.id, round.client_id).catch((err) =>

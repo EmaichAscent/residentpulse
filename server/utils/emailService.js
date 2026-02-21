@@ -1,5 +1,27 @@
 import { Resend } from "resend";
 
+/**
+ * Strip HTML to plain text for email fallback
+ */
+function htmlToText(html) {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/h[1-6]>/gi, "\n\n")
+    .replace(/<a[^>]+href="([^"]*)"[^>]*>(.*?)<\/a>/gi, "$2 ($1)")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // Lazy initialization - only create Resend instance when needed
 let resend = null;
 
@@ -126,6 +148,7 @@ export async function sendInvitation(user, token, roundInfo) {
       to: [user.email],
       subject: `Your Feedback Matters, ${user.first_name || "Board Member"}`,
       html: emailHtml,
+      text: htmlToText(emailHtml),
     });
 
     if (error) {
@@ -223,6 +246,7 @@ export async function sendPasswordResetEmail(email, resetToken) {
       to: [email],
       subject: "Reset your password",
       html: emailHtml,
+      text: htmlToText(emailHtml),
     });
 
     if (error) {
@@ -320,6 +344,7 @@ export async function sendVerificationEmail(email, token) {
       to: [email],
       subject: "Verify your email - ResidentPulse",
       html: emailHtml,
+      text: htmlToText(emailHtml),
     });
 
     if (error) {
@@ -438,6 +463,7 @@ export async function sendReminder(user, token, { daysRemaining, companyName }) 
       to: [user.email],
       subject: `Friendly reminder: Your Feedback Matters, ${user.first_name || "Board Member"}`,
       html: emailHtml,
+      text: htmlToText(emailHtml),
     });
 
     if (error) {
@@ -529,6 +555,7 @@ export async function sendNewAdminEmail(email, tempPassword, { firstName, compan
       to: [email],
       subject: `You've been added as an admin — ResidentPulse`,
       html: emailHtml,
+      text: htmlToText(emailHtml),
     });
 
     if (error) {
@@ -544,4 +571,131 @@ export async function sendNewAdminEmail(email, tempPassword, { firstName, compan
   }
 }
 
-export default { sendInvitation, sendPasswordResetEmail, sendVerificationEmail, sendReminder, sendNewAdminEmail };
+/**
+ * Send admin notification email (round launch, new response, round conclusion)
+ * @param {string} email - Admin email address
+ * @param {string} subject - Email subject line
+ * @param {string} emailHtml - Prebuilt HTML body
+ */
+async function sendAdminNotification(email, subject, emailHtml) {
+  try {
+    const resendClient = getResendClient();
+    const { data, error } = await resendClient.emails.send({
+      from: "ResidentPulse <residentpulse@camascent.com>",
+      to: [email],
+      subject,
+      html: emailHtml,
+      text: htmlToText(emailHtml),
+    });
+
+    if (error) {
+      console.error("Resend API error (admin notification):", error);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.error(`Failed to send admin notification to ${email}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Notify all admins that a survey round has launched
+ */
+export async function notifyRoundLaunched({ clientId, roundNumber, membersInvited, closesAt, db }) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+  const client = await db.get("SELECT company_name FROM clients WHERE id = ?", [clientId]);
+  const companyName = client?.company_name || "Your company";
+  const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
+  const closesDate = new Date(closesAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+      <div style="background: #3B9FE7; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 22px;">Survey Round ${roundNumber} Launched</h1>
+      </div>
+      <div style="padding: 24px 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hi {{firstName}},</p>
+        <p>Round ${roundNumber} for <strong>${companyName}</strong> is now live.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px 0; color: #666;">Members invited</td><td style="padding: 8px 0; font-weight: bold;">${membersInvited}</td></tr>
+          <tr><td style="padding: 8px 0; color: #666;">Closes on</td><td style="padding: 8px 0; font-weight: bold;">${closesDate}</td></tr>
+        </table>
+        <p>Invitations have been sent. You can track responses from your dashboard.</p>
+        <a href="${baseUrl}/admin" style="display: inline-block; background: #3B9FE7; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-top: 8px;">View Dashboard</a>
+        <p style="margin-top: 24px; font-size: 12px; color: #999;">ResidentPulse by CAMAscent</p>
+      </div>
+    </div>`;
+
+  for (const admin of admins) {
+    const personalized = html.replace("{{firstName}}", admin.first_name || "there");
+    await sendAdminNotification(admin.email, `Round ${roundNumber} launched — ${membersInvited} invitations sent`, personalized);
+  }
+}
+
+/**
+ * Notify all admins that a new survey response was received
+ */
+export async function notifyNewResponse({ clientId, roundNumber, respondentName, communityName, totalResponses, totalInvited, db }) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+  const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
+  const responseRate = totalInvited > 0 ? Math.round((totalResponses / totalInvited) * 100) : 0;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+      <div style="background: #1AB06E; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 22px;">New Survey Response</h1>
+      </div>
+      <div style="padding: 24px 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hi {{firstName}},</p>
+        <p><strong>${respondentName}</strong>${communityName ? ` from ${communityName}` : ""} just completed their Round ${roundNumber} survey.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px 0; color: #666;">Responses so far</td><td style="padding: 8px 0; font-weight: bold;">${totalResponses} of ${totalInvited}</td></tr>
+          <tr><td style="padding: 8px 0; color: #666;">Response rate</td><td style="padding: 8px 0; font-weight: bold;">${responseRate}%</td></tr>
+        </table>
+        <a href="${baseUrl}/admin" style="display: inline-block; background: #3B9FE7; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600;">View Responses</a>
+        <p style="margin-top: 24px; font-size: 12px; color: #999;">ResidentPulse by CAMAscent</p>
+      </div>
+    </div>`;
+
+  for (const admin of admins) {
+    const personalized = html.replace("{{firstName}}", admin.first_name || "there");
+    await sendAdminNotification(admin.email, `New response — Round ${roundNumber} (${totalResponses}/${totalInvited})`, personalized);
+  }
+}
+
+/**
+ * Notify all admins that a survey round has concluded
+ */
+export async function notifyRoundConcluded({ clientId, roundNumber, totalResponses, totalInvited, db }) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+  const client = await db.get("SELECT company_name FROM clients WHERE id = ?", [clientId]);
+  const companyName = client?.company_name || "Your company";
+  const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
+  const responseRate = totalInvited > 0 ? Math.round((totalResponses / totalInvited) * 100) : 0;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+      <div style="background: #3B9FE7; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 22px;">Round ${roundNumber} Complete</h1>
+      </div>
+      <div style="padding: 24px 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hi {{firstName}},</p>
+        <p>Survey Round ${roundNumber} for <strong>${companyName}</strong> has concluded.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px 0; color: #666;">Total responses</td><td style="padding: 8px 0; font-weight: bold;">${totalResponses} of ${totalInvited}</td></tr>
+          <tr><td style="padding: 8px 0; color: #666;">Response rate</td><td style="padding: 8px 0; font-weight: bold;">${responseRate}%</td></tr>
+        </table>
+        <p>AI-powered insights are being generated and will be available on your dashboard shortly.</p>
+        <a href="${baseUrl}/admin" style="display: inline-block; background: #3B9FE7; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-top: 8px;">View Results</a>
+        <p style="margin-top: 24px; font-size: 12px; color: #999;">ResidentPulse by CAMAscent</p>
+      </div>
+    </div>`;
+
+  for (const admin of admins) {
+    const personalized = html.replace("{{firstName}}", admin.first_name || "there");
+    await sendAdminNotification(admin.email, `Round ${roundNumber} complete — ${responseRate}% response rate`, personalized);
+  }
+}
+
+export default { sendInvitation, sendPasswordResetEmail, sendVerificationEmail, sendReminder, sendNewAdminEmail, notifyRoundLaunched, notifyNewResponse, notifyRoundConcluded };

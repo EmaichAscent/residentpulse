@@ -220,6 +220,128 @@ export default function RoundDashboard() {
   });
   const activeAlertCount = alerts.filter((a) => !a.dismissed && !a.solved).length;
 
+  const handlePrintReport = () => {
+    const w = window.open("", "_blank");
+    if (!w) return;
+
+    const npsBarHtml = `
+      <div style="display:flex;height:20px;border-radius:6px;overflow:hidden;margin:8px 0;">
+        ${pPct > 0 ? `<div style="width:${pPct}%;background:#22c55e;"></div>` : ""}
+        ${paPct > 0 ? `<div style="width:${paPct}%;background:#f59e0b;"></div>` : ""}
+        ${dPct > 0 ? `<div style="width:${dPct}%;background:#ef4444;"></div>` : ""}
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;">
+        <span style="color:#22c55e;">Promoters ${pPct}%</span>
+        <span style="color:#f59e0b;">Passives ${paPct}%</span>
+        <span style="color:#ef4444;">Detractors ${dPct}%</span>
+      </div>`;
+
+    const communityRows = community_cohorts.map(c =>
+      `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${c.name}</td>
+       <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;color:${
+         c.median >= 9 ? "#22c55e" : c.median >= 7 ? "#f59e0b" : "#ef4444"
+       };">${c.median}</td>
+       <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${c.respondents || ""}</td></tr>`
+    ).join("");
+
+    const summaryRows = completedSessions.map(s =>
+      `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <strong>${[s.first_name, s.last_name].filter(Boolean).join(" ") || "Anonymous"}</strong>
+          <span style="font-weight:600;color:${s.nps_score >= 9 ? "#22c55e" : s.nps_score >= 7 ? "#f59e0b" : "#ef4444"};">NPS: ${s.nps_score ?? "—"}</span>
+        </div>
+        ${s.community_name ? `<div style="font-size:12px;color:#666;margin-bottom:4px;">${s.community_name}</div>` : ""}
+        ${s.summary ? `<div style="font-size:13px;color:#333;">${s.summary}</div>` : ""}
+      </div>`
+    ).join("");
+
+    let insightsHtml = "";
+    if (insights?.executive_summary) {
+      insightsHtml += `<h2 style="margin-top:28px;">Executive Summary</h2><p>${insights.executive_summary}</p>`;
+    }
+    if (insights?.key_findings?.length) {
+      insightsHtml += `<h2 style="margin-top:20px;">Key Findings</h2><ol>`;
+      insights.key_findings.forEach(f => {
+        insightsHtml += `<li style="margin-bottom:6px;"><strong>${f.finding}</strong>${f.evidence ? `<br><span style="color:#666;font-size:13px;">${f.evidence}</span>` : ""}</li>`;
+      });
+      insightsHtml += `</ol>`;
+    }
+    if (insights?.recommended_actions?.length) {
+      insightsHtml += `<h2 style="margin-top:20px;">Recommended Actions</h2><ol>`;
+      insights.recommended_actions.forEach(a => {
+        insightsHtml += `<li style="margin-bottom:6px;"><span style="font-size:11px;font-weight:700;color:${a.priority === "high" ? "#ef4444" : a.priority === "medium" ? "#f59e0b" : "#666"};text-transform:uppercase;">${a.priority || ""}</span> ${a.action}${a.impact ? `<br><span style="color:#666;font-size:13px;">${a.impact}</span>` : ""}</li>`;
+      });
+      insightsHtml += `</ol>`;
+    }
+
+    let alertsHtml = "";
+    const activeAlerts = alerts.filter(a => !a.dismissed);
+    if (activeAlerts.length > 0) {
+      alertsHtml = `<h2 style="margin-top:28px;color:#dc2626;">Warnings &amp; Alerts (${activeAlerts.length})</h2>`;
+      activeAlerts.forEach(a => {
+        alertsHtml += `<div style="border-left:3px solid ${a.severity === "critical" ? "#ef4444" : "#f59e0b"};padding:8px 12px;margin-bottom:6px;background:#fef2f2;border-radius:0 6px 6px 0;">
+          <strong>${a.alert_community || ""}</strong> — ${a.description}${a.solved ? ' <span style="color:#22c55e;">(Resolved)</span>' : ""}
+        </div>`;
+      });
+    }
+
+    w.document.write(`<!DOCTYPE html><html><head><title>Round ${round.round_number} Report</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 24px; color: #333; font-size: 14px; line-height: 1.5; }
+        h1 { font-size: 22px; margin-bottom: 4px; }
+        h2 { font-size: 16px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 8px 12px; background: #f9fafb; border-bottom: 2px solid #e5e7eb; font-size: 12px; text-transform: uppercase; color: #666; }
+        .metrics { display: flex; gap: 16px; margin: 16px 0; }
+        .metric-card { flex: 1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; text-align: center; }
+        .metric-value { font-size: 32px; font-weight: 700; }
+        .metric-label { font-size: 12px; color: #666; text-transform: uppercase; }
+        @media print { body { padding: 0; } .no-print { display: none !important; } }
+      </style>
+    </head><body>
+      <div class="no-print" style="margin-bottom:16px;">
+        <button onclick="window.print()" style="padding:8px 20px;background:#3B9FE7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">Print / Save as PDF</button>
+        <button onclick="window.close()" style="padding:8px 20px;background:#f3f4f6;color:#333;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;margin-left:8px;">Close</button>
+      </div>
+      <h1>Survey Round ${round.round_number} Report</h1>
+      <p style="color:#666;margin-top:0;">${formatDate(round.launched_at)} — ${isConcluded ? formatDate(round.concluded_at) : `Closes ${formatDate(round.closes_at)}`} | ${isActive ? "In Progress" : "Concluded"}</p>
+
+      <div class="metrics">
+        <div class="metric-card">
+          <div class="metric-value" style="color:${npsColor(nps.score)};">${nps.score ?? "—"}</div>
+          <div class="metric-label">NPS Score</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">${response_rate.percentage}%</div>
+          <div class="metric-label">Response Rate</div>
+          <div style="font-size:12px;color:#666;">${response_rate.completed} of ${response_rate.invited}</div>
+        </div>
+      </div>
+
+      ${npsBarHtml}
+
+      ${alertsHtml}
+
+      ${community_cohorts.length > 1 ? `
+        <h2 style="margin-top:28px;">Community Scores</h2>
+        <table>
+          <thead><tr><th>Community</th><th style="text-align:center;">Median NPS</th><th style="text-align:center;">Respondents</th></tr></thead>
+          <tbody>${communityRows}</tbody>
+        </table>
+      ` : ""}
+
+      ${insightsHtml}
+
+      <h2 style="margin-top:28px;">Respondent Summaries (${completedSessions.length})</h2>
+      ${summaryRows || '<p style="color:#999;">No completed responses yet.</p>'}
+
+      <div style="margin-top:32px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:11px;color:#999;">
+        Generated ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} — ResidentPulse by CAMAscent
+      </div>
+    </body></html>`);
+    w.document.close();
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -249,6 +371,15 @@ export default function RoundDashboard() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={handlePrintReport}
+            className="py-2 px-4 text-sm font-medium text-gray-500 border border-gray-300 rounded-lg hover:bg-gray-50 inline-flex items-center gap-1.5"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M5 2.75C5 1.784 5.784 1 6.75 1h6.5c.966 0 1.75.784 1.75 1.75v3.552c.377.06.734.19 1.053.382a2.249 2.249 0 011.197 1.981v4.585a2.25 2.25 0 01-2.25 2.25H15v1.75A2.75 2.75 0 0112.25 18h-4.5A2.75 2.75 0 015 15.25V15H5a2.25 2.25 0 01-2.25-2.25V8.665a2.249 2.249 0 011.197-1.981A2.25 2.25 0 015 6.302V2.75zm1.5 0v3.5h7v-3.5a.25.25 0 00-.25-.25h-6.5a.25.25 0 00-.25.25zm-1.5 9v3.5c0 .69.56 1.25 1.25 1.25h7.5c.69 0 1.25-.56 1.25-1.25v-3.5H5z" clipRule="evenodd" />
+            </svg>
+            Print Report
+          </button>
           <a
             href={`/api/admin/survey-rounds/${roundId}/export`}
             className="py-2 px-4 text-sm font-medium text-gray-500 border border-gray-300 rounded-lg hover:bg-gray-50 inline-flex items-center gap-1.5"

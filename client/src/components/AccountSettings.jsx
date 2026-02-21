@@ -23,6 +23,10 @@ export default function AccountSettings() {
   const [pwForm, setPwForm] = useState({ current: "", newPw: "", confirm: "" });
   const [pwSaving, setPwSaving] = useState(false);
   const [pwMessage, setPwMessage] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const { user: sessionUser } = useOutletContext();
 
   useEffect(() => {
@@ -139,6 +143,28 @@ export default function AccountSettings() {
       setPwMessage({ type: "error", text: err.message });
     } finally {
       setPwSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async (e) => {
+    e.preventDefault();
+    setDeleteError("");
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/admin/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: deletePassword }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete account");
+      // Redirect to home after successful deletion
+      window.location.href = "/";
+    } catch (err) {
+      setDeleteError(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -555,6 +581,64 @@ export default function AccountSettings() {
           </p>
         )}
       </div>
+
+      {/* Delete Account */}
+      <div className="bg-white shadow-md rounded-lg p-6 border border-red-200">
+        <h2 className="text-lg font-semibold text-red-700 mb-2">Delete Account</h2>
+        <p className="text-sm text-gray-600 mb-3">
+          Permanently delete your account and all associated data, including board members,
+          survey rounds, responses, and insights. This action cannot be undone.
+        </p>
+        <button
+          onClick={() => { setDeletePassword(""); setDeleteError(""); setShowDeleteModal(true); }}
+          className="px-4 py-2 text-sm font-semibold text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition"
+        >
+          Delete Account
+        </button>
+      </div>
+
+      {/* Delete Account Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowDeleteModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-red-700 mb-2">Delete Account</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              This will permanently delete <strong>{client?.company_name}</strong> and all data.
+              Enter your password to confirm.
+            </p>
+            <form onSubmit={handleDeleteAccount} className="space-y-3">
+              <input
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                className="input-field-sm"
+                placeholder="Enter your password"
+                required
+                autoFocus
+              />
+              {deleteError && (
+                <p className="text-sm text-red-600">{deleteError}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition disabled:opacity-50"
+                >
+                  {deleting ? "Deleting..." : "Permanently Delete"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  className="px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <AddAdminUserModal
         isOpen={showAddUserModal}
