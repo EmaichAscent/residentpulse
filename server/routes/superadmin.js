@@ -763,9 +763,8 @@ router.delete("/clients/:id", async (req, res) => {
 
     // Log with null client_id since client is gone
     await db.run(
-      `INSERT INTO activity_log (actor_type, actor_id, action, entity_type, entity_id, metadata)
-       VALUES ('superadmin', ?, 'deleted_pending_client', 'client', ?, ?)`,
-      [req.session.userId, id, JSON.stringify({ company_name: client.company_name })]
+      "INSERT INTO activity_log (actor_type, actor_email, action, metadata) VALUES ('superadmin', ?, ?, ?)",
+      [req.session.user?.email || "superadmin", `Deleted pending client "${client.company_name}"`, JSON.stringify({ client_id: id, company_name: client.company_name })]
     );
 
     console.log(`Pending client ${id} (${client.company_name}) deleted by superadmin`);
