@@ -82,7 +82,7 @@ async function handleSubscriptionActivated(data) {
     return;
   }
 
-  // Update subscription to active (idempotent — only affects pending_payment)
+  // Try 1: New signup flow — activate pending_payment subscription
   const result = await db.run(
     `UPDATE client_subscriptions
      SET status = 'active', zoho_subscription_id = ?, zoho_customer_id = ?,
@@ -91,37 +91,60 @@ async function handleSubscriptionActivated(data) {
     [zohoSubscriptionId || null, zohoCustomerId || null, clientId]
   );
 
-  if (result.changes === 0) {
-    console.log(`Zoho webhook: subscription for client ${clientId} already active or not found`);
-    return;
-  }
-
-  // Activate the client (was 'pending')
-  await db.run(
-    "UPDATE clients SET status = 'active' WHERE id = ? AND status = 'pending'",
-    [clientId]
-  );
-
-  // Generate verification token and send verification email
-  const admin = await db.get(
-    "SELECT id, email FROM client_admins WHERE client_id = ? LIMIT 1",
-    [clientId]
-  );
-
-  if (admin?.email) {
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
+  if (result.changes > 0) {
+    // New signup: activate client and send verification email
     await db.run(
-      "UPDATE client_admins SET email_verification_token = ?, email_verification_expires = ? WHERE id = ?",
-      [verificationToken, expires.toISOString(), admin.id]
+      "UPDATE clients SET status = 'active' WHERE id = ? AND status = 'pending'",
+      [clientId]
     );
 
-    try {
-      await sendVerificationEmail(admin.email, verificationToken);
-      console.log(`Verification email sent to ${admin.email} after Zoho payment`);
-    } catch (emailErr) {
-      console.error("Failed to send verification email after payment:", emailErr.message);
+    const admin = await db.get(
+      "SELECT id, email FROM client_admins WHERE client_id = ? LIMIT 1",
+      [clientId]
+    );
+
+    if (admin?.email) {
+      const verificationToken = crypto.randomBytes(32).toString("hex");
+      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await db.run(
+        "UPDATE client_admins SET email_verification_token = ?, email_verification_expires = ? WHERE id = ?",
+        [verificationToken, expires.toISOString(), admin.id]
+      );
+
+      try {
+        await sendVerificationEmail(admin.email, verificationToken);
+        console.log(`Verification email sent to ${admin.email} after Zoho payment`);
+      } catch (emailErr) {
+        console.error("Failed to send verification email after payment:", emailErr.message);
+      }
+    }
+  } else {
+    // Try 2: Existing free user upgrading to paid — update plan + link Zoho IDs
+    const planCode = subscription.plan?.plan_code || subscription.plan_code;
+    if (planCode) {
+      const plan = await db.get("SELECT id FROM subscription_plans WHERE zoho_plan_code = ?", [planCode]);
+      if (plan) {
+        const upgradeResult = await db.run(
+          `UPDATE client_subscriptions
+           SET plan_id = ?, zoho_subscription_id = ?, zoho_customer_id = ?,
+               started_at = CURRENT_TIMESTAMP
+           WHERE client_id = ? AND zoho_subscription_id IS NULL`,
+          [plan.id, zohoSubscriptionId || null, zohoCustomerId || null, clientId]
+        );
+        if (upgradeResult.changes > 0) {
+          console.log(`Client ${clientId} upgraded from free to ${planCode} via Zoho webhook`);
+        } else {
+          console.log(`Zoho webhook: subscription for client ${clientId} already active or not found`);
+          return;
+        }
+      } else {
+        console.log(`Zoho webhook: unknown plan code ${planCode} for client ${clientId}`);
+        return;
+      }
+    } else {
+      console.log(`Zoho webhook: subscription for client ${clientId} already active or not found`);
+      return;
     }
   }
 

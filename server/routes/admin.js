@@ -406,12 +406,8 @@ router.post("/account/subscription/change-plan", async (req, res) => {
         redirectUrl: `${baseUrl}/account/plan-changed`,
       });
 
-      // Set subscription to pending_payment for webhook to activate
-      await db.run(
-        "UPDATE client_subscriptions SET plan_id = ?, status = 'pending_payment' WHERE client_id = ?",
-        [plan_id, req.clientId]
-      );
-
+      // Don't change plan or status yet — webhook will update after payment completes.
+      // If user abandons checkout, their current free plan stays unchanged.
       return res.json({ checkout_url: result.url });
     }
 
