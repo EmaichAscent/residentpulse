@@ -340,7 +340,7 @@ router.patch("/clients/:id/subscription", async (req, res) => {
 
   if (existing) {
     await db.run(
-      "UPDATE client_subscriptions SET plan_id = ?, custom_member_limit = ?, zoho_subscription_id = ? WHERE client_id = ?",
+      "UPDATE client_subscriptions SET plan_id = ?, status = 'active', cancel_at_period_end = FALSE, custom_member_limit = ?, zoho_subscription_id = ? WHERE client_id = ?",
       [plan_id, customLimit, zohoSubId, clientId]
     );
   } else {
