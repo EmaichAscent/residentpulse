@@ -1162,6 +1162,40 @@ router.get("/communities", async (req, res) => {
   res.json(communities);
 });
 
+// Export communities as CSV
+router.get("/communities/export", async (req, res) => {
+  const communities = await db.all(
+    `SELECT c.community_name, c.contract_value, c.community_manager_name,
+            c.property_type, c.number_of_units, c.contract_renewal_date,
+            c.contract_month_to_month, c.status, COUNT(u.id) as member_count
+     FROM communities c
+     LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
+     WHERE c.client_id = ?
+     GROUP BY c.id
+     ORDER BY c.status ASC, c.community_name`,
+    [req.clientId]
+  );
+
+  const escCSV = (val) => {
+    if (val == null) return "";
+    const s = String(val);
+    return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const header = "community_name,contract_value,community_manager_name,property_type,number_of_units,contract_renewal_date,month_to_month,status,member_count";
+  const rows = communities.map(c =>
+    [c.community_name, c.contract_value || "", c.community_manager_name || "",
+     c.property_type || "", c.number_of_units || "", c.contract_renewal_date ? c.contract_renewal_date.split("T")[0] : "",
+     c.contract_month_to_month ? "yes" : "no", c.status || "active", c.member_count || 0
+    ].map(escCSV).join(",")
+  );
+
+  const csv = [header, ...rows].join("\n");
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename="communities-export.csv"`);
+  res.send(csv);
+});
+
 // Create a single community
 router.post("/communities", async (req, res) => {
   try {
