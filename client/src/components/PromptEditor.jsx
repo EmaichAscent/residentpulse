@@ -4,6 +4,7 @@ export default function PromptEditor({ isSuperAdmin = false }) {
   const [prompt, setPrompt] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const apiBase = isSuperAdmin ? "/api/superadmin" : "/api/admin";
 
@@ -17,6 +18,7 @@ export default function PromptEditor({ isSuperAdmin = false }) {
   const handleSave = async () => {
     setSaving(true);
     setSaved(false);
+    setSaveError("");
     try {
       const res = await fetch(`${apiBase}/prompt`, {
         method: "PUT",
@@ -28,7 +30,7 @@ export default function PromptEditor({ isSuperAdmin = false }) {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch {
-      alert("Failed to save prompt.");
+      setSaveError("Failed to save prompt. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -55,6 +57,7 @@ export default function PromptEditor({ isSuperAdmin = false }) {
           {saving ? "Saving..." : "Save Prompt"}
         </button>
         {saved && <span className="text-green-600 font-medium">Saved!</span>}
+        {saveError && <span className="text-red-600 font-medium">{saveError}</span>}
       </div>
     </div>
   );

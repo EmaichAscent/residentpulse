@@ -453,4 +453,95 @@ export async function sendReminder(user, token, { daysRemaining, companyName }) 
   }
 }
 
-export default { sendInvitation, sendPasswordResetEmail, sendVerificationEmail, sendReminder };
+/**
+ * Build HTML email for new admin user credentials
+ */
+function buildNewAdminEmail(loginLink, tempPassword, { firstName, companyName }) {
+  const greeting = firstName ? `Hi ${firstName},` : "Hello,";
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Your ResidentPulse Admin Account</title>
+    </head>
+    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #3B9FE7; font-size: 28px; margin: 0 0 10px 0;">ResidentPulse</h1>
+          <p style="color: #666666; font-size: 14px; margin: 0;">Powered by CAM Ascent</p>
+        </div>
+
+        <h2 style="color: #3B9FE7; font-size: 24px; margin: 0 0 20px 0;">Your Admin Account</h2>
+
+        <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 15px 0;">
+          ${greeting}
+        </p>
+
+        <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 15px 0;">
+          You've been added as an admin for <strong>${companyName}</strong> on ResidentPulse. Here are your login credentials:
+        </p>
+
+        <div style="background: #f8f9fa; padding: 16px 20px; border-radius: 8px; margin: 20px 0; font-size: 15px;">
+          <p style="margin: 0 0 8px 0;"><strong>Temporary Password:</strong> <code style="background: #e9ecef; padding: 2px 6px; border-radius: 4px;">${tempPassword}</code></p>
+        </div>
+
+        <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 15px 0;">
+          Please change your password after your first login.
+        </p>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${loginLink}"
+             style="display: inline-block; background-color: #3B9FE7; color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+            Log In
+          </a>
+        </div>
+
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eeeeee;">
+          <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0;">
+            If you didn't expect this, please contact your administrator.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+/**
+ * Send new admin credentials email via Resend
+ * @param {string} email - New admin's email
+ * @param {string} tempPassword - Generated temporary password
+ * @param {Object} options - { firstName, companyName }
+ */
+export async function sendNewAdminEmail(email, tempPassword, { firstName, companyName }) {
+  const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
+  const loginLink = `${baseUrl}/admin/login`;
+
+  const emailHtml = buildNewAdminEmail(loginLink, tempPassword, { firstName, companyName });
+
+  try {
+    const resendClient = getResendClient();
+    const { data, error } = await resendClient.emails.send({
+      from: "ResidentPulse <residentpulse@camascent.com>",
+      to: [email],
+      subject: `You've been added as an admin — ResidentPulse`,
+      html: emailHtml,
+    });
+
+    if (error) {
+      console.error("Resend API error:", error);
+      throw new Error(error.message || "Failed to send email");
+    }
+
+    console.log(`New admin email sent to ${email}, email ID: ${data.id}`);
+    return data;
+  } catch (err) {
+    console.error(`Failed to send new admin email to ${email}:`, err.message);
+    throw err;
+  }
+}
+
+export default { sendInvitation, sendPasswordResetEmail, sendVerificationEmail, sendReminder, sendNewAdminEmail };

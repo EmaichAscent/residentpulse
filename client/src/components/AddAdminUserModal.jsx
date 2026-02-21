@@ -56,19 +56,10 @@ export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
         {success ? (
           <div className="space-y-4">
             <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-              <p className="text-sm text-green-800 font-medium mb-2">Admin user created successfully!</p>
-              <p className="text-sm text-green-700">Share these credentials with the new admin:</p>
-            </div>
-
-            <div className="p-4 bg-gray-50 rounded-md space-y-2">
-              <div>
-                <p className="text-xs text-gray-500">Email:</p>
-                <p className="text-sm font-mono font-medium text-gray-900">{success.email}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Temporary Password:</p>
-                <p className="text-sm font-mono font-medium text-gray-900">{success.temp_password}</p>
-              </div>
+              <p className="text-sm text-green-800 font-medium mb-2">Admin user created!</p>
+              <p className="text-sm text-green-700">
+                Login credentials have been sent to <strong>{success.email}</strong>. They can use the temporary password in the email to log in.
+              </p>
             </div>
 
             <p className="text-xs text-gray-500">This dialog will close automatically in 5 seconds...</p>
@@ -129,7 +120,7 @@ export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
                 required
               />
               <p className="text-xs text-gray-500 mt-2">
-                A temporary password will be generated and displayed after creation.
+                A temporary password will be generated and emailed to this address.
               </p>
             </div>
 

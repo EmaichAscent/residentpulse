@@ -119,6 +119,8 @@ export default function UserManager() {
   const [enrolling, setEnrolling] = useState(false);
   const [resending, setResending] = useState(null);
   const [communityNames, setCommunityNames] = useState([]);
+  const [sortKey, setSortKey] = useState("email");
+  const [sortDir, setSortDir] = useState("asc");
 
   const fetchUsers = () => {
     fetch("/api/admin/board-members")
@@ -260,9 +262,12 @@ export default function UserManager() {
     }
   };
 
+  const [actionError, setActionError] = useState("");
+
   const handleEnroll = async () => {
     if (!enrollPrompt) return;
     setEnrolling(true);
+    setActionError("");
     try {
       const res = await fetch(`/api/admin/users/${enrollPrompt.userId}/enroll`, {
         method: "POST",
@@ -272,7 +277,7 @@ export default function UserManager() {
       if (!res.ok) throw new Error(data.error);
       setEnrollPrompt(null);
     } catch (err) {
-      alert(err.message);
+      setActionError(err.message);
     } finally {
       setEnrolling(false);
     }
@@ -280,6 +285,7 @@ export default function UserManager() {
 
   const handleResend = async (userId) => {
     setResending(userId);
+    setActionError("");
     try {
       const res = await fetch(`/api/admin/users/${userId}/enroll`, {
         method: "POST",
@@ -289,7 +295,7 @@ export default function UserManager() {
       if (!res.ok) throw new Error(data.error);
       fetchUsers();
     } catch (err) {
-      alert(err.message);
+      setActionError(err.message);
     } finally {
       setResending(null);
     }
@@ -308,18 +314,45 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
     URL.revokeObjectURL(url);
   };
 
-  const filtered = search.trim()
-    ? users.filter((u) => {
-        const q = search.toLowerCase();
-        return (
-          u.email?.toLowerCase().includes(q) ||
-          u.first_name?.toLowerCase().includes(q) ||
-          u.last_name?.toLowerCase().includes(q) ||
-          u.community_name?.toLowerCase().includes(q) ||
-          u.management_company?.toLowerCase().includes(q)
-        );
-      })
-    : users;
+  const toggleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const filtered = useMemo(() => {
+    let list = search.trim()
+      ? users.filter((u) => {
+          const q = search.toLowerCase();
+          return (
+            u.email?.toLowerCase().includes(q) ||
+            u.first_name?.toLowerCase().includes(q) ||
+            u.last_name?.toLowerCase().includes(q) ||
+            u.community_name?.toLowerCase().includes(q) ||
+            u.management_company?.toLowerCase().includes(q)
+          );
+        })
+      : [...users];
+
+    list.sort((a, b) => {
+      let aVal, bVal;
+      if (sortKey === "name") {
+        aVal = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+        bVal = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+      } else {
+        aVal = (a[sortKey] || "").toLowerCase();
+        bVal = (b[sortKey] || "").toLowerCase();
+      }
+      if (aVal < bVal) return sortDir === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return list;
+  }, [users, search, sortKey, sortDir]);
 
   // Show email delivery column if any user has invitation status (active round exists)
   const hasActiveRound = useMemo(() => users.some((u) => u.invite_status), [users]);
@@ -348,6 +381,17 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
             placeholder="Search members..."
             className="input-field-sm flex-1"
           />
+          <a
+            href="/api/admin/board-members/export"
+            className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold rounded-lg transition hover:opacity-90 whitespace-nowrap bg-gray-100 text-gray-700 hover:bg-gray-200"
+            download
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+              <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
+              <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
+            </svg>
+            Export
+          </a>
           <label className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg cursor-pointer transition hover:opacity-90 disabled:opacity-50 whitespace-nowrap" style={{ backgroundColor: "var(--cam-blue)" }}>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
               <path d="M9.25 13.25a.75.75 0 001.5 0V4.636l2.955 3.129a.75.75 0 001.09-1.03l-4.25-4.5a.75.75 0 00-1.09 0l-4.25 4.5a.75.75 0 101.09 1.03L9.25 4.636v8.614z" />
@@ -382,6 +426,14 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
           </button>
         </p>
       </div>
+
+      {/* Action Error Banner */}
+      {actionError && (
+        <div className="p-3 rounded-lg border bg-red-50 border-red-200 flex items-center justify-between">
+          <p className="text-red-700 text-sm">{actionError}</p>
+          <button onClick={() => setActionError("")} className="text-red-400 hover:text-red-600 text-sm ml-4">Dismiss</button>
+        </div>
+      )}
 
       {/* Import Result */}
       {result && (
@@ -503,14 +555,29 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
         </p>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[700px]">
             <thead>
               <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
                 <th className="px-5 py-3 w-8">Trend</th>
-                <th className="px-5 py-3">Name</th>
-                <th className="px-5 py-3">Email</th>
-                <th className="px-5 py-3">Community</th>
-                <th className="px-5 py-3">Company</th>
+                {[
+                  { key: "name", label: "Name" },
+                  { key: "email", label: "Email" },
+                  { key: "community_name", label: "Community" },
+                  { key: "management_company", label: "Company" },
+                ].map((col) => (
+                  <th key={col.key} className="px-5 py-3">
+                    <button
+                      onClick={() => toggleSort(col.key)}
+                      className="inline-flex items-center gap-1 hover:text-gray-600 transition"
+                    >
+                      {col.label}
+                      {sortKey === col.key && (
+                        <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>
+                      )}
+                    </button>
+                  </th>
+                ))}
                 {hasActiveRound && <th className="px-5 py-3 w-24">Invite</th>}
                 <th className="px-5 py-3 w-20"></th>
               </tr>
@@ -669,12 +736,16 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
               ))}
             </tbody>
           </table>
+          </div>
           <div className="px-5 py-3 bg-gray-50 text-xs text-gray-400">
             {filtered.length} member{filtered.length !== 1 ? "s" : ""}
             {search.trim() && ` (${users.length} total)`}
           </div>
         </div>
       )}
+
+      {/* Inactive Members */}
+      <InactiveMembers onReactivate={fetchUsers} />
 
       {/* Info Banner */}
       <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
@@ -683,6 +754,105 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
           Keep your board member list up to date so everyone is included in the next round.
         </p>
       </div>
+    </div>
+  );
+}
+
+function InactiveMembers({ onReactivate }) {
+  const [open, setOpen] = useState(false);
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [reactivating, setReactivating] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/board-members/inactive", { credentials: "include" });
+      if (res.ok) setMembers(await res.json());
+    } catch {}
+    setLoading(false);
+  };
+
+  const handleToggle = () => {
+    if (!open && members.length === 0) load();
+    setOpen(!open);
+  };
+
+  const handleReactivate = async (id) => {
+    setReactivating(id);
+    try {
+      const res = await fetch(`/api/admin/board-members/${id}/reactivate`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        setMembers((prev) => prev.filter((m) => m.id !== id));
+        onReactivate();
+      }
+    } catch {}
+    setReactivating(null);
+  };
+
+  return (
+    <div>
+      <button
+        onClick={handleToggle}
+        className="text-sm text-gray-400 hover:text-gray-600 transition flex items-center gap-1"
+      >
+        <svg
+          className={`w-4 h-4 transition-transform ${open ? "rotate-90" : ""}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+        Inactive Members {members.length > 0 && `(${members.length})`}
+      </button>
+
+      {open && (
+        <div className="mt-3">
+          {loading ? (
+            <p className="text-gray-400 text-sm py-4">Loading...</p>
+          ) : members.length === 0 ? (
+            <p className="text-gray-400 text-sm py-4">No inactive members.</p>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[600px]">
+                <thead>
+                  <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    <th className="px-5 py-3">Name</th>
+                    <th className="px-5 py-3">Email</th>
+                    <th className="px-5 py-3">Community</th>
+                    <th className="px-5 py-3 w-28"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {members.map((m) => (
+                    <tr key={m.id} className="text-gray-400">
+                      <td className="px-5 py-3">
+                        {m.first_name || m.last_name ? `${m.first_name || ""} ${m.last_name || ""}`.trim() : "—"}
+                      </td>
+                      <td className="px-5 py-3">{m.email}</td>
+                      <td className="px-5 py-3">{m.community_name || "—"}</td>
+                      <td className="px-5 py-3">
+                        <button
+                          onClick={() => handleReactivate(m.id)}
+                          disabled={reactivating === m.id}
+                          className="text-xs font-medium hover:underline disabled:opacity-50"
+                          style={{ color: "var(--cam-blue)" }}
+                        >
+                          {reactivating === m.id ? "Reactivating..." : "Reactivate"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

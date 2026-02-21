@@ -1,7 +1,44 @@
 import { Router } from "express";
+import crypto from "crypto";
 import db from "../db.js";
 
 const router = Router();
+
+/**
+ * Verify Resend webhook signature (Svix format).
+ * Returns true if valid or if no secret is configured (graceful degradation).
+ */
+function verifyWebhookSignature(req) {
+  const secret = process.env.RESEND_WEBHOOK_SECRET;
+  if (!secret) return true; // Skip verification if secret not configured
+
+  const svixId = req.headers["svix-id"];
+  const svixTimestamp = req.headers["svix-timestamp"];
+  const svixSignature = req.headers["svix-signature"];
+
+  if (!svixId || !svixTimestamp || !svixSignature) return false;
+
+  // Reject if timestamp is more than 5 minutes old (replay protection)
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - parseInt(svixTimestamp)) > 300) return false;
+
+  // Decode secret (strip "whsec_" prefix, base64-decode)
+  const secretBytes = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+
+  // Sign: "{svix-id}.{svix-timestamp}.{raw body}"
+  const toSign = `${svixId}.${svixTimestamp}.${req.rawBody || JSON.stringify(req.body)}`;
+  const computed = crypto.createHmac("sha256", secretBytes).update(toSign).digest("base64");
+
+  // Svix may send multiple signatures space-separated, each prefixed with "v1,"
+  const candidates = svixSignature.split(" ").map(s => s.replace(/^v1,/, ""));
+  return candidates.some(sig => {
+    try {
+      return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(sig));
+    } catch {
+      return false;
+    }
+  });
+}
 
 /**
  * Resend webhook endpoint — receives email delivery events.
@@ -11,10 +48,16 @@ const router = Router();
  *   URL: https://residentpulse-production.up.railway.app/api/webhooks/resend
  *   Events: email.delivered, email.bounced, email.complained
  *
- * Optional: Set RESEND_WEBHOOK_SECRET env var for signature verification.
+ * Set RESEND_WEBHOOK_SECRET env var for signature verification.
  */
 router.post("/resend", async (req, res) => {
   try {
+    // Verify webhook signature
+    if (!verifyWebhookSignature(req)) {
+      console.warn("Webhook signature verification failed");
+      return res.status(401).json({ error: "Invalid signature" });
+    }
+
     const { type, data } = req.body;
 
     if (!type || !data) {

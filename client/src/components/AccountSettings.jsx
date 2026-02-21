@@ -15,6 +15,12 @@ export default function AccountSettings() {
   const [state, setState] = useState("");
   const [zip, setZip] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [saveMessage, setSaveMessage] = useState(null);
+  const [adminError, setAdminError] = useState("");
+  const [cadenceError, setCadenceError] = useState("");
+  const [pwForm, setPwForm] = useState({ current: "", newPw: "", confirm: "" });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMessage, setPwMessage] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -70,10 +76,10 @@ export default function AccountSettings() {
 
       if (!response.ok) throw new Error("Failed to save");
 
-      alert("Account information updated successfully!");
+      setSaveMessage({ type: "success", text: "Account information updated." });
       loadData();
     } catch (err) {
-      alert("Failed to update account: " + err.message);
+      setSaveMessage({ type: "error", text: "Failed to update account: " + err.message });
     } finally {
       setSaving(false);
     }
@@ -93,9 +99,42 @@ export default function AccountSettings() {
         throw new Error(data.error || "Failed to remove user");
       }
 
+      setAdminError("");
       loadData();
     } catch (err) {
-      alert(err.message);
+      setAdminError(err.message);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPwMessage(null);
+
+    if (pwForm.newPw.length < 8) {
+      setPwMessage({ type: "error", text: "New password must be at least 8 characters." });
+      return;
+    }
+    if (pwForm.newPw !== pwForm.confirm) {
+      setPwMessage({ type: "error", text: "Passwords do not match." });
+      return;
+    }
+
+    setPwSaving(true);
+    try {
+      const res = await fetch("/api/auth/admin/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current_password: pwForm.current, new_password: pwForm.newPw }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to change password");
+      setPwMessage({ type: "success", text: "Password changed successfully." });
+      setPwForm({ current: "", newPw: "", confirm: "" });
+    } catch (err) {
+      setPwMessage({ type: "error", text: err.message });
+    } finally {
+      setPwSaving(false);
     }
   };
 
@@ -235,7 +274,7 @@ export default function AccountSettings() {
             </div>
           </div>
 
-          <div>
+          <div className="flex items-center gap-3">
             <button
               onClick={handleSave}
               disabled={saving}
@@ -243,8 +282,59 @@ export default function AccountSettings() {
             >
               {saving ? "Saving..." : "Save Changes"}
             </button>
+            {saveMessage && (
+              <span className={`text-sm ${saveMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
+                {saveMessage.text}
+              </span>
+            )}
           </div>
         </div>
+      </div>
+
+      {/* Change Password */}
+      <div className="bg-white shadow-md rounded-lg p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">Change Password</h2>
+        <form onSubmit={handleChangePassword} className="space-y-3 max-w-md">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Current Password</label>
+            <input
+              type="password"
+              value={pwForm.current}
+              onChange={(e) => setPwForm({ ...pwForm, current: e.target.value })}
+              className="input-field-sm"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">New Password</label>
+            <input
+              type="password"
+              value={pwForm.newPw}
+              onChange={(e) => setPwForm({ ...pwForm, newPw: e.target.value })}
+              className="input-field-sm"
+              required
+              minLength={8}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Confirm New Password</label>
+            <input
+              type="password"
+              value={pwForm.confirm}
+              onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })}
+              className="input-field-sm"
+              required
+            />
+          </div>
+          {pwMessage && (
+            <p className={`text-sm ${pwMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
+              {pwMessage.text}
+            </p>
+          )}
+          <button type="submit" disabled={pwSaving} className="btn-primary-sm">
+            {pwSaving ? "Changing..." : "Change Password"}
+          </button>
+        </form>
       </div>
 
       {/* Admin Users */}
@@ -260,6 +350,9 @@ export default function AccountSettings() {
           </button>
         </div>
 
+        {adminError && (
+          <p className="text-sm text-red-600 mb-3">{adminError}</p>
+        )}
         <AdminUserList users={adminUsers} onRemove={handleRemoveUser} onUpdate={loadData} />
       </div>
 
@@ -358,7 +451,7 @@ export default function AccountSettings() {
                         loadData();
                       } else {
                         const data = await res.json();
-                        alert(data.error);
+                        setCadenceError(data.error);
                       }
                     }}
                     className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
@@ -389,7 +482,7 @@ export default function AccountSettings() {
                         loadData();
                       } else {
                         const data = await res.json();
-                        alert(data.error);
+                        setCadenceError(data.error);
                       }
                     }}
                     disabled={client.subscription.survey_rounds_per_year < 4}
@@ -407,6 +500,9 @@ export default function AccountSettings() {
                   </button>
                 </div>
               </div>
+              {cadenceError && (
+                <p className="text-sm text-red-600 mt-2">{cadenceError}</p>
+              )}
               <p className="text-xs text-gray-400 mt-2">
                 Changing cadence will recalculate future planned rounds. Already launched rounds are not affected.
               </p>

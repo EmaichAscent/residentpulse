@@ -3,7 +3,7 @@ import crypto from "crypto";
 import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
 import { hashPassword, generatePassword } from "../utils/password.js";
-import { sendInvitation } from "../utils/emailService.js";
+import { sendInvitation, sendNewAdminEmail } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
 import { generateSummary } from "../utils/summaryGenerator.js";
 
@@ -294,6 +294,64 @@ router.get("/board-members", async (req, res) => {
     [req.clientId]
   );
   res.json(users);
+});
+
+// Get inactive (deactivated) board members
+router.get("/board-members/inactive", async (req, res) => {
+  const users = await db.all(
+    `SELECT u.id, u.first_name, u.last_name, u.email,
+            COALESCE(c.community_name, u.community_name) as community_name,
+            u.management_company, u.updated_at
+     FROM users u
+     LEFT JOIN communities c ON c.id = u.community_id
+     WHERE u.client_id = ? AND u.active = FALSE
+     ORDER BY u.updated_at DESC`,
+    [req.clientId]
+  );
+  res.json(users);
+});
+
+// Reactivate an inactive board member
+router.post("/board-members/:id/reactivate", async (req, res) => {
+  const id = Number(req.params.id);
+  const user = await db.get(
+    "SELECT id, active FROM users WHERE id = ? AND client_id = ?",
+    [id, req.clientId]
+  );
+  if (!user) return res.status(404).json({ error: "Member not found" });
+  if (user.active) return res.status(400).json({ error: "Member is already active" });
+
+  await db.run(
+    "UPDATE users SET active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [id]
+  );
+  const updated = await db.get("SELECT * FROM users WHERE id = ?", [id]);
+  res.json(updated);
+});
+
+// Export board members as CSV
+router.get("/board-members/export", async (req, res) => {
+  const users = await db.all(
+    `SELECT u.first_name, u.last_name, u.email,
+            COALESCE(c.community_name, u.community_name) as community_name,
+            u.management_company
+     FROM users u
+     LEFT JOIN communities c ON c.id = u.community_id
+     WHERE u.client_id = ? AND u.active = TRUE
+     ORDER BY u.email`,
+    [req.clientId]
+  );
+
+  const header = "first_name,last_name,email,community_name,management_company";
+  const rows = users.map(u =>
+    [u.first_name || "", u.last_name || "", u.email, u.community_name || "", u.management_company || ""]
+      .map(v => `"${(v || "").replace(/"/g, '""')}"`)
+      .join(",")
+  );
+
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", "attachment; filename=board-members.csv");
+  res.send([header, ...rows].join("\n"));
 });
 
 // Bounce count for active round (lightweight, for tab badge)
@@ -654,17 +712,30 @@ router.post("/users", async (req, res) => {
   const tempPassword = generatePassword(16);
   const passwordHash = await hashPassword(tempPassword);
 
+  // Get company name for email
+  const client = await db.get("SELECT company_name FROM clients WHERE id = ?", [req.clientId]);
+
   // Create admin user
   await db.run(
     "INSERT INTO client_admins (client_id, email, password_hash, first_name, last_name) VALUES (?, ?, ?, ?, ?)",
     [req.clientId, cleanEmail, passwordHash, first_name || null, last_name || null]
   );
 
+  // Send credentials email to new admin
+  try {
+    await sendNewAdminEmail(cleanEmail, tempPassword, {
+      firstName: first_name || null,
+      companyName: client?.company_name || "your company",
+    });
+  } catch (emailErr) {
+    console.error("Failed to send new admin email:", emailErr);
+    // Still return success — admin was created, just email failed
+  }
+
   res.json({
     ok: true,
     email: cleanEmail,
-    temp_password: tempPassword,
-    message: "Admin user created successfully. Share these credentials with the new admin."
+    message: "Admin user created. Login credentials have been sent to their email."
   });
 });
 

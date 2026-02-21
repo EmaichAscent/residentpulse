@@ -585,6 +585,49 @@ router.get("/:id/dashboard", async (req, res) => {
   }
 });
 
+// Export round results as CSV
+router.get("/:id/export", async (req, res) => {
+  try {
+    const roundId = Number(req.params.id);
+
+    const round = await db.get(
+      "SELECT id, round_number FROM survey_rounds WHERE id = ? AND client_id = ?",
+      [roundId, req.clientId]
+    );
+    if (!round) return res.status(404).json({ error: "Round not found" });
+
+    const sessions = await db.all(
+      `SELECT s.email, s.nps_score, s.completed, s.summary,
+              COALESCE(sc.community_name, s.community_name) as community_name,
+              s.created_at, u.first_name, u.last_name
+       FROM sessions s
+       LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN communities sc ON sc.id = s.community_id
+       WHERE s.round_id = ? AND s.client_id = ?
+       ORDER BY s.created_at DESC`,
+      [roundId, req.clientId]
+    );
+
+    const header = "first_name,last_name,email,community_name,nps_score,completed,summary,date";
+    const rows = sessions.map(s =>
+      [
+        s.first_name || "", s.last_name || "", s.email || "",
+        s.community_name || "", s.nps_score ?? "", s.completed ? "Yes" : "No",
+        s.summary || "", s.created_at ? new Date(s.created_at).toLocaleDateString("en-US") : "",
+      ]
+        .map(v => `"${String(v).replace(/"/g, '""')}"`)
+        .join(",")
+    );
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename=round-${round.round_number}-results.csv`);
+    res.send([header, ...rows].join("\n"));
+  } catch (err) {
+    console.error("Error exporting round results:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Close a round early
 router.post("/:id/close", async (req, res) => {
   try {

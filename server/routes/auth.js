@@ -217,6 +217,51 @@ router.post("/admin/reset-password", async (req, res) => {
   }
 });
 
+// Change password (logged-in client admin)
+router.post("/admin/change-password", async (req, res) => {
+  if (!req.session?.user || req.session.user.role !== "client_admin") {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { current_password, new_password } = req.body;
+
+  if (!current_password || !new_password) {
+    return res.status(400).json({ error: "Current password and new password are required" });
+  }
+
+  if (new_password.length < 8) {
+    return res.status(400).json({ error: "New password must be at least 8 characters" });
+  }
+
+  try {
+    const admin = await db.get("SELECT id, password_hash FROM client_admins WHERE id = ?", [req.session.user.id]);
+    if (!admin) {
+      return res.status(404).json({ error: "Account not found" });
+    }
+
+    const isValid = await comparePassword(current_password, admin.password_hash);
+    if (!isValid) {
+      return res.status(401).json({ error: "Current password is incorrect" });
+    }
+
+    const newHash = await hashPassword(new_password);
+    await db.run("UPDATE client_admins SET password_hash = ? WHERE id = ?", [newHash, admin.id]);
+
+    await logActivity({
+      actorType: "client_admin",
+      actorId: admin.id,
+      actorEmail: req.session.user.email,
+      action: "change_password",
+      clientId: req.session.user.client_id,
+    });
+
+    res.json({ message: "Password changed successfully" });
+  } catch (err) {
+    console.error("Change password error:", err);
+    res.status(500).json({ error: "An error occurred. Please try again." });
+  }
+});
+
 // Logout (works for both SuperAdmin and Client Admin)
 router.post("/logout", (req, res) => {
   req.session.destroy((err) => {

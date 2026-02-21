@@ -48,6 +48,7 @@ export default function AdminUserList({ users, onRemove, onUpdate }) {
 
   return (
     <div className="overflow-hidden border border-gray-200 rounded-lg">
+      <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
@@ -141,6 +142,7 @@ export default function AdminUserList({ users, onRemove, onUpdate }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

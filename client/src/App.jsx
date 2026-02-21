@@ -1,4 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import ErrorBoundary from "./components/ErrorBoundary";
+import NotFoundPage from "./pages/NotFoundPage";
 import ChatPage from "./pages/ChatPage";
 import TokenSurveyPage from "./pages/TokenSurveyPage";
 import AdminPage from "./pages/AdminPage";
@@ -21,6 +23,7 @@ import AccountSettings from "./components/AccountSettings";
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <div className="min-h-screen bg-gray-50">
       <Routes>
         {/* Public routes */}
@@ -77,7 +80,10 @@ export default function App() {
           <Route path="members" element={<UserManager />} />
           <Route path="account" element={<AccountSettings />} />
         </Route>
+        {/* 404 catch-all */}
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </div>
+    </ErrorBoundary>
   );
 }

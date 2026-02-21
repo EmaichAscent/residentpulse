@@ -417,6 +417,13 @@ export default function SignUpPage() {
                 Already have an account? Log in
               </Link>
             </div>
+
+            <p className="text-xs text-gray-400 text-center mt-4">
+              By creating an account, you agree to our{" "}
+              <a href="/legal/terms-of-service.html" target="_blank" className="underline hover:text-gray-600">Terms of Service</a>
+              {" "}and{" "}
+              <a href="/legal/privacy-policy.html" target="_blank" className="underline hover:text-gray-600">Privacy Policy</a>.
+            </p>
           </form>
         </div>
       </div>

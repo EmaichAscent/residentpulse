@@ -459,7 +459,8 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
         </p>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[700px]">
             <thead>
               <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
                 <th className="px-5 py-3">Community</th>
@@ -596,6 +597,7 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
               )}
             </tbody>
           </table>
+          </div>
           <div className="px-5 py-3 bg-gray-50 text-xs text-gray-400">
             {filtered.length} communit{filtered.length !== 1 ? "ies" : "y"}
             {search.trim() && ` (${visibleCommunities.length} shown)`}

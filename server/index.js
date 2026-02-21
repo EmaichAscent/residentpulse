@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import helmet from "helmet";
 import cors from "cors";
 import session from "express-session";
 import fileUpload from "express-fileupload";
@@ -25,6 +26,12 @@ const PORT = process.env.PORT || 3001;
 // Trust Railway's reverse proxy for rate limiting and session management
 app.set('trust proxy', 1);
 
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Disabled — SPA serves its own inline styles/scripts
+  crossOriginEmbedderPolicy: false, // Allow loading external resources (e.g. fonts)
+}));
+
 // Session configuration
 app.use(session({
   secret: process.env.SESSION_SECRET || "residentpulse-dev-secret-change-in-production",
@@ -47,7 +54,14 @@ app.use(cors({
   origin: corsOrigin,
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    // Save raw body for webhook signature verification
+    if (req.url.startsWith("/resend") || req.originalUrl?.startsWith("/api/webhooks")) {
+      req.rawBody = buf.toString();
+    }
+  }
+}));
 app.use(fileUpload());
 
 // Auth routes (login/logout)

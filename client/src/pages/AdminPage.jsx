@@ -136,6 +136,16 @@ export default function AdminPage() {
       {/* Child routes render here */}
       <Outlet context={{ user, isPaidTier }} />
       </div>
+      {/* Footer */}
+      <footer className="max-w-4xl mx-auto px-4 py-6 mt-8 border-t border-gray-200">
+        <div className="flex items-center justify-between text-xs text-gray-400">
+          <span>&copy; {new Date().getFullYear()} CAM Ascent, LLC</span>
+          <div className="flex gap-4">
+            <a href="/legal/terms-of-service.html" target="_blank" className="hover:text-gray-600">Terms of Service</a>
+            <a href="/legal/privacy-policy.html" target="_blank" className="hover:text-gray-600">Privacy Policy</a>
+          </div>
+        </div>
+      </footer>
       <HelpPanel />
     </div>
   );
