@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function AdminUserList({ users, onRemove, onUpdate }) {
+export default function AdminUserList({ users, onRemove, onUpdate, currentUserEmail, onChangePassword }) {
   const [editingId, setEditingId] = useState(null);
   const [editFirst, setEditFirst] = useState("");
   const [editLast, setEditLast] = useState("");
@@ -129,6 +129,14 @@ export default function AdminUserList({ users, onRemove, onUpdate }) {
                     >
                       Edit
                     </button>
+                    {currentUserEmail && user.email === currentUserEmail && onChangePassword && (
+                      <button
+                        onClick={onChangePassword}
+                        className="text-sm font-medium text-gray-500 hover:text-gray-700 hover:underline"
+                      >
+                        Password
+                      </button>
+                    )}
                     <button
                       onClick={() => onRemove(user.id)}
                       className="text-sm font-medium text-red-600 hover:text-red-900"

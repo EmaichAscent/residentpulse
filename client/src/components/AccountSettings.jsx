@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useOutletContext } from "react-router-dom";
 import AdminUserList from "./AdminUserList";
 import AddAdminUserModal from "./AddAdminUserModal";
 
@@ -22,6 +23,7 @@ export default function AccountSettings() {
   const [pwForm, setPwForm] = useState({ current: "", newPw: "", confirm: "" });
   const [pwSaving, setPwSaving] = useState(false);
   const [pwMessage, setPwMessage] = useState(null);
+  const { user: sessionUser } = useOutletContext();
 
   useEffect(() => {
     loadData();
@@ -284,12 +286,6 @@ export default function AccountSettings() {
             >
               {saving ? "Saving..." : "Save Changes"}
             </button>
-            <button
-              onClick={() => { setPwMessage(null); setPwForm({ current: "", newPw: "", confirm: "" }); setShowPwModal(true); }}
-              className="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-            >
-              Change Password
-            </button>
             {saveMessage && (
               <span className={`text-sm ${saveMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
                 {saveMessage.text}
@@ -371,7 +367,13 @@ export default function AccountSettings() {
         {adminError && (
           <p className="text-sm text-red-600 mb-3">{adminError}</p>
         )}
-        <AdminUserList users={adminUsers} onRemove={handleRemoveUser} onUpdate={loadData} />
+        <AdminUserList
+          users={adminUsers}
+          onRemove={handleRemoveUser}
+          onUpdate={loadData}
+          currentUserEmail={sessionUser?.email}
+          onChangePassword={() => { setPwMessage(null); setPwForm({ current: "", newPw: "", confirm: "" }); setShowPwModal(true); }}
+        />
       </div>
 
       {/* Subscription */}
