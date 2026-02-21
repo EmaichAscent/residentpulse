@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import db from "../db.js";
+import { notifyBouncedInvitation } from "../utils/emailService.js";
 
 const router = Router();
 
@@ -105,6 +106,27 @@ router.post("/resend", async (req, res) => {
       console.log(`Webhook: no invitation_log found for Resend email ID ${emailId}`);
     } else {
       console.log(`Webhook: ${type} for email ${emailId} → delivery_status=${deliveryStatus}`);
+
+      // Notify admins on bounce
+      if (deliveryStatus === "bounced") {
+        const invite = await db.get(
+          `SELECT il.client_id, u.email as member_email, u.first_name, u.last_name
+           FROM invitation_logs il
+           JOIN users u ON u.id = il.user_id
+           WHERE il.resend_email_id = ?`,
+          [emailId]
+        );
+        if (invite) {
+          const memberName = [invite.first_name, invite.last_name].filter(Boolean).join(" ");
+          notifyBouncedInvitation({
+            clientId: invite.client_id,
+            memberEmail: invite.member_email,
+            memberName,
+            bounceType,
+            db,
+          }).catch(err => console.error("Failed to send bounce notification:", err.message));
+        }
+      }
     }
 
     res.json({ received: true });

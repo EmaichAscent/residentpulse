@@ -5,6 +5,18 @@ import { notifyNewResponse } from "../utils/emailService.js";
 
 const router = Router();
 
+// Serve client logo as image (public — used by survey page)
+router.get("/logo/:clientId", async (req, res) => {
+  const client = await db.get("SELECT logo_base64, logo_mime_type FROM clients WHERE id = ?", [Number(req.params.clientId)]);
+  if (!client?.logo_base64) {
+    return res.status(404).json({ error: "No logo" });
+  }
+  const buffer = Buffer.from(client.logo_base64, "base64");
+  res.setHeader("Content-Type", client.logo_mime_type);
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.send(buffer);
+});
+
 // Get session details including messages
 router.get("/:id", async (req, res) => {
   const id = Number(req.params.id);
@@ -67,6 +79,12 @@ router.get("/validate-token/:token", async (req, res) => {
       }
     }
 
+    // Check if client has a logo
+    const clientInfo = await db.get(
+      "SELECT company_name, CASE WHEN logo_base64 IS NOT NULL THEN true ELSE false END as has_logo FROM clients WHERE id = ?",
+      [user.client_id]
+    );
+
     // Return user data (without sensitive info)
     res.json({
       email: user.email,
@@ -75,7 +93,9 @@ router.get("/validate-token/:token", async (req, res) => {
       community_name: user.community_name,
       management_company: user.management_company,
       user_id: user.id,
-      client_id: user.client_id
+      client_id: user.client_id,
+      company_name: clientInfo?.company_name || "",
+      has_logo: clientInfo?.has_logo || false,
     });
 
   } catch (err) {

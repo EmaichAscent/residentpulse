@@ -258,6 +258,7 @@ router.post("/:id/enroll", requireClientAdmin, async (req, res) => {
       closesAt: expiresAt,
       roundNumber: activeRound.round_number,
       companyName: client?.company_name || "",
+      clientId: req.clientId,
     });
 
     await db.run(

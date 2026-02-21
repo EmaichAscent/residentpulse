@@ -57,7 +57,10 @@ export default function TokenSurveyPage() {
           email: userData.email,
           firstName: userData.first_name,
           community: userData.community_name,
-          company: userData.management_company
+          company: userData.management_company,
+          clientId: userData.client_id,
+          hasLogo: userData.has_logo,
+          companyName: userData.company_name,
         }
       });
 

@@ -106,8 +106,12 @@ router.get("/account", async (req, res) => {
     surveyRoundsCount = legacyRounds?.count || 0;
   }
 
+  // Don't send logo blob with account data — use separate endpoint
+  const { logo_base64, ...clientWithoutLogo } = client;
+
   res.json({
-    ...client,
+    ...clientWithoutLogo,
+    has_logo: !!logo_base64,
     subscription: subscription || null,
     usage: {
       member_count: memberCount?.count || 0,
@@ -129,6 +133,66 @@ router.put("/account", async (req, res) => {
     [company_name, address_line1 || null, address_line2 || null, city || null, state || null, zip || null, phone_number || null, req.clientId]
   );
 
+  res.json({ ok: true });
+});
+
+// Upload client logo (base64, max 500KB, landscape/square only, max 3:1 aspect ratio)
+router.post("/account/logo", async (req, res) => {
+  const { logo_base64, logo_mime_type, width, height } = req.body;
+
+  if (!logo_base64 || !logo_mime_type) {
+    return res.status(400).json({ error: "Logo data and MIME type are required" });
+  }
+
+  // Validate MIME type
+  const allowedTypes = ["image/png", "image/jpeg", "image/svg+xml"];
+  if (!allowedTypes.includes(logo_mime_type)) {
+    return res.status(400).json({ error: "Only PNG, JPG, and SVG files are accepted" });
+  }
+
+  // Validate file size (~500KB base64 ≈ ~680KB encoded string)
+  if (logo_base64.length > 700000) {
+    return res.status(400).json({ error: "Logo file must be under 500KB" });
+  }
+
+  // Validate aspect ratio (client sends width/height)
+  if (width && height) {
+    const ratio = width / height;
+    if (ratio < 0.8) {
+      return res.status(400).json({ error: "Portrait logos are not supported. Please use a landscape or square image." });
+    }
+    if (ratio > 3) {
+      return res.status(400).json({ error: "Logo is too wide. Maximum aspect ratio is 3:1." });
+    }
+  }
+
+  await db.run(
+    "UPDATE clients SET logo_base64 = ?, logo_mime_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [logo_base64, logo_mime_type, req.clientId]
+  );
+
+  res.json({ ok: true });
+});
+
+// Serve client logo as image
+router.get("/account/logo", async (req, res) => {
+  const client = await db.get("SELECT logo_base64, logo_mime_type FROM clients WHERE id = ?", [req.clientId]);
+  if (!client?.logo_base64) {
+    return res.status(404).json({ error: "No logo uploaded" });
+  }
+
+  const buffer = Buffer.from(client.logo_base64, "base64");
+  res.setHeader("Content-Type", client.logo_mime_type);
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.send(buffer);
+});
+
+// Delete client logo
+router.delete("/account/logo", async (req, res) => {
+  await db.run(
+    "UPDATE clients SET logo_base64 = NULL, logo_mime_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [req.clientId]
+  );
   res.json({ ok: true });
 });
 
@@ -663,7 +727,7 @@ router.post("/board-members/invite", async (req, res) => {
         );
 
         // Send email via Resend
-        const emailResult = await sendInvitation(user, token);
+        const emailResult = await sendInvitation(user, token, { clientId: req.clientId });
 
         // Log invitation with Resend email ID
         await db.run(

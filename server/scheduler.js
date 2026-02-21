@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import db from "./db.js";
-import { sendReminder, notifyRoundConcluded } from "./utils/emailService.js";
+import { sendReminder, notifyRoundConcluded, notifyRoundApproaching } from "./utils/emailService.js";
 import { generateRoundInsights } from "./utils/insightGenerator.js";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -119,7 +119,7 @@ async function sendRoundReminders(round, dayNumber) {
     if (!user.invitation_token) continue;
 
     try {
-      await sendReminder(user, user.invitation_token, { daysRemaining, companyName });
+      await sendReminder(user, user.invitation_token, { daysRemaining, companyName, clientId: round.client_id });
     } catch (err) {
       console.error(`Failed to send day ${dayNumber} reminder to ${user.email}:`, err.message);
     }
@@ -132,12 +132,58 @@ async function sendRoundReminders(round, dayNumber) {
 }
 
 /**
+ * Notify admins when a planned round is approaching (14 days before and day-of)
+ */
+async function sendApproachingRoundReminders() {
+  // 14-day reminder
+  const day14Rounds = await db.all(
+    `SELECT id, client_id, round_number, scheduled_date FROM survey_rounds
+     WHERE status = 'planned'
+       AND admin_reminder_14_sent = false
+       AND scheduled_date <= CURRENT_DATE + INTERVAL '14 days'
+       AND scheduled_date > CURRENT_DATE`
+  );
+
+  for (const round of day14Rounds) {
+    const daysUntil = Math.ceil((new Date(round.scheduled_date) - new Date()) / (1000 * 60 * 60 * 24));
+    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE", [round.client_id]);
+    await notifyRoundApproaching({
+      clientId: round.client_id, roundNumber: round.round_number,
+      scheduledDate: round.scheduled_date, daysUntil,
+      memberCount: memberCount?.count || 0, db
+    });
+    await db.run("UPDATE survey_rounds SET admin_reminder_14_sent = true WHERE id = ?", [round.id]);
+    console.log(`14-day approaching reminder sent for round ${round.round_number} (client ${round.client_id})`);
+  }
+
+  // Day-of reminder
+  const dayOfRounds = await db.all(
+    `SELECT id, client_id, round_number, scheduled_date FROM survey_rounds
+     WHERE status = 'planned'
+       AND admin_reminder_0_sent = false
+       AND scheduled_date <= CURRENT_DATE`
+  );
+
+  for (const round of dayOfRounds) {
+    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE", [round.client_id]);
+    await notifyRoundApproaching({
+      clientId: round.client_id, roundNumber: round.round_number,
+      scheduledDate: round.scheduled_date, daysUntil: 0,
+      memberCount: memberCount?.count || 0, db
+    });
+    await db.run("UPDATE survey_rounds SET admin_reminder_0_sent = true WHERE id = ?", [round.id]);
+    console.log(`Day-of approaching reminder sent for round ${round.round_number} (client ${round.client_id})`);
+  }
+}
+
+/**
  * Start the scheduler - runs daily at 9:00 AM UTC
  */
 export function startScheduler() {
   cron.schedule("0 9 * * *", async () => {
     console.log("Running daily survey round scheduler...");
     try {
+      await sendApproachingRoundReminders();
       await concludeExpiredRounds();
       await sendReminders();
       console.log("Daily scheduler completed successfully");

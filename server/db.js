@@ -239,6 +239,26 @@ async function initializeSchema() {
       console.log("Community deactivation and snapshots migration skipped (already applied or file not found)");
     }
 
+    // Run round approaching reminders migration
+    try {
+      const roundRemindersPath = join(__dirname, "migrations", "add-round-approaching-reminders.sql");
+      const roundRemindersSQL = readFileSync(roundRemindersPath, "utf-8");
+      await client.query(roundRemindersSQL);
+      console.log("Round approaching reminders migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Round approaching reminders migration skipped (already applied or file not found)");
+    }
+
+    // Run client logo migration
+    try {
+      const logoPath = join(__dirname, "migrations", "add-client-logo.sql");
+      const logoSQL = readFileSync(logoPath, "utf-8");
+      await client.query(logoSQL);
+      console.log("Client logo migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Client logo migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");
   } catch (err) {

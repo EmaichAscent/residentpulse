@@ -47,6 +47,7 @@ function buildInvitationEmail(user, surveyLink, roundInfo) {
   const firstName = user.first_name || "Board Member";
   const communityName = user.community_name || "your community";
   const managementCompany = roundInfo?.companyName || user.management_company || "your management company";
+  const logoUrl = roundInfo?.logoUrl || null;
 
   return `
     <!DOCTYPE html>
@@ -58,6 +59,11 @@ function buildInvitationEmail(user, surveyLink, roundInfo) {
     </head>
     <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+        ${logoUrl ? `
+        <!-- Client Logo -->
+        <div style="padding: 24px 20px 0; text-align: center;">
+          <img src="${logoUrl}" alt="${managementCompany}" style="max-height: 60px; max-width: 200px; object-fit: contain;" />
+        </div>` : ""}
         <!-- Header Banner -->
         <div style="background-color: #3B9FE7; padding: 24px 20px; text-align: center;">
           <h1 style="color: #ffffff; font-size: 28px; margin: 0 0 4px 0; font-weight: bold;">ResidentPulse</h1>
@@ -137,6 +143,11 @@ export async function sendInvitation(user, token, roundInfo) {
   // Remove trailing slash from base URL to prevent double slashes
   const surveyBaseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
   const surveyLink = `${surveyBaseUrl}/survey?token=${token}`;
+
+  // Build logo URL if clientId is provided
+  if (roundInfo?.clientId && !roundInfo.logoUrl) {
+    roundInfo.logoUrl = `${surveyBaseUrl}/api/sessions/logo/${roundInfo.clientId}`;
+  }
 
   const emailHtml = buildInvitationEmail(user, surveyLink, roundInfo);
   const companyName = roundInfo?.companyName || user.management_company || "ResidentPulse";
@@ -367,7 +378,7 @@ export async function sendVerificationEmail(email, token) {
  * @param {number} daysRemaining - Days left in the survey round
  * @returns {string} HTML email template
  */
-function buildReminderEmail(user, surveyLink, daysRemaining, companyName) {
+function buildReminderEmail(user, surveyLink, daysRemaining, companyName, logoUrl) {
   const firstName = user.first_name || "Board Member";
   const communityName = user.community_name || "your community";
   const mgmtCompany = companyName || user.management_company || "your management company";
@@ -382,6 +393,11 @@ function buildReminderEmail(user, surveyLink, daysRemaining, companyName) {
     </head>
     <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+        ${logoUrl ? `
+        <!-- Client Logo -->
+        <div style="padding: 24px 20px 0; text-align: center;">
+          <img src="${logoUrl}" alt="${mgmtCompany}" style="max-height: 60px; max-width: 200px; object-fit: contain;" />
+        </div>` : ""}
         <!-- Header Banner -->
         <div style="background-color: #3B9FE7; padding: 24px 20px; text-align: center;">
           <h1 style="color: #ffffff; font-size: 28px; margin: 0 0 4px 0; font-weight: bold;">ResidentPulse</h1>
@@ -449,11 +465,14 @@ function buildReminderEmail(user, surveyLink, daysRemaining, companyName) {
  * @param {Object} options - { daysRemaining }
  * @returns {Promise<Object>} Resend response with email ID
  */
-export async function sendReminder(user, token, { daysRemaining, companyName }) {
+export async function sendReminder(user, token, { daysRemaining, companyName, clientId }) {
   const surveyBaseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
   const surveyLink = `${surveyBaseUrl}/survey?token=${token}`;
 
-  const emailHtml = buildReminderEmail(user, surveyLink, daysRemaining, companyName);
+  // Build logo URL if clientId is provided
+  const logoUrl = clientId ? `${surveyBaseUrl}/api/sessions/logo/${clientId}` : null;
+
+  const emailHtml = buildReminderEmail(user, surveyLink, daysRemaining, companyName, logoUrl);
   const fromName = companyName || user.management_company || "ResidentPulse";
 
   try {
@@ -698,4 +717,117 @@ export async function notifyRoundConcluded({ clientId, roundNumber, totalRespons
   }
 }
 
-export default { sendInvitation, sendPasswordResetEmail, sendVerificationEmail, sendReminder, sendNewAdminEmail, notifyRoundLaunched, notifyNewResponse, notifyRoundConcluded };
+/**
+ * Notify all admins that a critical alert was triggered during a survey
+ */
+export async function notifyCriticalAlert({ clientId, alertType, severity, description, respondentName, communityName, roundNumber, db }) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+  const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
+
+  const alertLabels = {
+    contract_termination: "Contract Termination",
+    legal_threat: "Legal Threat",
+    safety_concern: "Safety Concern",
+    other_critical: "Critical Concern",
+  };
+  const alertLabel = alertLabels[alertType] || "Critical Alert";
+  const bannerColor = severity === "critical" ? "#dc2626" : "#f59e0b";
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+      <div style="background: ${bannerColor}; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 22px;">Critical Alert: ${alertLabel}</h1>
+      </div>
+      <div style="padding: 24px 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hi {{firstName}},</p>
+        <p>A <strong>${severity}</strong> alert was flagged during a Round ${roundNumber || "—"} survey response.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px 0; color: #666;">Alert type</td><td style="padding: 8px 0; font-weight: bold;">${alertLabel}</td></tr>
+          <tr><td style="padding: 8px 0; color: #666;">Board member</td><td style="padding: 8px 0; font-weight: bold;">${respondentName || "Anonymous"}</td></tr>
+          ${communityName ? `<tr><td style="padding: 8px 0; color: #666;">Community</td><td style="padding: 8px 0; font-weight: bold;">${communityName}</td></tr>` : ""}
+        </table>
+        <p style="background: #fef2f2; border-left: 3px solid ${bannerColor}; padding: 12px; border-radius: 0 6px 6px 0;">${description}</p>
+        <a href="${baseUrl}/admin" style="display: inline-block; background: #3B9FE7; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-top: 8px;">View Dashboard</a>
+        <p style="margin-top: 24px; font-size: 12px; color: #999;">ResidentPulse by CAMAscent</p>
+      </div>
+    </div>`;
+
+  for (const admin of admins) {
+    const personalized = html.replace("{{firstName}}", admin.first_name || "there");
+    await sendAdminNotification(admin.email, `ALERT: ${alertLabel} — ${respondentName || "Board member"}`, personalized);
+  }
+}
+
+/**
+ * Notify all admins that a board member invitation bounced
+ */
+export async function notifyBouncedInvitation({ clientId, memberEmail, memberName, bounceType, db }) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+  const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+      <div style="background: #f59e0b; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 22px;">Invitation Bounced</h1>
+      </div>
+      <div style="padding: 24px 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hi {{firstName}},</p>
+        <p>A survey invitation could not be delivered:</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px 0; color: #666;">Board member</td><td style="padding: 8px 0; font-weight: bold;">${memberName || "—"}</td></tr>
+          <tr><td style="padding: 8px 0; color: #666;">Email</td><td style="padding: 8px 0; font-weight: bold;">${memberEmail}</td></tr>
+          <tr><td style="padding: 8px 0; color: #666;">Bounce type</td><td style="padding: 8px 0; font-weight: bold;">${bounceType || "unknown"}</td></tr>
+        </table>
+        <p>Please update their email address in the Members tab, then re-enroll them in the active round.</p>
+        <a href="${baseUrl}/admin/members" style="display: inline-block; background: #3B9FE7; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-top: 8px;">Go to Members</a>
+        <p style="margin-top: 24px; font-size: 12px; color: #999;">ResidentPulse by CAMAscent</p>
+      </div>
+    </div>`;
+
+  for (const admin of admins) {
+    const personalized = html.replace("{{firstName}}", admin.first_name || "there");
+    await sendAdminNotification(admin.email, `Bounced invitation — ${memberEmail}`, personalized);
+  }
+}
+
+/**
+ * Notify all admins that a round is approaching (14 days or day-of)
+ */
+export async function notifyRoundApproaching({ clientId, roundNumber, scheduledDate, daysUntil, memberCount, db }) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+  const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
+  const dateStr = new Date(scheduledDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const isDayOf = daysUntil <= 0;
+  const subject = isDayOf
+    ? `Round ${roundNumber} is scheduled for today`
+    : `Round ${roundNumber} launches in ${daysUntil} days`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+      <div style="background: #3B9FE7; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 22px;">${isDayOf ? "Round Launching Today" : "Upcoming Survey Round"}</h1>
+      </div>
+      <div style="padding: 24px 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hi {{firstName}},</p>
+        <p>${isDayOf
+          ? `Survey Round ${roundNumber} is scheduled to launch <strong>today</strong>.`
+          : `Survey Round ${roundNumber} is scheduled for <strong>${dateStr}</strong> — ${daysUntil} days from now.`
+        }</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px 0; color: #666;">Round</td><td style="padding: 8px 0; font-weight: bold;">${roundNumber}</td></tr>
+          <tr><td style="padding: 8px 0; color: #666;">Scheduled date</td><td style="padding: 8px 0; font-weight: bold;">${dateStr}</td></tr>
+          <tr><td style="padding: 8px 0; color: #666;">Active board members</td><td style="padding: 8px 0; font-weight: bold;">${memberCount}</td></tr>
+        </table>
+        <p>Now is a good time to review your board member list and make sure email addresses are up to date.</p>
+        <a href="${baseUrl}/admin/members" style="display: inline-block; background: #3B9FE7; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-top: 8px;">Review Members</a>
+        <p style="margin-top: 24px; font-size: 12px; color: #999;">ResidentPulse by CAMAscent</p>
+      </div>
+    </div>`;
+
+  for (const admin of admins) {
+    const personalized = html.replace("{{firstName}}", admin.first_name || "there");
+    await sendAdminNotification(admin.email, subject, personalized);
+  }
+}
+
+export default { sendInvitation, sendPasswordResetEmail, sendVerificationEmail, sendReminder, sendNewAdminEmail, notifyRoundLaunched, notifyNewResponse, notifyRoundConcluded, notifyCriticalAlert, notifyBouncedInvitation, notifyRoundApproaching };

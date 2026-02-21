@@ -8,7 +8,7 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 export default function ChatPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { sessionId, email, firstName, community, company } = location.state || {};
+  const { sessionId, email, firstName, community, company, clientId, hasLogo, companyName } = location.state || {};
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -195,8 +195,18 @@ export default function ChatPage() {
         {/* Header */}
         <div className="bg-white border-b px-5 py-4 flex-shrink-0 flex items-center">
           <div className="w-1/2">
-            <h1 className="text-xl font-bold text-gray-900">ResidentPulse</h1>
-            <img src="/CAMAscent.png" alt="CAM Ascent" className="h-10 object-contain mt-1" />
+            {hasLogo && clientId ? (
+              <img
+                src={`/api/sessions/logo/${clientId}`}
+                alt={companyName || "Company logo"}
+                className="h-12 max-w-[180px] object-contain"
+                onError={(e) => { e.target.style.display = "none"; e.target.nextElementSibling.style.display = "block"; }}
+              />
+            ) : null}
+            <div style={hasLogo && clientId ? { display: "none" } : {}}>
+              <h1 className="text-xl font-bold text-gray-900">ResidentPulse</h1>
+              <img src="/CAMAscent.png" alt="CAM Ascent" className="h-10 object-contain mt-1" />
+            </div>
           </div>
           <div className="w-1/2 text-right">
             <p className="font-semibold text-gray-900">{email}</p>
@@ -245,6 +255,14 @@ export default function ChatPage() {
         )}
 
         <div ref={bottomRef} />
+        </div>
+
+        {/* Powered by footer */}
+        <div className="bg-gray-50 border-t px-5 py-2 flex-shrink-0 flex items-center justify-center gap-2">
+          <span className="text-xs text-gray-400">Powered by</span>
+          <span className="text-xs font-semibold text-gray-500">ResidentPulse</span>
+          <span className="text-xs text-gray-300">|</span>
+          <img src="/CAMAscent.png" alt="CAM Ascent" className="h-5 object-contain" />
         </div>
 
         {/* Bottom bar: input + end chat */}

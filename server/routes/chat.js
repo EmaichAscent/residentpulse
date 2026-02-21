@@ -1,6 +1,7 @@
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
+import { notifyCriticalAlert } from "../utils/emailService.js";
 
 const router = Router();
 const anthropic = new Anthropic();
@@ -154,6 +155,20 @@ or
   );
 
   console.log(`CRITICAL ALERT created for client ${session.client_id}, session ${session.id}: ${parsed.alert_type}`);
+
+  // Notify admins immediately
+  const respondentName = [session.first_name, session.last_name].filter(Boolean).join(" ") || "A board member";
+  const round = session.round_id ? await db.get("SELECT round_number FROM survey_rounds WHERE id = ?", [session.round_id]) : null;
+  notifyCriticalAlert({
+    clientId: session.client_id,
+    alertType: parsed.alert_type || "other_critical",
+    severity: parsed.severity || "high",
+    description: parsed.description || "Critical concern detected",
+    respondentName,
+    communityName: session.community_name || "",
+    roundNumber: round?.round_number || null,
+    db,
+  }).catch(err => console.error("Failed to send critical alert notification:", err.message));
 }
 
 export default router;

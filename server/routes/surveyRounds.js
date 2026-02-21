@@ -818,6 +818,7 @@ router.post("/:id/launch", async (req, res) => {
           closesAt: closesAt.toISOString(),
           roundNumber: round.round_number,
           companyName,
+          clientId: req.clientId,
         });
 
         // Log invitation with round_id and Resend email ID

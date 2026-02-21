@@ -27,6 +27,9 @@ export default function AccountSettings() {
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState("");
   const { user: sessionUser } = useOutletContext();
 
   useEffect(() => {
@@ -168,6 +171,79 @@ export default function AccountSettings() {
     }
   };
 
+  const handleLogoSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = "";
+    setLogoError("");
+
+    const allowedTypes = ["image/png", "image/jpeg", "image/svg+xml"];
+    if (!allowedTypes.includes(file.type)) {
+      setLogoError("Only PNG, JPG, and SVG files are accepted.");
+      return;
+    }
+    if (file.size > 500 * 1024) {
+      setLogoError("Logo must be under 500KB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      // Check dimensions for raster images
+      if (file.type !== "image/svg+xml") {
+        const img = new Image();
+        img.onload = () => {
+          const ratio = img.width / img.height;
+          if (ratio < 0.8) {
+            setLogoError("Portrait logos are not supported. Use a landscape or square image.");
+            return;
+          }
+          if (ratio > 3) {
+            setLogoError("Logo is too wide. Maximum aspect ratio is 3:1.");
+            return;
+          }
+          uploadLogo(dataUrl, file.type, img.width, img.height);
+        };
+        img.src = dataUrl;
+      } else {
+        uploadLogo(dataUrl, file.type);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const uploadLogo = async (dataUrl, mimeType, width, height) => {
+    setLogoUploading(true);
+    const base64 = dataUrl.split(",")[1];
+    try {
+      const res = await fetch("/api/admin/account/logo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logo_base64: base64, logo_mime_type: mimeType, width, height }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setLogoPreview(dataUrl);
+      setClient((prev) => ({ ...prev, has_logo: true }));
+    } catch (err) {
+      setLogoError(err.message);
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    try {
+      await fetch("/api/admin/account/logo", { method: "DELETE", credentials: "include" });
+      setLogoPreview(null);
+      setClient((prev) => ({ ...prev, has_logo: false }));
+    } catch (err) {
+      console.error("Failed to remove logo:", err);
+    }
+  };
+
   if (loading) {
     return <p className="text-gray-400 text-center py-10">Loading account information...</p>;
   }
@@ -203,6 +279,33 @@ export default function AccountSettings() {
                 placeholder="(555) 123-4567"
               />
             </div>
+          </div>
+
+          {/* Company Logo */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Company Logo
+            </label>
+            <div className="flex items-center gap-4">
+              {(logoPreview || client?.has_logo) && (
+                <img
+                  src={logoPreview || "/api/admin/account/logo"}
+                  alt="Company logo"
+                  className="h-12 max-w-[200px] object-contain rounded border border-gray-200 bg-white p-1"
+                />
+              )}
+              <div className="flex items-center gap-2">
+                <label className="px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition text-gray-600">
+                  {logoUploading ? "Uploading..." : (client?.has_logo || logoPreview) ? "Replace" : "Upload Logo"}
+                  <input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={handleLogoSelect} disabled={logoUploading} className="hidden" />
+                </label>
+                {(client?.has_logo || logoPreview) && (
+                  <button onClick={handleRemoveLogo} className="text-sm text-red-500 hover:text-red-700">Remove</button>
+                )}
+              </div>
+            </div>
+            {logoError && <p className="text-xs text-red-600 mt-1">{logoError}</p>}
+            <p className="text-xs text-gray-400 mt-1">PNG, JPG, or SVG. Max 500KB. Landscape or square.</p>
           </div>
 
           <div>

@@ -303,8 +303,13 @@ export default function RoundDashboard() {
         <button onclick="window.print()" style="padding:8px 20px;background:#3B9FE7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">Print / Save as PDF</button>
         <button onclick="window.close()" style="padding:8px 20px;background:#f3f4f6;color:#333;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;margin-left:8px;">Close</button>
       </div>
-      <h1>Survey Round ${round.round_number} Report</h1>
-      <p style="color:#666;margin-top:0;">${formatDate(round.launched_at)} — ${isConcluded ? formatDate(round.concluded_at) : `Closes ${formatDate(round.closes_at)}`} | ${isActive ? "In Progress" : "Concluded"}</p>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <img src="/api/admin/account/logo" style="height:40px;max-width:160px;object-fit:contain;" onerror="this.style.display='none'" />
+        <div>
+          <h1 style="margin-bottom:0;">Survey Round ${round.round_number} Report</h1>
+          <p style="color:#666;margin-top:2px;">${formatDate(round.launched_at)} — ${isConcluded ? formatDate(round.concluded_at) : `Closes ${formatDate(round.closes_at)}`} | ${isActive ? "In Progress" : "Concluded"}</p>
+        </div>
+      </div>
 
       <div class="metrics">
         <div class="metric-card">

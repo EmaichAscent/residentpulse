@@ -5,6 +5,7 @@ import HelpPanel from "../components/HelpPanel";
 export default function AdminPage() {
   const [user, setUser] = useState(null);
   const [bounceCount, setBounceCount] = useState(0);
+  const [logoUrl, setLogoUrl] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -12,6 +13,10 @@ export default function AdminPage() {
 
   useEffect(() => {
     checkAuth();
+    // Check for client logo
+    fetch("/api/admin/account/logo", { credentials: "include" })
+      .then(res => { if (res.ok) setLogoUrl("/api/admin/account/logo"); })
+      .catch(() => {});
   }, []);
 
   // Refresh bounce count when navigating between tabs
@@ -100,9 +105,19 @@ export default function AdminPage() {
       {/* Header */}
       <div className="shadow-sm" style={{ backgroundColor: "var(--cam-blue)" }}>
         <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-white">ResidentPulse Admin</h1>
-            <p className="text-lg text-white/90 font-medium">{user?.company_name || "Loading..."}</p>
+          <div className="flex items-center gap-4">
+            {logoUrl && (
+              <img
+                src={logoUrl}
+                alt={user?.company_name || "Company logo"}
+                className="h-10 max-w-[140px] object-contain rounded bg-white/10 p-1"
+                onError={(e) => { e.target.style.display = "none"; }}
+              />
+            )}
+            <div>
+              <h1 className="text-2xl font-bold text-white">ResidentPulse Admin</h1>
+              <p className="text-lg text-white/90 font-medium">{user?.company_name || "Loading..."}</p>
+            </div>
           </div>
           <button onClick={handleLogout} className="px-4 py-2 text-sm font-semibold text-white border border-white/40 rounded-lg transition hover:bg-white/10">
             Logout
