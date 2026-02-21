@@ -300,7 +300,8 @@ router.get("/plans", async (req, res) => {
 router.get("/clients/:id/subscription", async (req, res) => {
   const subscription = await db.get(
     `SELECT cs.*, sp.name as plan_name, sp.display_name as plan_display_name,
-            sp.member_limit, sp.survey_rounds_per_year
+            COALESCE(cs.custom_member_limit, sp.member_limit) as member_limit,
+            sp.survey_rounds_per_year
      FROM client_subscriptions cs
      JOIN subscription_plans sp ON sp.id = cs.plan_id
      WHERE cs.client_id = ?`,
@@ -311,7 +312,7 @@ router.get("/clients/:id/subscription", async (req, res) => {
 
 // Update subscription plan for a client
 router.patch("/clients/:id/subscription", async (req, res) => {
-  const { plan_id } = req.body;
+  const { plan_id, custom_member_limit, zoho_subscription_id } = req.body;
   const clientId = req.params.id;
 
   if (!plan_id) {
@@ -319,23 +320,33 @@ router.patch("/clients/:id/subscription", async (req, res) => {
   }
 
   // Verify plan exists
-  const plan = await db.get("SELECT id FROM subscription_plans WHERE id = ?", [plan_id]);
+  const plan = await db.get("SELECT id, name FROM subscription_plans WHERE id = ?", [plan_id]);
   if (!plan) {
     return res.status(400).json({ error: "Invalid plan" });
   }
+
+  // Validate custom plan fields
+  if (plan.name === "custom") {
+    if (!custom_member_limit || custom_member_limit < 1) {
+      return res.status(400).json({ error: "Custom plan requires a member limit greater than 0" });
+    }
+  }
+
+  const customLimit = plan.name === "custom" ? custom_member_limit : null;
+  const zohoSubId = zoho_subscription_id || null;
 
   // Check if subscription exists
   const existing = await db.get("SELECT id FROM client_subscriptions WHERE client_id = ?", [clientId]);
 
   if (existing) {
     await db.run(
-      "UPDATE client_subscriptions SET plan_id = ? WHERE client_id = ?",
-      [plan_id, clientId]
+      "UPDATE client_subscriptions SET plan_id = ?, custom_member_limit = ?, zoho_subscription_id = ? WHERE client_id = ?",
+      [plan_id, customLimit, zohoSubId, clientId]
     );
   } else {
     await db.run(
-      "INSERT INTO client_subscriptions (client_id, plan_id, status) VALUES (?, ?, 'active')",
-      [clientId, plan_id]
+      "INSERT INTO client_subscriptions (client_id, plan_id, status, custom_member_limit, zoho_subscription_id) VALUES (?, ?, 'active', ?, ?)",
+      [clientId, plan_id, customLimit, zohoSubId]
     );
   }
 
@@ -493,7 +504,8 @@ router.get("/clients/:id/detail", async (req, res) => {
     // Subscription
     const subscription = await db.get(
       `SELECT cs.*, sp.name as plan_name, sp.display_name as plan_display_name,
-              sp.member_limit, sp.survey_rounds_per_year
+              COALESCE(cs.custom_member_limit, sp.member_limit) as member_limit,
+              sp.survey_rounds_per_year
        FROM client_subscriptions cs
        JOIN subscription_plans sp ON sp.id = cs.plan_id
        WHERE cs.client_id = ?`,

@@ -20,6 +20,7 @@ import superadminRoutes from "./routes/superadmin.js";
 import surveyRoundsRoutes from "./routes/surveyRounds.js";
 import interviewRoutes from "./routes/interview.js";
 import webhookRoutes from "./routes/webhooks.js";
+import zohoWebhookRoutes from "./routes/zohoWebhooks.js";
 import { startScheduler } from "./scheduler.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -109,6 +110,7 @@ app.use("/api/users", userRoutes);
 
 // Webhook routes (no auth — verified by signature)
 app.use("/api/webhooks", webhookRoutes);
+app.use("/api/webhooks", zohoWebhookRoutes);
 
 // Health check endpoint
 app.get("/api/health", async (_req, res) => {

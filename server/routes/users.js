@@ -50,7 +50,7 @@ router.post("/import", requireClientAdmin, upload.single("file"), async (req, re
 
   // Check member limit before import
   const subscription = await db.get(
-    `SELECT sp.member_limit FROM client_subscriptions cs
+    `SELECT COALESCE(cs.custom_member_limit, sp.member_limit) as member_limit FROM client_subscriptions cs
      JOIN subscription_plans sp ON sp.id = cs.plan_id
      WHERE cs.client_id = ? AND cs.status = 'active'`,
     [req.clientId]
@@ -109,7 +109,7 @@ router.post("/", requireClientAdmin, async (req, res) => {
 
   // Check member limit
   const subscription = await db.get(
-    `SELECT sp.member_limit FROM client_subscriptions cs
+    `SELECT COALESCE(cs.custom_member_limit, sp.member_limit) as member_limit FROM client_subscriptions cs
      JOIN subscription_plans sp ON sp.id = cs.plan_id
      WHERE cs.client_id = ? AND cs.status = 'active'`,
     [req.clientId]

@@ -6,6 +6,7 @@ import { hashPassword } from "../utils/password.js";
 import { sendVerificationEmail } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
 import { generateClientCode } from "../utils/clientCode.js";
+import { createCheckoutSession, isZohoConfigured } from "../utils/zohoService.js";
 
 const router = Router();
 
@@ -58,10 +59,12 @@ router.post("/register", signupLimiter, async (req, res) => {
     }
 
     // Verify plan exists and is public
-    const plan = await db.get("SELECT id FROM subscription_plans WHERE id = ? AND is_public = TRUE", [plan_id]);
+    const plan = await db.get("SELECT id, name, price_cents, zoho_plan_code FROM subscription_plans WHERE id = ? AND is_public = TRUE", [plan_id]);
     if (!plan) {
       return res.status(400).json({ error: "Invalid subscription plan" });
     }
+
+    const isPaidPlan = plan.price_cents && plan.price_cents > 0;
 
     // Create client with pending status and unique code
     const clientCode = await generateClientCode();
@@ -87,7 +90,7 @@ router.post("/register", signupLimiter, async (req, res) => {
     // Create subscription
     await db.run(
       "INSERT INTO client_subscriptions (client_id, plan_id, status) VALUES (?, ?, ?)",
-      [clientId, plan_id, "active"]
+      [clientId, plan_id, isPaidPlan ? "pending_payment" : "active"]
     );
 
     // Copy global system prompt
@@ -99,7 +102,55 @@ router.post("/register", signupLimiter, async (req, res) => {
       );
     }
 
-    // Send verification email
+    if (isPaidPlan) {
+      // Paid plan: redirect to Zoho checkout — verification email sent after payment webhook
+      await logActivity({
+        actorType: "client_admin",
+        actorEmail: email,
+        action: "signup_paid_checkout",
+        entityType: "client",
+        entityId: clientId,
+        clientId,
+        metadata: { plan_name: plan.name }
+      });
+
+      if (!isZohoConfigured()) {
+        return res.status(502).json({
+          error: "Payment system is not yet configured. Please contact us to complete your subscription setup."
+        });
+      }
+
+      try {
+        const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
+        const checkoutResult = await createCheckoutSession({
+          planCode: plan.zoho_plan_code,
+          customerInfo: {
+            display_name: company_name,
+            email,
+            first_name: admin_first_name || "",
+            last_name: admin_last_name || "",
+            phone: phone_number || "",
+            company_name,
+          },
+          clientId,
+          redirectUrl: `${baseUrl}/signup/payment-success`,
+        });
+
+        return res.json({
+          ok: true,
+          requires_payment: true,
+          checkout_url: checkoutResult.url,
+          message: "Redirecting to payment...",
+        });
+      } catch (zohoErr) {
+        console.error("Zoho checkout creation failed:", zohoErr);
+        return res.status(502).json({
+          error: "Payment system is temporarily unavailable. Your account has been created. Please contact support to complete setup."
+        });
+      }
+    }
+
+    // Free plan: send verification email immediately
     try {
       await sendVerificationEmail(email, verificationToken);
     } catch (emailErr) {

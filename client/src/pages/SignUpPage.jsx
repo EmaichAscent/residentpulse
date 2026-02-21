@@ -37,6 +37,14 @@ export default function SignUpPage() {
       .catch(() => {});
   }, []);
 
+  const selectedPlan = plans.find((p) => p.id === selectedPlanId);
+  const isPaidPlan = selectedPlan && selectedPlan.price_cents > 0;
+
+  const formatPrice = (cents) => {
+    if (!cents || cents === 0) return null;
+    return `$${(cents / 100).toLocaleString()}`;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -84,6 +92,13 @@ export default function SignUpPage() {
         throw new Error(data.error || "Something went wrong");
       }
 
+      // Paid plan: redirect to Zoho checkout
+      if (data.requires_payment && data.checkout_url) {
+        window.location.href = data.checkout_url;
+        return;
+      }
+
+      // Free plan: show verification email screen
       setSubmitted(true);
     } catch (err) {
       setError(err.message);
@@ -152,7 +167,7 @@ export default function SignUpPage() {
       </div>
 
       <div className="relative flex flex-col items-center justify-center min-h-screen px-4 py-8">
-      <div className="max-w-2xl w-full">
+      <div className="max-w-3xl w-full">
         {/* Branding */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-extrabold text-white tracking-tight mb-2">ResidentPulse</h1>
@@ -170,9 +185,10 @@ export default function SignUpPage() {
             {/* Section 1: Choose Plan */}
             <div className="mb-8">
               <h2 className="text-lg font-bold text-gray-900 mb-4">Choose Your Plan</h2>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {plans.map((plan) => {
-                  const isFree = plan.price_cents === null && plan.name === "free";
+                  const isFree = plan.name === "free";
+                  const price = formatPrice(plan.price_cents);
                   const isSelected = selectedPlanId === plan.id;
                   return (
                     <button
@@ -199,9 +215,15 @@ export default function SignUpPage() {
                       <p className="text-sm text-gray-600">
                         {plan.survey_rounds_per_year} survey rounds/year
                       </p>
-                      <p className="text-xs font-semibold mt-2" style={{ color: isFree ? "var(--cam-green)" : "var(--cam-blue)" }}>
-                        {isFree ? "Free Forever" : "Contact Us for Pricing"}
-                      </p>
+                      {isFree ? (
+                        <p className="text-xs font-semibold mt-2" style={{ color: "var(--cam-green)" }}>
+                          Free Forever
+                        </p>
+                      ) : (
+                        <p className="text-sm font-bold mt-2" style={{ color: "var(--cam-blue)" }}>
+                          {price}<span className="text-xs font-normal text-gray-500">/mo</span>
+                        </p>
+                      )}
                     </button>
                   );
                 })}
@@ -405,8 +427,16 @@ export default function SignUpPage() {
               disabled={loading}
               className="w-full btn-primary"
             >
-              {loading ? "Creating Account..." : "Create Account"}
+              {loading
+                ? (isPaidPlan ? "Redirecting to Payment..." : "Creating Account...")
+                : (isPaidPlan ? "Continue to Payment" : "Create Account")}
             </button>
+
+            {isPaidPlan && (
+              <p className="text-xs text-gray-500 text-center mt-2">
+                You'll be redirected to our secure payment partner to complete your subscription.
+              </p>
+            )}
 
             <div className="text-center mt-4">
               <Link

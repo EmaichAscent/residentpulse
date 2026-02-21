@@ -10,6 +10,7 @@ import ClientAdminLoginPage from "./pages/ClientAdminLoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import SignUpPage from "./pages/SignUpPage";
+import PaymentSuccessPage from "./pages/PaymentSuccessPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import AdminOnboardingPage from "./pages/AdminOnboardingPage";
 import SuperAdminClientDetailPage from "./pages/SuperAdminClientDetailPage";
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/admin/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/admin/reset-password" element={<ResetPasswordPage />} />
         <Route path="/admin/signup" element={<SignUpPage />} />
+        <Route path="/signup/payment-success" element={<PaymentSuccessPage />} />
         <Route path="/admin/verify-email" element={<VerifyEmailPage />} />
         <Route
           path="/admin/onboarding"

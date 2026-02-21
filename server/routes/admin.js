@@ -68,10 +68,11 @@ router.get("/account", async (req, res) => {
     return res.status(404).json({ error: "Client not found" });
   }
 
-  // Fetch subscription info
+  // Fetch subscription info (custom_member_limit overrides plan default for custom plans)
   const subscription = await db.get(
     `SELECT cs.*, sp.name as plan_name, sp.display_name as plan_display_name,
-            sp.member_limit, sp.survey_rounds_per_year, sp.price_cents
+            COALESCE(cs.custom_member_limit, sp.member_limit) as member_limit,
+            sp.survey_rounds_per_year, sp.price_cents
      FROM client_subscriptions cs
      JOIN subscription_plans sp ON sp.id = cs.plan_id
      WHERE cs.client_id = ?`,

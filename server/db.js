@@ -259,6 +259,16 @@ async function initializeSchema() {
       console.log("Client logo migration skipped (already applied or file not found)");
     }
 
+    // Run Zoho billing migration
+    try {
+      const zohoBillingPath = join(__dirname, "migrations", "add-zoho-billing.sql");
+      const zohoBillingSQL = readFileSync(zohoBillingPath, "utf-8");
+      await client.query(zohoBillingSQL);
+      console.log("Zoho billing migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Zoho billing migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");
   } catch (err) {

@@ -12,6 +12,8 @@ export default function SuperAdminClientDetailPage() {
   const [saving, setSaving] = useState(false);
   const [editData, setEditData] = useState(null);
   const [editPlanId, setEditPlanId] = useState(null);
+  const [customMemberLimit, setCustomMemberLimit] = useState("");
+  const [zohoSubscriptionId, setZohoSubscriptionId] = useState("");
   const [expandedInterview, setExpandedInterview] = useState(null);
   const [transcriptMessages, setTranscriptMessages] = useState([]);
   const [activity, setActivity] = useState([]);
@@ -31,6 +33,8 @@ export default function SuperAdminClientDetailPage() {
       setDetail(data);
       setEditData(data.client);
       setEditPlanId(data.subscription?.plan_id || null);
+      setCustomMemberLimit(data.subscription?.custom_member_limit || "");
+      setZohoSubscriptionId(data.subscription?.zoho_subscription_id || "");
     }
   };
 
@@ -87,10 +91,16 @@ export default function SuperAdminClientDetailPage() {
       });
 
       if (editPlanId) {
+        const selectedPlan = plans.find(p => p.id === editPlanId);
+        const subBody = { plan_id: editPlanId };
+        if (selectedPlan?.name === "custom") {
+          subBody.custom_member_limit = Number(customMemberLimit) || 0;
+          subBody.zoho_subscription_id = zohoSubscriptionId || null;
+        }
         await fetch(`/api/superadmin/clients/${id}/subscription`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ plan_id: editPlanId }),
+          body: JSON.stringify(subBody),
           credentials: "include"
         });
       }
@@ -264,10 +274,40 @@ export default function SuperAdminClientDetailPage() {
                 <select value={editPlanId || ""} onChange={(e) => setEditPlanId(Number(e.target.value))} className="input-field-sm mt-1">
                   <option value="">No plan</option>
                   {plans.map((p) => (
-                    <option key={p.id} value={p.id}>{p.display_name} ({p.member_limit} board members, {p.survey_rounds_per_year} rounds/yr)</option>
+                    <option key={p.id} value={p.id}>
+                      {p.display_name}
+                      {p.name === "custom" ? " (SuperAdmin only)" : ` (${p.member_limit} members, ${p.survey_rounds_per_year} rounds/yr)`}
+                      {p.price_cents > 0 ? ` — $${(p.price_cents / 100).toLocaleString()}/mo` : p.name === "free" ? " — Free" : ""}
+                    </option>
                   ))}
                 </select>
               </div>
+              {plans.find(p => p.id === editPlanId)?.name === "custom" && (
+                <div className="grid grid-cols-2 gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">Custom Member Limit *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={customMemberLimit}
+                      onChange={(e) => setCustomMemberLimit(e.target.value)}
+                      className="input-field-sm mt-1"
+                      placeholder="e.g. 3000"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">Zoho Subscription ID</label>
+                    <input
+                      type="text"
+                      value={zohoSubscriptionId}
+                      onChange={(e) => setZohoSubscriptionId(e.target.value)}
+                      className="input-field-sm mt-1"
+                      placeholder="Optional"
+                    />
+                  </div>
+                </div>
+              )}
               <button onClick={handleSave} disabled={saving} className="btn-primary-sm">
                 {saving ? "Saving..." : "Save Changes"}
               </button>
