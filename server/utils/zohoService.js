@@ -137,4 +137,126 @@ export function verifyZohoWebhook(rawBody, signature) {
   }
 }
 
-export default { isZohoConfigured, createCheckoutSession, verifyZohoWebhook };
+/**
+ * Create a Zoho hosted page to update (upgrade/downgrade) an existing subscription
+ * @param {Object} options
+ * @param {string} options.zohoSubscriptionId - Existing Zoho subscription ID
+ * @param {string} options.newPlanCode - New plan code to switch to
+ * @param {string} options.redirectUrl - URL to redirect after successful update
+ * @returns {Promise<{hostedpage_id: string, url: string}>}
+ */
+export async function updateSubscriptionHostedPage({ zohoSubscriptionId, newPlanCode, redirectUrl }) {
+  if (!isZohoConfigured()) {
+    throw new Error("Zoho Subscriptions is not configured");
+  }
+
+  const token = await getAccessToken();
+
+  const body = {
+    subscription_id: zohoSubscriptionId,
+    plan: {
+      plan_code: newPlanCode,
+    },
+    redirect_url: redirectUrl,
+  };
+
+  const response = await fetch(
+    "https://www.zohoapis.com/billing/v1/hostedpages/updatesubscription",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Zoho-oauthtoken ${token}`,
+        "X-com-zoho-subscriptions-organizationid": process.env.ZOHO_ORG_ID,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  const data = await response.json();
+
+  if (data.code !== 0 && !data.hostedpage) {
+    console.error("Zoho Update Subscription API error:", data);
+    throw new Error(data.message || "Failed to create Zoho update session");
+  }
+
+  const hostedpage = data.hostedpage || data;
+  return {
+    hostedpage_id: hostedpage.hostedpage_id,
+    url: hostedpage.url,
+  };
+}
+
+/**
+ * Cancel a Zoho subscription at end of billing period
+ * @param {string} zohoSubscriptionId - Zoho subscription ID
+ * @returns {Promise<Object>} Zoho API response
+ */
+export async function cancelSubscription(zohoSubscriptionId) {
+  if (!isZohoConfigured()) {
+    throw new Error("Zoho Subscriptions is not configured");
+  }
+
+  const token = await getAccessToken();
+
+  const response = await fetch(
+    `https://www.zohoapis.com/billing/v1/subscriptions/${zohoSubscriptionId}/cancel`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Zoho-oauthtoken ${token}`,
+        "X-com-zoho-subscriptions-organizationid": process.env.ZOHO_ORG_ID,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ cancel_at_end: true }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (data.code !== 0) {
+    console.error("Zoho Cancel Subscription API error:", data);
+    throw new Error(data.message || "Failed to cancel subscription");
+  }
+
+  return data;
+}
+
+/**
+ * Reactivate a Zoho subscription that was scheduled for cancellation
+ * @param {string} zohoSubscriptionId - Zoho subscription ID
+ * @returns {Promise<Object>} Zoho API response
+ */
+export async function reactivateSubscription(zohoSubscriptionId) {
+  if (!isZohoConfigured()) {
+    throw new Error("Zoho Subscriptions is not configured");
+  }
+
+  const token = await getAccessToken();
+
+  const response = await fetch(
+    `https://www.zohoapis.com/billing/v1/subscriptions/${zohoSubscriptionId}/reactivate`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Zoho-oauthtoken ${token}`,
+        "X-com-zoho-subscriptions-organizationid": process.env.ZOHO_ORG_ID,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  const data = await response.json();
+
+  if (data.code !== 0) {
+    console.error("Zoho Reactivate Subscription API error:", data);
+    throw new Error(data.message || "Failed to reactivate subscription");
+  }
+
+  return data;
+}
+
+export default {
+  isZohoConfigured, createCheckoutSession, verifyZohoWebhook,
+  updateSubscriptionHostedPage, cancelSubscription, reactivateSubscription
+};

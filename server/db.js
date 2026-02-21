@@ -269,6 +269,16 @@ async function initializeSchema() {
       console.log("Zoho billing migration skipped (already applied or file not found)");
     }
 
+    // Run subscription management migration
+    try {
+      const subMgmtPath = join(__dirname, "migrations", "add-subscription-management.sql");
+      const subMgmtSQL = readFileSync(subMgmtPath, "utf-8");
+      await client.query(subMgmtSQL);
+      console.log("Subscription management migration applied successfully");
+    } catch (migrationErr) {
+      console.log("Subscription management migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     console.log("Database schema initialized successfully");
   } catch (err) {

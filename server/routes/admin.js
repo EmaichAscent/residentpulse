@@ -6,6 +6,7 @@ import { hashPassword, generatePassword, comparePassword } from "../utils/passwo
 import { sendInvitation, sendNewAdminEmail } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
 import { generateSummary } from "../utils/summaryGenerator.js";
+import { isZohoConfigured, createCheckoutSession, updateSubscriptionHostedPage, cancelSubscription, reactivateSubscription } from "../utils/zohoService.js";
 
 const router = Router();
 
@@ -72,7 +73,8 @@ router.get("/account", async (req, res) => {
   const subscription = await db.get(
     `SELECT cs.*, sp.name as plan_name, sp.display_name as plan_display_name,
             COALESCE(cs.custom_member_limit, sp.member_limit) as member_limit,
-            sp.survey_rounds_per_year, sp.price_cents
+            sp.survey_rounds_per_year, sp.price_cents,
+            cs.cancel_at_period_end, cs.current_period_end
      FROM client_subscriptions cs
      JOIN subscription_plans sp ON sp.id = cs.plan_id
      WHERE cs.client_id = ?`,
@@ -333,6 +335,202 @@ router.patch("/account/cadence", async (req, res) => {
   }
 
   res.json({ ok: true, message, survey_cadence });
+});
+
+// Get available plans for plan change UI
+router.get("/account/subscription/plans", async (req, res) => {
+  const plans = await db.all(
+    "SELECT id, name, display_name, member_limit, survey_rounds_per_year, price_cents FROM subscription_plans WHERE is_public = TRUE ORDER BY sort_order"
+  );
+  res.json(plans);
+});
+
+// Change subscription plan (upgrade or downgrade via Zoho hosted page)
+router.post("/account/subscription/change-plan", async (req, res) => {
+  const { plan_id } = req.body;
+
+  if (!plan_id) {
+    return res.status(400).json({ error: "Plan ID is required" });
+  }
+
+  // Validate target plan
+  const targetPlan = await db.get(
+    "SELECT id, name, price_cents, zoho_plan_code, member_limit FROM subscription_plans WHERE id = ? AND is_public = TRUE",
+    [plan_id]
+  );
+  if (!targetPlan) {
+    return res.status(400).json({ error: "Invalid plan" });
+  }
+
+  // Get current subscription
+  const currentSub = await db.get(
+    `SELECT cs.*, sp.name as plan_name, sp.price_cents as current_price_cents, sp.zoho_plan_code as current_zoho_code
+     FROM client_subscriptions cs
+     JOIN subscription_plans sp ON sp.id = cs.plan_id
+     WHERE cs.client_id = ?`,
+    [req.clientId]
+  );
+
+  if (!currentSub) {
+    return res.status(400).json({ error: "No active subscription found" });
+  }
+
+  if (currentSub.plan_id === plan_id) {
+    return res.status(400).json({ error: "You are already on this plan" });
+  }
+
+  if (!isZohoConfigured()) {
+    return res.status(502).json({ error: "Payment system is not configured. Please contact support." });
+  }
+
+  const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
+  const isPaidTarget = targetPlan.price_cents && targetPlan.price_cents > 0;
+
+  try {
+    // Free → Paid: create new subscription checkout
+    if (currentSub.plan_name === "free" && isPaidTarget) {
+      const client = await db.get("SELECT * FROM clients WHERE id = ?", [req.clientId]);
+      const admin = await db.get("SELECT email, first_name, last_name FROM client_admins WHERE client_id = ? LIMIT 1", [req.clientId]);
+
+      const result = await createCheckoutSession({
+        planCode: targetPlan.zoho_plan_code,
+        customerInfo: {
+          display_name: client.company_name,
+          email: admin.email,
+          first_name: admin.first_name || "",
+          last_name: admin.last_name || "",
+          phone: client.phone_number || "",
+          company_name: client.company_name,
+        },
+        clientId: req.clientId,
+        redirectUrl: `${baseUrl}/account/plan-changed`,
+      });
+
+      // Set subscription to pending_payment for webhook to activate
+      await db.run(
+        "UPDATE client_subscriptions SET plan_id = ?, status = 'pending_payment' WHERE client_id = ?",
+        [plan_id, req.clientId]
+      );
+
+      return res.json({ checkout_url: result.url });
+    }
+
+    // Paid → Paid (upgrade or downgrade): update existing subscription
+    if (currentSub.zoho_subscription_id && isPaidTarget) {
+      const result = await updateSubscriptionHostedPage({
+        zohoSubscriptionId: currentSub.zoho_subscription_id,
+        newPlanCode: targetPlan.zoho_plan_code,
+        redirectUrl: `${baseUrl}/account/plan-changed`,
+      });
+
+      return res.json({ checkout_url: result.url });
+    }
+
+    // Paid → Free: cancel Zoho subscription (downgrades at period end)
+    if (currentSub.zoho_subscription_id && !isPaidTarget) {
+      await cancelSubscription(currentSub.zoho_subscription_id);
+      await db.run(
+        "UPDATE client_subscriptions SET cancel_at_period_end = TRUE WHERE client_id = ?",
+        [req.clientId]
+      );
+
+      await logActivity({
+        actorType: "client_admin", actorId: req.userId, actorEmail: req.userEmail,
+        action: "subscription_downgrade_to_free",
+        entityType: "client", entityId: req.clientId, clientId: req.clientId,
+      });
+
+      return res.json({ ok: true, message: "Your subscription will downgrade to Free at the end of your billing period." });
+    }
+
+    return res.status(400).json({ error: "Unable to process plan change. Please contact support." });
+  } catch (err) {
+    console.error("Plan change error:", err);
+    return res.status(502).json({ error: "Payment system error. Please try again or contact support." });
+  }
+});
+
+// Cancel subscription (at end of billing period)
+router.post("/account/subscription/cancel", async (req, res) => {
+  const sub = await db.get(
+    `SELECT cs.zoho_subscription_id, cs.status, cs.cancel_at_period_end, sp.name as plan_name
+     FROM client_subscriptions cs
+     JOIN subscription_plans sp ON sp.id = cs.plan_id
+     WHERE cs.client_id = ?`,
+    [req.clientId]
+  );
+
+  if (!sub) {
+    return res.status(400).json({ error: "No subscription found" });
+  }
+
+  if (sub.plan_name === "free") {
+    return res.status(400).json({ error: "Free plans cannot be cancelled" });
+  }
+
+  if (sub.cancel_at_period_end) {
+    return res.status(400).json({ error: "Subscription is already scheduled for cancellation" });
+  }
+
+  if (!sub.zoho_subscription_id) {
+    return res.status(400).json({ error: "No billing subscription found. Please contact support." });
+  }
+
+  try {
+    await cancelSubscription(sub.zoho_subscription_id);
+
+    await db.run(
+      "UPDATE client_subscriptions SET cancel_at_period_end = TRUE WHERE client_id = ?",
+      [req.clientId]
+    );
+
+    await logActivity({
+      actorType: "client_admin", actorId: req.userId, actorEmail: req.userEmail,
+      action: "subscription_cancel_scheduled",
+      entityType: "client", entityId: req.clientId, clientId: req.clientId,
+    });
+
+    res.json({ ok: true, message: "Your subscription will be cancelled at the end of your billing period. You'll be downgraded to the Free plan." });
+  } catch (err) {
+    console.error("Cancel subscription error:", err);
+    res.status(502).json({ error: "Failed to cancel subscription. Please try again or contact support." });
+  }
+});
+
+// Reactivate a subscription that was scheduled for cancellation
+router.post("/account/subscription/reactivate", async (req, res) => {
+  const sub = await db.get(
+    "SELECT zoho_subscription_id, cancel_at_period_end FROM client_subscriptions WHERE client_id = ?",
+    [req.clientId]
+  );
+
+  if (!sub || !sub.cancel_at_period_end) {
+    return res.status(400).json({ error: "No pending cancellation to undo" });
+  }
+
+  if (!sub.zoho_subscription_id) {
+    return res.status(400).json({ error: "No billing subscription found. Please contact support." });
+  }
+
+  try {
+    await reactivateSubscription(sub.zoho_subscription_id);
+
+    await db.run(
+      "UPDATE client_subscriptions SET cancel_at_period_end = FALSE WHERE client_id = ?",
+      [req.clientId]
+    );
+
+    await logActivity({
+      actorType: "client_admin", actorId: req.userId, actorEmail: req.userEmail,
+      action: "subscription_reactivated",
+      entityType: "client", entityId: req.clientId, clientId: req.clientId,
+    });
+
+    res.json({ ok: true, message: "Your subscription has been reactivated." });
+  } catch (err) {
+    console.error("Reactivate subscription error:", err);
+    res.status(502).json({ error: "Failed to reactivate subscription. Please try again or contact support." });
+  }
 });
 
 // Delete entire client account (requires password confirmation)

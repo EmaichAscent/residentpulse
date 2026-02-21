@@ -30,6 +30,14 @@ export default function AccountSettings() {
   const [logoPreview, setLogoPreview] = useState(null);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoError, setLogoError] = useState("");
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [availablePlans, setAvailablePlans] = useState([]);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState("");
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+  const [subMessage, setSubMessage] = useState(null);
   const { user: sessionUser } = useOutletContext();
 
   useEffect(() => {
@@ -523,8 +531,16 @@ export default function AccountSettings() {
                   {client.subscription.survey_rounds_per_year} survey rounds/year
                 </p>
               </div>
-              <span className="inline-flex px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 capitalize">
-                {client.subscription.status}
+              <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full capitalize ${
+                client.subscription.cancel_at_period_end
+                  ? "bg-amber-100 text-amber-800"
+                  : client.subscription.status === "active"
+                  ? "bg-green-100 text-green-800"
+                  : "bg-gray-100 text-gray-800"
+              }`}>
+                {client.subscription.cancel_at_period_end
+                  ? `Cancels${client.subscription.current_period_end ? " " + new Date(client.subscription.current_period_end).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}`
+                  : client.subscription.status}
               </span>
             </div>
 
@@ -662,19 +678,71 @@ export default function AccountSettings() {
               )}
             </div>
 
-            {/* Upgrade prompt for free tier */}
-            {client.subscription.plan_name === "free" && (
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                <p className="text-sm text-gray-700">
-                  Need more capacity? Contact us to upgrade your plan.
-                </p>
-                <a
-                  href="mailto:support@camascent.com"
-                  className="text-sm font-semibold hover:underline"
-                  style={{ color: "var(--cam-blue)" }}
+            {/* Plan Management */}
+            {subMessage && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+                <p className="text-sm text-green-700">{subMessage}</p>
+              </div>
+            )}
+
+            {client.subscription.cancel_at_period_end ? (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800">Cancellation Scheduled</p>
+                    <p className="text-sm text-amber-700 mt-1">
+                      Your subscription will end{client.subscription.current_period_end
+                        ? ` on ${new Date(client.subscription.current_period_end).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`
+                        : " at the end of your billing period"}.
+                      You'll be downgraded to the Free plan.
+                    </p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setSubMessage(null);
+                      try {
+                        const res = await fetch("/api/admin/account/subscription/reactivate", {
+                          method: "POST", credentials: "include",
+                          headers: { "Content-Type": "application/json" },
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                          setSubMessage(data.message);
+                          loadData();
+                        } else {
+                          setSubMessage(data.error);
+                        }
+                      } catch { setSubMessage("Failed to reactivate. Please try again."); }
+                    }}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg border border-amber-400 text-amber-800 hover:bg-amber-100 transition whitespace-nowrap ml-4"
+                  >
+                    Undo Cancellation
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-3">
+                <button
+                  onClick={async () => {
+                    setPlanError("");
+                    setShowPlanModal(true);
+                    const res = await fetch("/api/admin/account/subscription/plans", { credentials: "include" });
+                    if (res.ok) setAvailablePlans(await res.json());
+                  }}
+                  className="px-4 py-2 text-sm font-semibold rounded-lg text-white transition"
+                  style={{ backgroundColor: "var(--cam-blue)" }}
                 >
-                  Contact Sales
-                </a>
+                  Change Plan
+                </button>
+
+                {client.subscription.plan_name !== "free" && (
+                  <button
+                    onClick={() => { setCancelError(""); setShowCancelModal(true); }}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg border border-red-300 text-red-600 hover:bg-red-50 transition"
+                  >
+                    Cancel Subscription
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -699,6 +767,153 @@ export default function AccountSettings() {
           Delete Account
         </button>
       </div>
+
+      {/* Change Plan Modal */}
+      {showPlanModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowPlanModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Change Your Plan</h2>
+            {planError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-sm text-red-600">{planError}</p>
+              </div>
+            )}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+              {availablePlans.map((plan) => {
+                const isCurrent = client?.subscription?.plan_id === plan.id;
+                const isFree = plan.name === "free";
+                const price = plan.price_cents ? `$${(plan.price_cents / 100).toLocaleString()}` : null;
+                const memberCount = client?.usage?.member_count || 0;
+                const wouldExceed = memberCount > plan.member_limit;
+                return (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    disabled={isCurrent || planLoading}
+                    onClick={async () => {
+                      setPlanError("");
+                      setPlanLoading(true);
+                      try {
+                        const res = await fetch("/api/admin/account/subscription/change-plan", {
+                          method: "POST", credentials: "include",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ plan_id: plan.id }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error);
+                        if (data.checkout_url) {
+                          window.location.href = data.checkout_url;
+                        } else {
+                          setSubMessage(data.message);
+                          setShowPlanModal(false);
+                          loadData();
+                        }
+                      } catch (err) {
+                        setPlanError(err.message);
+                      } finally {
+                        setPlanLoading(false);
+                      }
+                    }}
+                    className={`relative p-4 rounded-xl border-2 text-left transition ${
+                      isCurrent
+                        ? "border-blue-500 bg-blue-50 cursor-default"
+                        : "border-gray-200 hover:border-gray-300"
+                    } ${planLoading ? "opacity-50 cursor-wait" : ""}`}
+                  >
+                    {isCurrent && (
+                      <span className="absolute top-2 right-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-500 text-white">
+                        Current
+                      </span>
+                    )}
+                    <p className="font-bold text-gray-900">{plan.display_name}</p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Up to {plan.member_limit.toLocaleString()} members
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {plan.survey_rounds_per_year} rounds/year
+                    </p>
+                    {isFree ? (
+                      <p className="text-xs font-semibold mt-2" style={{ color: "var(--cam-green)" }}>Free Forever</p>
+                    ) : (
+                      <p className="text-sm font-bold mt-2" style={{ color: "var(--cam-blue)" }}>
+                        {price}<span className="text-xs font-normal text-gray-500">/mo</span>
+                      </p>
+                    )}
+                    {wouldExceed && !isCurrent && (
+                      <p className="text-xs text-amber-600 mt-2">
+                        You have {memberCount} active members. {memberCount - plan.member_limit} will be deactivated.
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowPlanModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Subscription Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowCancelModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-red-700 mb-2">Cancel Subscription</h2>
+            <p className="text-sm text-gray-600 mb-2">
+              Your subscription will remain active until the end of your billing period.
+              After that, your account will be downgraded to the <strong>Free plan</strong>:
+            </p>
+            <ul className="text-sm text-gray-600 mb-4 list-disc pl-5 space-y-1">
+              <li>25 board members max</li>
+              <li>2 survey rounds per year</li>
+              <li>Members over the limit will be deactivated</li>
+            </ul>
+            {cancelError && (
+              <p className="text-sm text-red-600 mb-3">{cancelError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                disabled={cancelLoading}
+                onClick={async () => {
+                  setCancelError("");
+                  setCancelLoading(true);
+                  try {
+                    const res = await fetch("/api/admin/account/subscription/cancel", {
+                      method: "POST", credentials: "include",
+                      headers: { "Content-Type": "application/json" },
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error);
+                    setSubMessage(data.message);
+                    setShowCancelModal(false);
+                    loadData();
+                  } catch (err) {
+                    setCancelError(err.message);
+                  } finally {
+                    setCancelLoading(false);
+                  }
+                }}
+                className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition disabled:opacity-50"
+              >
+                {cancelLoading ? "Cancelling..." : "Confirm Cancellation"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCancelModal(false)}
+                className="px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+              >
+                Keep Plan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Account Confirmation Modal */}
       {showDeleteModal && (
