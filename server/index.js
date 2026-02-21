@@ -1,9 +1,12 @@
 import "dotenv/config";
+import "express-async-errors";
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import fileUpload from "express-fileupload";
+import pg from "pg";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import sessionRoutes from "./routes/sessions.js";
@@ -23,6 +26,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// --- Startup environment variable validation ---
+const REQUIRED_ENV = ["DATABASE_URL", "SESSION_SECRET", "RESEND_API_KEY", "SURVEY_BASE_URL"];
+const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
+if (missing.length > 0) {
+  console.error(`FATAL: Missing required environment variables: ${missing.join(", ")}`);
+  process.exit(1);
+}
+
 // Trust Railway's reverse proxy for rate limiting and session management
 app.set('trust proxy', 1);
 
@@ -32,9 +43,20 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false, // Allow loading external resources (e.g. fonts)
 }));
 
+// PostgreSQL session store
+const PgStore = connectPgSimple(session);
+const sessionPool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+});
+
 // Session configuration
 app.use(session({
-  secret: process.env.SESSION_SECRET || "residentpulse-dev-secret-change-in-production",
+  store: new PgStore({
+    pool: sessionPool,
+    createTableIfMissing: true,
+  }),
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -88,6 +110,16 @@ app.use("/api/users", userRoutes);
 // Webhook routes (no auth — verified by signature)
 app.use("/api/webhooks", webhookRoutes);
 
+// Health check endpoint
+app.get("/api/health", async (_req, res) => {
+  try {
+    await sessionPool.query("SELECT 1");
+    res.json({ status: "ok" });
+  } catch {
+    res.status(503).json({ status: "unhealthy", error: "database unreachable" });
+  }
+});
+
 // Serve static files from client build in production
 if (process.env.NODE_ENV === "production") {
   const clientBuildPath = join(__dirname, "..", "client", "dist");
@@ -99,9 +131,25 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
+// Global error handler — catches unhandled async errors from all routes
+app.use((err, _req, res, _next) => {
+  console.error("Unhandled error:", err.stack || err.message || err);
+  res.status(500).json({ error: "Internal server error" });
+});
+
 // Start the daily survey round scheduler
 startScheduler();
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`ResidentPulse server running on http://localhost:${PORT}`);
+});
+
+// Graceful shutdown — finish in-flight requests before exiting
+process.on("SIGTERM", () => {
+  console.log("SIGTERM received — shutting down gracefully...");
+  server.close(() => {
+    sessionPool.end();
+    console.log("Server closed.");
+    process.exit(0);
+  });
 });

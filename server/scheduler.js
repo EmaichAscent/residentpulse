@@ -82,6 +82,7 @@ async function sendRoundReminders(round, dayNumber) {
   const companyName = client?.company_name || "your management company";
 
   // Find non-responders: users invited for this round who haven't completed a session
+  // Excludes bounced/complained addresses to avoid sending to bad/hostile addresses
   const nonResponders = await db.all(
     `SELECT DISTINCT u.id, u.email, u.first_name, u.last_name,
             COALESCE(c.community_name, u.community_name) as community_name,
@@ -91,6 +92,7 @@ async function sendRoundReminders(round, dayNumber) {
      LEFT JOIN communities c ON c.id = u.community_id
      WHERE il.round_id = ? AND il.email_status = 'sent'
        AND (u.community_id IS NULL OR c.status = 'active')
+       AND COALESCE(il.delivery_status, 'delivered') NOT IN ('bounced', 'complained')
        AND NOT EXISTS (
          SELECT 1 FROM sessions s
          WHERE s.round_id = ? AND s.user_id = u.id AND s.completed = true
