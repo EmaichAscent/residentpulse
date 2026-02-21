@@ -8,6 +8,7 @@ export default function AccountSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [showPwModal, setShowPwModal] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
   const [addressLine2, setAddressLine2] = useState("");
@@ -131,6 +132,7 @@ export default function AccountSettings() {
       if (!res.ok) throw new Error(data.error || "Failed to change password");
       setPwMessage({ type: "success", text: "Password changed successfully." });
       setPwForm({ current: "", newPw: "", confirm: "" });
+      setTimeout(() => setShowPwModal(false), 1200);
     } catch (err) {
       setPwMessage({ type: "error", text: err.message });
     } finally {
@@ -282,6 +284,12 @@ export default function AccountSettings() {
             >
               {saving ? "Saving..." : "Save Changes"}
             </button>
+            <button
+              onClick={() => { setPwMessage(null); setPwForm({ current: "", newPw: "", confirm: "" }); setShowPwModal(true); }}
+              className="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+            >
+              Change Password
+            </button>
             {saveMessage && (
               <span className={`text-sm ${saveMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
                 {saveMessage.text}
@@ -291,51 +299,61 @@ export default function AccountSettings() {
         </div>
       </div>
 
-      {/* Change Password */}
-      <div className="bg-white shadow-md rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Change Password</h2>
-        <form onSubmit={handleChangePassword} className="space-y-3 max-w-md">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Current Password</label>
-            <input
-              type="password"
-              value={pwForm.current}
-              onChange={(e) => setPwForm({ ...pwForm, current: e.target.value })}
-              className="input-field-sm"
-              required
-            />
+      {/* Change Password Modal */}
+      {showPwModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowPwModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h2>
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Current Password</label>
+                <input
+                  type="password"
+                  value={pwForm.current}
+                  onChange={(e) => setPwForm({ ...pwForm, current: e.target.value })}
+                  className="input-field-sm"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={pwForm.newPw}
+                  onChange={(e) => setPwForm({ ...pwForm, newPw: e.target.value })}
+                  className="input-field-sm"
+                  required
+                  minLength={8}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Confirm New Password</label>
+                <input
+                  type="password"
+                  value={pwForm.confirm}
+                  onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })}
+                  className="input-field-sm"
+                  required
+                />
+              </div>
+              {pwMessage && (
+                <p className={`text-sm ${pwMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
+                  {pwMessage.text}
+                </p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button type="submit" disabled={pwSaving} className="btn-primary-sm flex-1">
+                  {pwSaving ? "Changing..." : "Change Password"}
+                </button>
+                <button type="button" onClick={() => setShowPwModal(false)} className="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">New Password</label>
-            <input
-              type="password"
-              value={pwForm.newPw}
-              onChange={(e) => setPwForm({ ...pwForm, newPw: e.target.value })}
-              className="input-field-sm"
-              required
-              minLength={8}
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Confirm New Password</label>
-            <input
-              type="password"
-              value={pwForm.confirm}
-              onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })}
-              className="input-field-sm"
-              required
-            />
-          </div>
-          {pwMessage && (
-            <p className={`text-sm ${pwMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
-              {pwMessage.text}
-            </p>
-          )}
-          <button type="submit" disabled={pwSaving} className="btn-primary-sm">
-            {pwSaving ? "Changing..." : "Change Password"}
-          </button>
-        </form>
-      </div>
+        </div>
+      )}
 
       {/* Admin Users */}
       <div className="bg-white shadow-md rounded-lg p-6">
