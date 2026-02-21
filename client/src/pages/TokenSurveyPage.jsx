@@ -82,36 +82,45 @@ export default function TokenSurveyPage() {
     );
   }
 
+  const isAlreadyCompleted = error?.includes("already completed");
+  const isExpired = error?.includes("expired");
+  const isConcluded = error?.includes("concluded");
+
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 p-4">
         <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-8 h-8 text-red-600">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-            </svg>
+          <div className={`w-16 h-16 ${isAlreadyCompleted ? "bg-green-100" : "bg-red-100"} rounded-full flex items-center justify-center mx-auto mb-4`}>
+            {isAlreadyCompleted ? (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-8 h-8 text-green-600">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-8 h-8 text-red-600">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+              </svg>
+            )}
           </div>
 
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Invitation {error.includes("expired") ? "Expired" : "Invalid"}
+            {isAlreadyCompleted ? "Survey Already Completed" : isExpired ? "Invitation Expired" : isConcluded ? "Survey Round Closed" : "Invitation Invalid"}
           </h1>
 
           <p className="text-gray-600 mb-6">
-            {error.includes("expired")
+            {isAlreadyCompleted
+              ? "You've already completed this survey round. Thank you for your feedback!"
+              : isExpired
               ? "Your invitation link has expired. The survey round may have concluded."
+              : isConcluded
+              ? "This survey round has closed. Thank you for your interest."
               : "This invitation link is invalid or has already been used."}
           </p>
 
-          <p className="text-sm text-gray-500 mb-6">
-            Please contact your property manager if you need a new invitation, or you can start the survey by entering your email address.
-          </p>
-
-          <Link
-            to="/"
-            className="inline-block px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition"
-          >
-            Go to Survey Home
-          </Link>
+          {!isAlreadyCompleted && (
+            <p className="text-sm text-gray-500 mb-6">
+              Please contact your property manager if you need a new invitation.
+            </p>
+          )}
         </div>
       </div>
     );

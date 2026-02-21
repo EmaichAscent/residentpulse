@@ -77,6 +77,15 @@ router.get("/validate-token/:token", async (req, res) => {
       if (!activeRound) {
         return res.status(404).json({ error: "This survey round has concluded." });
       }
+
+      // Check if user already completed a session for this round
+      const existingSession = await db.get(
+        "SELECT id FROM sessions WHERE user_id = ? AND round_id = ? AND completed = TRUE",
+        [user.id, activeRound.id]
+      );
+      if (existingSession) {
+        return res.status(409).json({ error: "You have already completed this survey. Thank you for your feedback!" });
+      }
     }
 
     // Check if client has a logo
