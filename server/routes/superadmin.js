@@ -738,4 +738,42 @@ router.post("/clients/:id/reset", async (req, res) => {
   }
 });
 
+/**
+ * Delete a pending client (abandoned signup cleanup)
+ * Only allowed for clients with status = 'pending'
+ */
+router.delete("/clients/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const client = await db.get("SELECT id, company_name, status FROM clients WHERE id = ?", [id]);
+    if (!client) {
+      return res.status(404).json({ error: "Client not found" });
+    }
+
+    if (client.status !== "pending") {
+      return res.status(400).json({ error: "Only pending clients can be deleted" });
+    }
+
+    // Sessions use ON DELETE SET NULL, so delete them explicitly first
+    // (messages cascade from sessions)
+    await db.run("DELETE FROM sessions WHERE client_id = ?", [id]);
+    // Delete client row — all other tables cascade
+    await db.run("DELETE FROM clients WHERE id = ? AND status = 'pending'", [id]);
+
+    // Log with null client_id since client is gone
+    await db.run(
+      `INSERT INTO activity_log (actor_type, actor_id, action, entity_type, entity_id, metadata)
+       VALUES ('superadmin', ?, 'deleted_pending_client', 'client', ?, ?)`,
+      [req.session.userId, id, JSON.stringify({ company_name: client.company_name })]
+    );
+
+    console.log(`Pending client ${id} (${client.company_name}) deleted by superadmin`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Client delete error:", err);
+    res.status(500).json({ error: "Failed to delete client" });
+  }
+});
+
 export default router;

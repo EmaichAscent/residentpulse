@@ -158,6 +158,25 @@ export default function SuperAdminClientDetailPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!confirm(`Permanently delete "${detail.client.company_name}" and all associated data?\n\nThis cannot be undone.`)) return;
+
+    try {
+      const res = await fetch(`/api/superadmin/clients/${id}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (res.ok) {
+        navigate("/superadmin/clients");
+      } else {
+        const data = await res.json();
+        alert("Delete failed: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      alert("Delete failed: " + err.message);
+    }
+  };
+
   const formatDate = (d) => d ? new Date(d).toLocaleDateString() : "—";
   const formatDateTime = (d) => d ? new Date(d).toLocaleString() : "Never";
 
@@ -191,6 +210,12 @@ export default function SuperAdminClientDetailPage() {
             <p className="text-sm text-white/60">{client.client_code}</p>
           </div>
           <div className="flex gap-2">
+            {client.status === "pending" && (
+              <button onClick={handleDelete}
+                className="px-3 py-1.5 text-xs font-medium text-red-200 border border-red-300/40 rounded-lg hover:bg-red-500/20">
+                Delete
+              </button>
+            )}
             <button onClick={handleReset} disabled={resetting}
               className="px-3 py-1.5 text-xs font-medium text-red-200 border border-red-300/40 rounded-lg hover:bg-red-500/20 disabled:opacity-40">
               {resetting ? "Resetting..." : "Reset"}

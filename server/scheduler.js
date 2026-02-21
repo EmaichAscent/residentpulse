@@ -177,6 +177,25 @@ async function sendApproachingRoundReminders() {
 }
 
 /**
+ * Delete abandoned signups — pending clients older than 48 hours
+ */
+async function cleanupAbandonedSignups() {
+  const abandoned = await db.all(
+    "SELECT id, company_name FROM clients WHERE status = 'pending' AND created_at < CURRENT_TIMESTAMP - INTERVAL '48 hours'"
+  );
+
+  for (const client of abandoned) {
+    await db.run("DELETE FROM sessions WHERE client_id = ?", [client.id]);
+    await db.run("DELETE FROM clients WHERE id = ?", [client.id]);
+    console.log(`Auto-deleted abandoned signup: client ${client.id} (${client.company_name})`);
+  }
+
+  if (abandoned.length > 0) {
+    console.log(`Cleaned up ${abandoned.length} abandoned signup(s)`);
+  }
+}
+
+/**
  * Start the scheduler - runs daily at 9:00 AM UTC
  */
 export function startScheduler() {
@@ -186,6 +205,7 @@ export function startScheduler() {
       await sendApproachingRoundReminders();
       await concludeExpiredRounds();
       await sendReminders();
+      await cleanupAbandonedSignups();
       console.log("Daily scheduler completed successfully");
     } catch (err) {
       console.error("Scheduler error:", err);
