@@ -9,6 +9,7 @@ import fileUpload from "express-fileupload";
 import pg from "pg";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import logger from "./utils/logger.js";
 import sessionRoutes from "./routes/sessions.js";
 import chatRoutes from "./routes/chat.js";
 import adminRoutes from "./routes/admin.js";
@@ -31,7 +32,7 @@ const PORT = process.env.PORT || 3001;
 const REQUIRED_ENV = ["DATABASE_URL", "SESSION_SECRET", "RESEND_API_KEY", "SURVEY_BASE_URL"];
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
 if (missing.length > 0) {
-  console.error(`FATAL: Missing required environment variables: ${missing.join(", ")}`);
+  logger.fatal(`FATAL: Missing required environment variables: ${missing.join(", ")}`);
   process.exit(1);
 }
 
@@ -85,7 +86,11 @@ app.use(express.json({
     }
   }
 }));
-app.use(fileUpload());
+app.use(fileUpload({
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  abortOnLimit: true,
+  responseOnLimit: "File too large. Maximum upload size is 5 MB."
+}));
 
 // Auth routes (login/logout)
 app.use("/api/auth", authRoutes);
@@ -135,7 +140,7 @@ if (process.env.NODE_ENV === "production") {
 
 // Global error handler — catches unhandled async errors from all routes
 app.use((err, _req, res, _next) => {
-  console.error("Unhandled error:", err.stack || err.message || err);
+  logger.error({ err }, "Unhandled error");
   res.status(500).json({ error: "Internal server error" });
 });
 
@@ -143,15 +148,15 @@ app.use((err, _req, res, _next) => {
 startScheduler();
 
 const server = app.listen(PORT, () => {
-  console.log(`ResidentPulse server running on http://localhost:${PORT}`);
+  logger.info(`ResidentPulse server running on http://localhost:${PORT}`);
 });
 
 // Graceful shutdown — finish in-flight requests before exiting
 process.on("SIGTERM", () => {
-  console.log("SIGTERM received — shutting down gracefully...");
+  logger.info("SIGTERM received — shutting down gracefully...");
   server.close(() => {
     sessionPool.end();
-    console.log("Server closed.");
+    logger.info("Server closed.");
     process.exit(0);
   });
 });

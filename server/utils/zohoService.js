@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import logger from "./logger.js";
 
 // --- OAuth Token Management ---
 let cachedToken = null;
@@ -94,7 +95,7 @@ export async function createCheckoutSession({ planCode, customerInfo, clientId, 
   const data = await response.json();
 
   if (data.code !== 0 && !data.hostedpage) {
-    console.error("Zoho Hosted Pages API error:", data);
+    logger.error({ data }, "Zoho Hosted Pages API error");
     throw new Error(data.message || "Failed to create Zoho checkout session");
   }
 
@@ -114,7 +115,7 @@ export async function createCheckoutSession({ planCode, customerInfo, clientId, 
 export function verifyZohoWebhook(rawBody, signature) {
   const secret = process.env.ZOHO_WEBHOOK_SECRET;
   if (!secret) {
-    console.warn("ZOHO_WEBHOOK_SECRET not set — skipping webhook verification");
+    logger.warn("ZOHO_WEBHOOK_SECRET not set — skipping webhook verification");
     return true;
   }
 
@@ -176,7 +177,7 @@ export async function updateSubscriptionHostedPage({ zohoSubscriptionId, newPlan
   const data = await response.json();
 
   if (data.code !== 0 && !data.hostedpage) {
-    console.error("Zoho Update Subscription API error:", data);
+    logger.error({ data }, "Zoho Update Subscription API error");
     throw new Error(data.message || "Failed to create Zoho update session");
   }
 
@@ -215,7 +216,7 @@ export async function cancelSubscription(zohoSubscriptionId) {
   const data = await response.json();
 
   if (data.code !== 0) {
-    console.error("Zoho Cancel Subscription API error:", data);
+    logger.error({ data }, "Zoho Cancel Subscription API error");
     throw new Error(data.message || "Failed to cancel subscription");
   }
 
@@ -249,7 +250,7 @@ export async function reactivateSubscription(zohoSubscriptionId) {
   const data = await response.json();
 
   if (data.code !== 0) {
-    console.error("Zoho Reactivate Subscription API error:", data);
+    logger.error({ data }, "Zoho Reactivate Subscription API error");
     throw new Error(data.message || "Failed to reactivate subscription");
   }
 

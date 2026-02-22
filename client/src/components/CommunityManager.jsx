@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ConfirmModal from "./ConfirmModal";
 
 const PROPERTY_TYPES = [
   { value: "condo", label: "Condo" },
@@ -29,6 +30,7 @@ export default function CommunityManager() {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [editSaving, setEditSaving] = useState(false);
+  const [toggleTarget, setToggleTarget] = useState(null);
 
   // Deactivation toggle
   const [showDeactivated, setShowDeactivated] = useState(false);
@@ -183,11 +185,6 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
 
   // --- Deactivate / Reactivate toggle ---
   const handleToggleStatus = async (c) => {
-    const isActive = c.status !== "deactivated";
-    const msg = isActive
-      ? `Deactivate "${c.community_name}"? Members won't be contacted in future rounds.`
-      : `Reactivate "${c.community_name}"? Members will be included in future rounds.`;
-    if (!confirm(msg)) return;
     try {
       const res = await fetch(`/api/admin/communities/${c.id}`, { method: "DELETE" });
       const data = await res.json();
@@ -201,6 +198,8 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
       );
     } catch {
       // silently fail
+    } finally {
+      setToggleTarget(null);
     }
   };
 
@@ -589,13 +588,13 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
                           </svg>
                         </button>
                         {c.status === "deactivated" ? (
-                          <button onClick={() => handleToggleStatus(c)} className="p-1 text-gray-300 hover:text-green-500 transition" title="Reactivate community">
+                          <button onClick={() => setToggleTarget(c)} className="p-1 text-gray-300 hover:text-green-500 transition" title="Reactivate community">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                               <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H4.598a.75.75 0 00-.75.75v3.634a.75.75 0 001.5 0v-2.033l.312.311a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm-10.624-2.85a5.5 5.5 0 019.201-2.465l.312.31H11.77a.75.75 0 000 1.5h3.634a.75.75 0 00.75-.75V3.535a.75.75 0 00-1.5 0v2.033l-.312-.31A7 7 0 002.63 8.387a.75.75 0 001.449.39z" clipRule="evenodd" />
                             </svg>
                           </button>
                         ) : (
-                          <button onClick={() => handleToggleStatus(c)} className="p-1 text-gray-300 hover:text-red-500 transition" title="Deactivate community">
+                          <button onClick={() => setToggleTarget(c)} className="p-1 text-gray-300 hover:text-red-500 transition" title="Deactivate community">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                               <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
                             </svg>
@@ -624,6 +623,17 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
           Board members are automatically linked to communities by matching community names.
         </p>
       </div>
+      <ConfirmModal
+        isOpen={!!toggleTarget}
+        onClose={() => setToggleTarget(null)}
+        onConfirm={() => handleToggleStatus(toggleTarget)}
+        title={toggleTarget?.status !== "deactivated" ? "Deactivate Community" : "Reactivate Community"}
+        message={toggleTarget?.status !== "deactivated"
+          ? `Deactivate "${toggleTarget?.community_name}"? Members won't be contacted in future rounds.`
+          : `Reactivate "${toggleTarget?.community_name}"? Members will be included in future rounds.`}
+        confirmLabel={toggleTarget?.status !== "deactivated" ? "Deactivate" : "Reactivate"}
+        destructive={toggleTarget?.status !== "deactivated"}
+      />
     </div>
   );
 }

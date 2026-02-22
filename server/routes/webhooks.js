@@ -2,6 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import db from "../db.js";
 import { notifyBouncedInvitation } from "../utils/emailService.js";
+import logger from "../utils/logger.js";
 
 const router = Router();
 
@@ -55,7 +56,7 @@ router.post("/resend", async (req, res) => {
   try {
     // Verify webhook signature
     if (!verifyWebhookSignature(req)) {
-      console.warn("Webhook signature verification failed");
+      logger.warn("Webhook signature verification failed");
       return res.status(401).json({ error: "Invalid signature" });
     }
 
@@ -103,9 +104,9 @@ router.post("/resend", async (req, res) => {
     );
 
     if (result?.rowCount === 0) {
-      console.log(`Webhook: no invitation_log found for Resend email ID ${emailId}`);
+      logger.info(`Webhook: no invitation_log found for Resend email ID ${emailId}`);
     } else {
-      console.log(`Webhook: ${type} for email ${emailId} → delivery_status=${deliveryStatus}`);
+      logger.info(`Webhook: ${type} for email ${emailId} → delivery_status=${deliveryStatus}`);
 
       // Notify admins on bounce
       if (deliveryStatus === "bounced") {
@@ -124,14 +125,14 @@ router.post("/resend", async (req, res) => {
             memberName,
             bounceType,
             db,
-          }).catch(err => console.error("Failed to send bounce notification:", err.message));
+          }).catch(err => logger.error("Failed to send bounce notification: %s", err.message));
         }
       }
     }
 
     res.json({ received: true });
   } catch (err) {
-    console.error("Webhook processing error:", err);
+    logger.error({ err }, "Webhook processing error");
     // Always return 200 to prevent Resend from retrying on our errors
     res.json({ received: true, error: true });
   }

@@ -7,6 +7,7 @@ import { sendVerificationEmail } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
 import { generateClientCode } from "../utils/clientCode.js";
 import { createCheckoutSession, isZohoConfigured } from "../utils/zohoService.js";
+import logger from "../utils/logger.js";
 
 const router = Router();
 
@@ -25,7 +26,7 @@ router.get("/plans", async (req, res) => {
     );
     res.json(plans);
   } catch (err) {
-    console.error("Error fetching plans:", err);
+    logger.error({ err }, "Error fetching plans");
     res.status(500).json({ error: "Failed to fetch plans" });
   }
 });
@@ -143,7 +144,7 @@ router.post("/register", signupLimiter, async (req, res) => {
           message: "Redirecting to payment...",
         });
       } catch (zohoErr) {
-        console.error("Zoho checkout creation failed:", zohoErr);
+        logger.error({ err: zohoErr }, "Zoho checkout creation failed");
         return res.status(502).json({
           error: "Payment system is temporarily unavailable. Your account has been created. Please contact support to complete setup."
         });
@@ -155,8 +156,8 @@ router.post("/register", signupLimiter, async (req, res) => {
       await sendVerificationEmail(email, verificationToken);
     } catch (emailErr) {
       // Log but don't fail — account is created, user can request resend
-      console.error("Failed to send verification email:", emailErr.message);
-      console.log(`Verification link: ${(process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "")}/admin/verify-email?token=${verificationToken}`);
+      logger.error("Failed to send verification email: %s", emailErr.message);
+      logger.info(`Verification link: ${(process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "")}/admin/verify-email?token=${verificationToken}`);
     }
 
     await logActivity({
@@ -170,7 +171,7 @@ router.post("/register", signupLimiter, async (req, res) => {
 
     res.json({ ok: true, message: "Check your email to verify your account." });
   } catch (err) {
-    console.error("Error during signup:", err);
+    logger.error({ err }, "Error during signup");
     res.status(500).json({ error: "Something went wrong. Please try again." });
   }
 });
@@ -207,7 +208,7 @@ router.get("/verify", async (req, res) => {
 
     res.json({ ok: true, message: "Email verified! You can now log in." });
   } catch (err) {
-    console.error("Error verifying email:", err);
+    logger.error({ err }, "Error verifying email");
     res.status(500).json({ ok: false, error: "Something went wrong. Please try again." });
   }
 });
@@ -251,7 +252,7 @@ router.post("/resend-verification", rateLimit({
 
     res.json({ message: "If an unverified account exists with that email, a new verification link has been sent." });
   } catch (err) {
-    console.error("Error resending verification:", err);
+    logger.error({ err }, "Error resending verification");
     res.json({ message: "If an unverified account exists with that email, a new verification link has been sent." });
   }
 });

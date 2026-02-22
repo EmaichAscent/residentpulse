@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
 import { generateSummary } from "./summaryGenerator.js";
+import logger from "./logger.js";
 
 const anthropic = new Anthropic();
 const MODEL = "claude-sonnet-4-5-20250929";
@@ -49,7 +50,7 @@ const STOP_WORDS = new Set([
  * Uses 3 parallel Sonnet passes + synthesis for consistency.
  */
 export async function generateRoundInsights(roundId, clientId) {
-  console.log(`Generating insights for round ${roundId}, client ${clientId}...`);
+  logger.info(`Generating insights for round ${roundId}, client ${clientId}...`);
 
   // Auto-finalize abandoned sessions before generating insights
   await finalizeStaleSessionsForRound(roundId, clientId);
@@ -67,7 +68,7 @@ export async function generateRoundInsights(roundId, clientId) {
   );
 
   if (sessions.length === 0) {
-    console.log(`No completed sessions for round ${roundId}, skipping insights`);
+    logger.info(`No completed sessions for round ${roundId}, skipping insights`);
     return;
   }
 
@@ -168,7 +169,7 @@ ${sessionContext}${alertContext}`;
   // Generate word frequencies
   await generateWordFrequencies(roundId, clientId);
 
-  console.log(`Insights generated for round ${roundId}`);
+  logger.info(`Insights generated for round ${roundId}`);
   return insightsJson;
 }
 
@@ -355,15 +356,15 @@ async function finalizeStaleSessionsForRound(roundId, clientId) {
 
   if (staleSessions.length === 0) return;
 
-  console.log(`Auto-finalizing ${staleSessions.length} abandoned session(s) for round ${roundId}`);
+  logger.info(`Auto-finalizing ${staleSessions.length} abandoned session(s) for round ${roundId}`);
 
   for (const session of staleSessions) {
     try {
       await db.run("UPDATE sessions SET completed = TRUE WHERE id = ?", [session.id]);
       await generateSummary(session.id);
-      console.log(`Auto-finalized session ${session.id}`);
+      logger.info(`Auto-finalized session ${session.id}`);
     } catch (err) {
-      console.error(`Failed to auto-finalize session ${session.id}:`, err.message);
+      logger.error(`Failed to auto-finalize session ${session.id}: %s`, err.message);
     }
   }
 }

@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import logger from "./logger.js";
 
 /**
  * Strip HTML to plain text for email fallback
@@ -163,14 +164,14 @@ export async function sendInvitation(user, token, roundInfo) {
     });
 
     if (error) {
-      console.error("Resend API error:", error);
+      logger.error({ error }, "Resend API error");
       throw new Error(error.message || "Failed to send email");
     }
 
-    console.log(`Invitation sent to ${user.email}, email ID: ${data.id}`);
+    logger.info(`Invitation sent to ${user.email}, email ID: ${data.id}`);
     return data;
   } catch (err) {
-    console.error(`Failed to send invitation to ${user.email}:`, err.message);
+    logger.error(`Failed to send invitation to ${user.email}: %s`, err.message);
     throw err;
   }
 }
@@ -261,14 +262,14 @@ export async function sendPasswordResetEmail(email, resetToken) {
     });
 
     if (error) {
-      console.error("Resend API error:", error);
+      logger.error({ error }, "Resend API error");
       throw new Error(error.message || "Failed to send email");
     }
 
-    console.log(`Password reset email sent to ${email}, email ID: ${data.id}`);
+    logger.info(`Password reset email sent to ${email}, email ID: ${data.id}`);
     return data;
   } catch (err) {
-    console.error(`Failed to send password reset email to ${email}:`, err.message);
+    logger.error(`Failed to send password reset email to ${email}: %s`, err.message);
     throw err;
   }
 }
@@ -359,14 +360,14 @@ export async function sendVerificationEmail(email, token) {
     });
 
     if (error) {
-      console.error("Resend API error:", error);
+      logger.error({ error }, "Resend API error");
       throw new Error(error.message || "Failed to send email");
     }
 
-    console.log(`Verification email sent to ${email}, email ID: ${data.id}`);
+    logger.info(`Verification email sent to ${email}, email ID: ${data.id}`);
     return data;
   } catch (err) {
-    console.error(`Failed to send verification email to ${email}:`, err.message);
+    logger.error(`Failed to send verification email to ${email}: %s`, err.message);
     throw err;
   }
 }
@@ -486,14 +487,14 @@ export async function sendReminder(user, token, { daysRemaining, companyName, cl
     });
 
     if (error) {
-      console.error("Resend API error:", error);
+      logger.error({ error }, "Resend API error");
       throw new Error(error.message || "Failed to send email");
     }
 
-    console.log(`Reminder sent to ${user.email}, email ID: ${data.id}`);
+    logger.info(`Reminder sent to ${user.email}, email ID: ${data.id}`);
     return data;
   } catch (err) {
-    console.error(`Failed to send reminder to ${user.email}:`, err.message);
+    logger.error(`Failed to send reminder to ${user.email}: %s`, err.message);
     throw err;
   }
 }
@@ -578,14 +579,14 @@ export async function sendNewAdminEmail(email, tempPassword, { firstName, compan
     });
 
     if (error) {
-      console.error("Resend API error:", error);
+      logger.error({ error }, "Resend API error");
       throw new Error(error.message || "Failed to send email");
     }
 
-    console.log(`New admin email sent to ${email}, email ID: ${data.id}`);
+    logger.info(`New admin email sent to ${email}, email ID: ${data.id}`);
     return data;
   } catch (err) {
-    console.error(`Failed to send new admin email to ${email}:`, err.message);
+    logger.error(`Failed to send new admin email to ${email}: %s`, err.message);
     throw err;
   }
 }
@@ -608,12 +609,12 @@ async function sendAdminNotification(email, subject, emailHtml) {
     });
 
     if (error) {
-      console.error("Resend API error (admin notification):", error);
+      logger.error({ error }, "Resend API error (admin notification)");
       return null;
     }
     return data;
   } catch (err) {
-    console.error(`Failed to send admin notification to ${email}:`, err.message);
+    logger.error(`Failed to send admin notification to ${email}: %s`, err.message);
     return null;
   }
 }

@@ -2,6 +2,7 @@ import cron from "node-cron";
 import db from "./db.js";
 import { sendReminder, notifyRoundConcluded, notifyRoundApproaching } from "./utils/emailService.js";
 import { generateRoundInsights } from "./utils/insightGenerator.js";
+import logger from "./utils/logger.js";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -31,7 +32,7 @@ async function concludeExpiredRounds() {
       [round.id, round.client_id]
     );
 
-    console.log(`Auto-concluded round ${round.round_number} for client ${round.client_id}`);
+    logger.info(`Auto-concluded round ${round.round_number} for client ${round.client_id}`);
 
     // Notify admins of round conclusion
     const completedCount = await db.get(
@@ -42,11 +43,11 @@ async function concludeExpiredRounds() {
     notifyRoundConcluded({
       clientId: round.client_id, roundNumber: round.round_number,
       totalResponses: completedCount?.count || 0, totalInvited: roundDetails?.members_invited || 0, db
-    }).catch(err => console.error(`Failed to send conclusion notifications for round ${round.id}:`, err.message));
+    }).catch(err => logger.error(`Failed to send conclusion notifications for round ${round.id}: %s`, err.message));
 
     // Generate AI insights asynchronously
     generateRoundInsights(round.id, round.client_id).catch((err) =>
-      console.error(`Failed to generate insights for round ${round.id}:`, err.message)
+      logger.error(`Failed to generate insights for round ${round.id}: %s`, err.message)
     );
   }
 }
@@ -66,7 +67,7 @@ async function sendReminders() {
   for (const round of day10Rounds) {
     await sendRoundReminders(round, 10);
     await db.run("UPDATE survey_rounds SET reminder_10_sent = true WHERE id = ?", [round.id]);
-    console.log(`Day 10 reminders sent for round ${round.round_number} (client ${round.client_id})`);
+    logger.info(`Day 10 reminders sent for round ${round.round_number} (client ${round.client_id})`);
   }
 
   // Day 20 reminders
@@ -80,7 +81,7 @@ async function sendReminders() {
   for (const round of day20Rounds) {
     await sendRoundReminders(round, 20);
     await db.run("UPDATE survey_rounds SET reminder_20_sent = true WHERE id = ?", [round.id]);
-    console.log(`Day 20 reminders sent for round ${round.round_number} (client ${round.client_id})`);
+    logger.info(`Day 20 reminders sent for round ${round.round_number} (client ${round.client_id})`);
   }
 }
 
@@ -121,7 +122,7 @@ async function sendRoundReminders(round, dayNumber) {
     try {
       await sendReminder(user, user.invitation_token, { daysRemaining, companyName, clientId: round.client_id });
     } catch (err) {
-      console.error(`Failed to send day ${dayNumber} reminder to ${user.email}:`, err.message);
+      logger.error(`Failed to send day ${dayNumber} reminder to ${user.email}: %s`, err.message);
     }
 
     // Rate limit
@@ -153,7 +154,7 @@ async function sendApproachingRoundReminders() {
       memberCount: memberCount?.count || 0, db
     });
     await db.run("UPDATE survey_rounds SET admin_reminder_14_sent = true WHERE id = ?", [round.id]);
-    console.log(`14-day approaching reminder sent for round ${round.round_number} (client ${round.client_id})`);
+    logger.info(`14-day approaching reminder sent for round ${round.round_number} (client ${round.client_id})`);
   }
 
   // Day-of reminder
@@ -172,7 +173,7 @@ async function sendApproachingRoundReminders() {
       memberCount: memberCount?.count || 0, db
     });
     await db.run("UPDATE survey_rounds SET admin_reminder_0_sent = true WHERE id = ?", [round.id]);
-    console.log(`Day-of approaching reminder sent for round ${round.round_number} (client ${round.client_id})`);
+    logger.info(`Day-of approaching reminder sent for round ${round.round_number} (client ${round.client_id})`);
   }
 }
 
@@ -197,11 +198,11 @@ async function cleanupAbandonedSignups() {
     await db.run("DELETE FROM client_admins WHERE client_id = ?", [client.id]);
     await db.run("UPDATE activity_log SET client_id = NULL WHERE client_id = ?", [client.id]);
     await db.run("DELETE FROM clients WHERE id = ?", [client.id]);
-    console.log(`Auto-deleted abandoned signup: client ${client.id} (${client.company_name})`);
+    logger.info(`Auto-deleted abandoned signup: client ${client.id} (${client.company_name})`);
   }
 
   if (abandoned.length > 0) {
-    console.log(`Cleaned up ${abandoned.length} abandoned signup(s)`);
+    logger.info(`Cleaned up ${abandoned.length} abandoned signup(s)`);
   }
 }
 
@@ -210,17 +211,17 @@ async function cleanupAbandonedSignups() {
  */
 export function startScheduler() {
   cron.schedule("0 9 * * *", async () => {
-    console.log("Running daily survey round scheduler...");
+    logger.info("Running daily survey round scheduler...");
     try {
       await sendApproachingRoundReminders();
       await concludeExpiredRounds();
       await sendReminders();
       await cleanupAbandonedSignups();
-      console.log("Daily scheduler completed successfully");
+      logger.info("Daily scheduler completed successfully");
     } catch (err) {
-      console.error("Scheduler error:", err);
+      logger.error({ err }, "Scheduler error");
     }
   });
 
-  console.log("Survey round scheduler started (daily at 9:00 AM UTC)");
+  logger.info("Survey round scheduler started (daily at 9:00 AM UTC)");
 }

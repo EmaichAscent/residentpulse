@@ -7,6 +7,7 @@ import { sendInvitation, sendNewAdminEmail } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
 import { generateSummary } from "../utils/summaryGenerator.js";
 import { isZohoConfigured, createCheckoutSession, updateSubscriptionHostedPage, cancelSubscription, reactivateSubscription } from "../utils/zohoService.js";
+import logger from "../utils/logger.js";
 
 const router = Router();
 
@@ -441,7 +442,7 @@ router.post("/account/subscription/change-plan", async (req, res) => {
 
     return res.status(400).json({ error: "Unable to process plan change. Please contact support." });
   } catch (err) {
-    console.error("Plan change error:", err);
+    logger.error({ err }, "Plan change error");
     return res.status(502).json({ error: "Payment system error. Please try again or contact support." });
   }
 });
@@ -488,7 +489,7 @@ router.post("/account/subscription/cancel", async (req, res) => {
 
     res.json({ ok: true, message: "Your subscription will be cancelled at the end of your billing period. You'll be downgraded to the Free plan." });
   } catch (err) {
-    console.error("Cancel subscription error:", err);
+    logger.error({ err }, "Cancel subscription error");
     res.status(502).json({ error: "Failed to cancel subscription. Please try again or contact support." });
   }
 });
@@ -524,7 +525,7 @@ router.post("/account/subscription/reactivate", async (req, res) => {
 
     res.json({ ok: true, message: "Your subscription has been reactivated." });
   } catch (err) {
-    console.error("Reactivate subscription error:", err);
+    logger.error({ err }, "Reactivate subscription error");
     res.status(502).json({ error: "Failed to reactivate subscription. Please try again or contact support." });
   }
 });
@@ -938,7 +939,7 @@ router.post("/board-members/invite", async (req, res) => {
         sentCount++;
 
       } catch (err) {
-        console.error(`Failed to send invitation to user ${userId}:`, err);
+        logger.error({ err }, `Failed to send invitation to user ${userId}`);
 
         // Log failed invitation
         try {
@@ -947,7 +948,7 @@ router.post("/board-members/invite", async (req, res) => {
             [userId, req.clientId, req.userId, "failed", err.message]
           );
         } catch (logErr) {
-          console.error("Failed to log invitation error:", logErr);
+          logger.error({ err: logErr }, "Failed to log invitation error");
         }
 
         results.push({
@@ -972,7 +973,7 @@ router.post("/board-members/invite", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Invitation endpoint error:", err);
+    logger.error({ err }, "Invitation endpoint error");
     res.status(500).json({ error: err.message });
   }
 });
@@ -1022,7 +1023,7 @@ router.post("/users", async (req, res) => {
       companyName: client?.company_name || "your company",
     });
   } catch (emailErr) {
-    console.error("Failed to send new admin email:", emailErr);
+    logger.error({ err: emailErr }, "Failed to send new admin email");
     // Still return success — admin was created, just email failed
   }
 
@@ -1096,7 +1097,7 @@ router.get("/alerts", async (req, res) => {
     );
     res.json(alerts);
   } catch (err) {
-    console.error("Error fetching alerts:", err);
+    logger.error({ err }, "Error fetching alerts");
     res.status(500).json({ error: err.message });
   }
 });
@@ -1126,7 +1127,7 @@ router.get("/alerts/round/:roundId", async (req, res) => {
     );
     res.json(alerts);
   } catch (err) {
-    console.error("Error fetching round alerts:", err);
+    logger.error({ err }, "Error fetching round alerts");
     res.status(500).json({ error: err.message });
   }
 });
@@ -1161,7 +1162,7 @@ router.post("/alerts/:id/dismiss", async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    console.error("Error dismissing alert:", err);
+    logger.error({ err }, "Error dismissing alert");
     res.status(500).json({ error: err.message });
   }
 });
@@ -1196,7 +1197,7 @@ router.post("/alerts/:id/solve", async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    console.error("Error solving alert:", err);
+    logger.error({ err }, "Error solving alert");
     res.status(500).json({ error: err.message });
   }
 });
@@ -1245,7 +1246,7 @@ router.post("/sessions/:id/finalize", async (req, res) => {
 
     res.json({ ok: true, summary });
   } catch (err) {
-    console.error("Error finalizing session:", err);
+    logger.error({ err }, "Error finalizing session");
     res.status(500).json({ error: err.message });
   }
 });
@@ -1414,7 +1415,7 @@ router.get("/communities", async (req, res) => {
         );
       }
     } catch (err) {
-      console.error("Auto-seed communities failed:", err);
+      logger.error({ err }, "Auto-seed communities failed");
     }
   }
 

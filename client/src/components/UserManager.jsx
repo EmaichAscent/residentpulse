@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
+import ConfirmModal from "./ConfirmModal";
 
 function AutocompleteInput({ value, onChange, options, placeholder, className }) {
   const [open, setOpen] = useState(false);
@@ -121,6 +122,7 @@ export default function UserManager() {
   const [communityNames, setCommunityNames] = useState([]);
   const [sortKey, setSortKey] = useState("email");
   const [sortDir, setSortDir] = useState("asc");
+  const [deactivateTarget, setDeactivateTarget] = useState(null);
 
   const fetchUsers = () => {
     fetch("/api/admin/board-members")
@@ -205,14 +207,15 @@ export default function UserManager() {
     }
   };
 
-  const handleDelete = async (id, email) => {
-    if (!confirm(`Remove ${email} from future surveys? Their past survey responses will be preserved.`)) return;
+  const handleDelete = async (id) => {
     try {
       await fetch(`/api/admin/board-members/${id}`, { method: "DELETE" });
       setUsers((prev) => prev.filter((u) => u.id !== id));
       if (editingId === id) setEditingId(null);
     } catch {
       // silently fail
+    } finally {
+      setDeactivateTarget(null);
     }
   };
 
@@ -721,7 +724,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                           </svg>
                         </button>
                         <button
-                          onClick={() => handleDelete(u.id, u.email)}
+                          onClick={() => setDeactivateTarget(u)}
                           className="p-1 text-gray-300 hover:text-red-500 transition"
                           title="Remove from future surveys"
                         >
@@ -754,6 +757,15 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
           Keep your board member list up to date so everyone is included in the next round.
         </p>
       </div>
+      <ConfirmModal
+        isOpen={!!deactivateTarget}
+        onClose={() => setDeactivateTarget(null)}
+        onConfirm={() => handleDelete(deactivateTarget?.id)}
+        title="Remove Member"
+        message={deactivateTarget ? `Remove ${deactivateTarget.email} from future surveys? Their past survey responses will be preserved.` : ""}
+        confirmLabel="Remove"
+        destructive
+      />
     </div>
   );
 }

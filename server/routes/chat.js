@@ -2,15 +2,44 @@ import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
 import { notifyCriticalAlert } from "../utils/emailService.js";
+import logger from "../utils/logger.js";
 
 const router = Router();
 const anthropic = new Anthropic();
+
+// Rate limiter: 10 requests per minute per session_id
+const rateLimits = new Map();
+const RATE_LIMIT = 10;
+const RATE_WINDOW = 60 * 1000;
+
+function checkRateLimit(sessionId) {
+  const now = Date.now();
+  let entry = rateLimits.get(sessionId);
+  if (!entry || now - entry.windowStart > RATE_WINDOW) {
+    entry = { windowStart: now, count: 0 };
+    rateLimits.set(sessionId, entry);
+  }
+  entry.count++;
+  return entry.count <= RATE_LIMIT;
+}
+
+// Clean up stale entries every 5 minutes
+setInterval(() => {
+  const cutoff = Date.now() - RATE_WINDOW;
+  for (const [key, entry] of rateLimits) {
+    if (entry.windowStart < cutoff) rateLimits.delete(key);
+  }
+}, 5 * 60 * 1000);
 
 router.post("/", async (req, res) => {
   const { session_id, message } = req.body;
 
   if (!session_id || !message) {
     return res.status(400).json({ error: "session_id and message are required" });
+  }
+
+  if (!checkRateLimit(session_id)) {
+    return res.status(429).json({ error: "Too many messages. Please wait a moment before sending another." });
   }
 
   const session = await db.get("SELECT * FROM sessions WHERE id = ?", [Number(session_id)]);
@@ -83,12 +112,12 @@ router.post("/", async (req, res) => {
 
     // Fire critical alert detection asynchronously (don't block the response)
     detectCriticalAlert(message, session, savedMsg?.id).catch((err) =>
-      console.error("Critical alert detection error:", err.message)
+      logger.error("Critical alert detection error: %s", err.message)
     );
 
     res.json({ message: assistantMessage, timestamp: savedMsg?.created_at });
   } catch (err) {
-    console.error("Anthropic API error:", err.message);
+    logger.error("Anthropic API error: %s", err.message);
     res.status(500).json({ error: "Failed to get AI response" });
   }
 });
@@ -154,7 +183,7 @@ or
     ]
   );
 
-  console.log(`CRITICAL ALERT created for client ${session.client_id}, session ${session.id}: ${parsed.alert_type}`);
+  logger.warn(`CRITICAL ALERT created for client ${session.client_id}, session ${session.id}: ${parsed.alert_type}`);
 
   // Notify admins immediately
   const respondentName = [session.first_name, session.last_name].filter(Boolean).join(" ") || "A board member";
@@ -168,7 +197,7 @@ or
     communityName: session.community_name || "",
     roundNumber: round?.round_number || null,
     db,
-  }).catch(err => console.error("Failed to send critical alert notification:", err.message));
+  }).catch(err => logger.error("Failed to send critical alert notification: %s", err.message));
 }
 
 export default router;

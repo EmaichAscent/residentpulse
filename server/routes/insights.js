@@ -2,6 +2,7 @@ import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
+import logger from "../utils/logger.js";
 
 const router = Router();
 const anthropic = new Anthropic();
@@ -76,7 +77,7 @@ Focus on concrete, specific actions that can improve resident satisfaction.`;
     const insights = response.content[0].text;
     res.json({ insights, session_count: sessions.length });
   } catch (err) {
-    console.error("Anthropic API error:", err.message);
+    logger.error("Anthropic API error: %s", err.message);
     res.status(500).json({ error: "Failed to generate insights" });
   }
 });

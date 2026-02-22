@@ -1,9 +1,11 @@
 import { useState } from "react";
+import ConfirmModal from "./ConfirmModal";
 
 export default function ResponseList({ sessions, onDelete }) {
   const [expanded, setExpanded] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const toggleExpand = async (id) => {
     if (expanded === id) {
@@ -23,16 +25,21 @@ export default function ResponseList({ sessions, onDelete }) {
     }
   };
 
-  const handleDelete = async (e, id, email) => {
+  const handleDeleteClick = (e, id, email) => {
     e.stopPropagation();
-    if (!confirm(`Delete session for ${email}? This cannot be undone.`)) return;
+    setDeleteTarget({ id, email });
+  };
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
     try {
-      await fetch(`/api/admin/responses/${id}`, { method: "DELETE" });
-      if (expanded === id) setExpanded(null);
-      onDelete?.(id);
+      await fetch(`/api/admin/responses/${deleteTarget.id}`, { method: "DELETE" });
+      if (expanded === deleteTarget.id) setExpanded(null);
+      onDelete?.(deleteTarget.id);
     } catch {
       // silently fail
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -74,7 +81,7 @@ export default function ResponseList({ sessions, onDelete }) {
                 <p className="text-xs text-gray-400">NPS</p>
               </div>
               <button
-                onClick={(e) => handleDelete(e, s.id, s.email)}
+                onClick={(e) => handleDeleteClick(e, s.id, s.email)}
                 className="p-2 text-gray-300 hover:text-red-500 transition"
                 title="Delete session"
               >
@@ -116,6 +123,15 @@ export default function ResponseList({ sessions, onDelete }) {
           )}
         </div>
       ))}
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Session"
+        message={deleteTarget ? `Delete session for ${deleteTarget.email}? This cannot be undone.` : ""}
+        confirmLabel="Delete"
+        destructive
+      />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import db from "../db.js";
+import logger from "./logger.js";
 
 /**
  * Log an activity to the global audit trail.
@@ -31,6 +32,6 @@ export async function logActivity({ actorType, actorId, actorEmail, action, enti
     );
   } catch (err) {
     // Activity logging should never break the main flow
-    console.error("Failed to log activity:", err.message);
+    logger.error("Failed to log activity: %s", err.message);
   }
 }

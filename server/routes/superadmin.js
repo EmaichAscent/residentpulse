@@ -3,6 +3,7 @@ import db from "../db.js";
 import { requireSuperAdmin } from "../middleware/auth.js";
 import { hashPassword, generatePassword } from "../utils/password.js";
 import { generateClientCode } from "../utils/clientCode.js";
+import logger from "../utils/logger.js";
 
 const router = Router();
 
@@ -54,7 +55,7 @@ router.get("/dashboard", async (req, res) => {
       engagement_warnings: warnings
     });
   } catch (err) {
-    console.error("Dashboard error:", err);
+    logger.error({ err }, "Dashboard error");
     res.status(500).json({ error: "Failed to load dashboard" });
   }
 });
@@ -84,7 +85,7 @@ router.get("/activity-log", async (req, res) => {
       limit
     });
   } catch (err) {
-    console.error("Activity log error:", err);
+    logger.error({ err }, "Activity log error");
     res.status(500).json({ error: "Failed to load activity log" });
   }
 });
@@ -166,7 +167,7 @@ router.post("/clients", async (req, res) => {
       message: "Client created successfully. Share these credentials with the client admin."
     });
   } catch (error) {
-    console.error("Error creating client:", error);
+    logger.error({ err: error }, "Error creating client");
     res.status(500).json({ error: "Failed to create client" });
   }
 });
@@ -285,7 +286,7 @@ router.put("/prompt", async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    console.error("Error saving prompt:", err);
+    logger.error({ err }, "Error saving prompt");
     res.status(500).json({ error: "Failed to save prompt" });
   }
 });
@@ -382,7 +383,7 @@ router.patch("/clients/:id/subscription", async (req, res) => {
         );
       }
     } catch (err) {
-      console.error("Failed to seed communities on upgrade:", err);
+      logger.error({ err }, "Failed to seed communities on upgrade");
     }
   }
 
@@ -458,7 +459,7 @@ router.get("/clients/:id/diagnostics", async (req, res) => {
       invitation_logs: invitationLogs
     });
   } catch (err) {
-    console.error("Diagnostics error:", err);
+    logger.error({ err }, "Diagnostics error");
     res.status(500).json({ error: err.message });
   }
 });
@@ -591,7 +592,7 @@ router.get("/clients/:id/detail", async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Client detail error:", err);
+    logger.error({ err }, "Client detail error");
     res.status(500).json({ error: "Failed to load client details" });
   }
 });
@@ -614,7 +615,7 @@ router.get("/clients/:id/alerts", async (req, res) => {
     );
     res.json(alerts);
   } catch (err) {
-    console.error("Error fetching client alerts:", err);
+    logger.error({ err }, "Error fetching client alerts");
     res.status(500).json({ error: err.message });
   }
 });
@@ -635,7 +636,7 @@ router.get("/clients/:id/interviews", async (req, res) => {
     );
     res.json(interviews);
   } catch (err) {
-    console.error("Interviews list error:", err);
+    logger.error({ err }, "Interviews list error");
     res.status(500).json({ error: "Failed to load interviews" });
   }
 });
@@ -657,7 +658,7 @@ router.get("/clients/:id/interviews/:interviewId/messages", async (req, res) => 
 
     res.json({ interview, messages });
   } catch (err) {
-    console.error("Interview messages error:", err);
+    logger.error({ err }, "Interview messages error");
     res.status(500).json({ error: "Failed to load interview messages" });
   }
 });
@@ -671,7 +672,7 @@ router.get("/clients/:id/activity", async (req, res) => {
     );
     res.json(entries);
   } catch (err) {
-    console.error("Client activity error:", err);
+    logger.error({ err }, "Client activity error");
     res.status(500).json({ error: "Failed to load activity" });
   }
 });
@@ -733,7 +734,7 @@ router.post("/clients/:id/reset", async (req, res) => {
 
     res.json({ ok: true, message: `Client "${client.company_name}" has been reset. Board members preserved.` });
   } catch (err) {
-    console.error("Client reset error:", err);
+    logger.error({ err }, "Client reset error");
     res.status(500).json({ error: "Failed to reset client" });
   }
 });
@@ -775,10 +776,10 @@ router.delete("/clients/:id", async (req, res) => {
       [req.session.user?.email || "superadmin", `Deleted pending client "${client.company_name}"`, JSON.stringify({ client_id: id, company_name: client.company_name })]
     );
 
-    console.log(`Pending client ${id} (${client.company_name}) deleted by superadmin`);
+    logger.info(`Pending client ${id} (${client.company_name}) deleted by superadmin`);
     res.json({ success: true });
   } catch (err) {
-    console.error("Client delete error:", err);
+    logger.error({ err }, "Client delete error");
     res.status(500).json({ error: "Failed to delete client", detail: err.message });
   }
 });

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ChatBubble from "../components/ChatBubble";
+import ConfirmModal from "../components/ConfirmModal";
 
 export default function SuperAdminClientDetailPage() {
   const { id } = useParams();
@@ -20,6 +21,7 @@ export default function SuperAdminClientDetailPage() {
   const [alerts, setAlerts] = useState([]);
   const [expandedAlertRound, setExpandedAlertRound] = useState(null);
   const [resetting, setResetting] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
 
   useEffect(() => {
     Promise.all([loadDetail(), loadInterviews(), loadPlans(), loadActivity(), loadAlerts()])
@@ -114,9 +116,8 @@ export default function SuperAdminClientDetailPage() {
   };
 
   const handleToggleStatus = async () => {
+    setConfirmAction(null);
     const newStatus = detail.client.status === "active" ? "inactive" : "active";
-    if (!confirm(`${newStatus === "active" ? "Activate" : "Deactivate"} ${detail.client.company_name}?`)) return;
-
     await fetch(`/api/superadmin/clients/${id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -127,7 +128,7 @@ export default function SuperAdminClientDetailPage() {
   };
 
   const handleImpersonate = async () => {
-    if (!confirm(`Impersonate ${detail.client.company_name}?`)) return;
+    setConfirmAction(null);
     const res = await fetch(`/api/superadmin/clients/${id}/impersonate`, {
       method: "POST",
       credentials: "include"
@@ -136,8 +137,7 @@ export default function SuperAdminClientDetailPage() {
   };
 
   const handleReset = async () => {
-    if (!confirm(`RESET "${detail.client.company_name}"?\n\nThis will delete:\n- Admin interviews & generated prompt\n- All survey rounds\n- All board member sessions & responses\n- Critical alerts\n\nBoard members will be preserved.\nAdmins will need to redo onboarding.\n\nThis cannot be undone.`)) return;
-
+    setConfirmAction(null);
     setResetting(true);
     try {
       const res = await fetch(`/api/superadmin/clients/${id}/reset`, {
@@ -145,22 +145,20 @@ export default function SuperAdminClientDetailPage() {
         credentials: "include"
       });
       if (res.ok) {
-        alert("Client has been reset. Board members preserved.");
         await Promise.all([loadDetail(), loadInterviews(), loadActivity()]);
       } else {
         const data = await res.json();
-        alert("Reset failed: " + (data.error || "Unknown error"));
+        setConfirmAction({ type: "error", message: "Reset failed: " + (data.error || "Unknown error") });
       }
     } catch (err) {
-      alert("Reset failed: " + err.message);
+      setConfirmAction({ type: "error", message: "Reset failed: " + err.message });
     } finally {
       setResetting(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!confirm(`Permanently delete "${detail.client.company_name}" and all associated data?\n\nThis cannot be undone.`)) return;
-
+    setConfirmAction(null);
     try {
       const res = await fetch(`/api/superadmin/clients/${id}`, {
         method: "DELETE",
@@ -170,10 +168,10 @@ export default function SuperAdminClientDetailPage() {
         navigate("/superadmin/clients");
       } else {
         const data = await res.json();
-        alert("Delete failed: " + (data.detail || data.error || "Unknown error"));
+        setConfirmAction({ type: "error", message: "Delete failed: " + (data.detail || data.error || "Unknown error") });
       }
     } catch (err) {
-      alert("Delete failed: " + err.message);
+      setConfirmAction({ type: "error", message: "Delete failed: " + err.message });
     }
   };
 
@@ -211,20 +209,20 @@ export default function SuperAdminClientDetailPage() {
           </div>
           <div className="flex gap-2">
             {client.status === "pending" && (
-              <button onClick={handleDelete}
+              <button onClick={() => setConfirmAction({ type: "delete" })}
                 className="px-3 py-1.5 text-xs font-medium text-red-200 border border-red-300/40 rounded-lg hover:bg-red-500/20">
                 Delete
               </button>
             )}
-            <button onClick={handleReset} disabled={resetting}
+            <button onClick={() => setConfirmAction({ type: "reset" })} disabled={resetting}
               className="px-3 py-1.5 text-xs font-medium text-red-200 border border-red-300/40 rounded-lg hover:bg-red-500/20 disabled:opacity-40">
               {resetting ? "Resetting..." : "Reset"}
             </button>
-            <button onClick={handleImpersonate} disabled={client.status !== "active"}
+            <button onClick={() => setConfirmAction({ type: "impersonate" })} disabled={client.status !== "active"}
               className="px-3 py-1.5 text-xs font-medium text-white border border-white/40 rounded-lg hover:bg-white/10 disabled:opacity-40">
               Impersonate
             </button>
-            <button onClick={handleToggleStatus}
+            <button onClick={() => setConfirmAction({ type: "toggleStatus" })}
               className="px-3 py-1.5 text-xs font-medium text-white border border-white/40 rounded-lg hover:bg-white/10">
               {client.status === "active" ? "Deactivate" : "Activate"}
             </button>
@@ -602,6 +600,50 @@ export default function SuperAdminClientDetailPage() {
           </div>
         )}
       </div>
+      <ConfirmModal
+        isOpen={confirmAction?.type === "toggleStatus"}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={handleToggleStatus}
+        title={client.status === "active" ? "Deactivate Client" : "Activate Client"}
+        message={`${client.status === "active" ? "Deactivate" : "Activate"} ${client.company_name}?`}
+        confirmLabel={client.status === "active" ? "Deactivate" : "Activate"}
+        destructive={client.status === "active"}
+      />
+      <ConfirmModal
+        isOpen={confirmAction?.type === "impersonate"}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={handleImpersonate}
+        title="Impersonate Client"
+        message={`Impersonate ${client.company_name}? You will be logged in as their admin.`}
+        confirmLabel="Impersonate"
+      />
+      <ConfirmModal
+        isOpen={confirmAction?.type === "reset"}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={handleReset}
+        title="Reset Client"
+        message={`RESET "${client.company_name}"?\n\nThis will delete:\n- Admin interviews & generated prompt\n- All survey rounds\n- All board member sessions & responses\n- Critical alerts\n\nBoard members will be preserved.\nAdmins will need to redo onboarding.\n\nThis cannot be undone.`}
+        confirmLabel="Reset"
+        destructive
+        loading={resetting}
+      />
+      <ConfirmModal
+        isOpen={confirmAction?.type === "delete"}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={handleDelete}
+        title="Delete Client"
+        message={`Permanently delete "${client.company_name}" and all associated data?\n\nThis cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+      />
+      <ConfirmModal
+        isOpen={confirmAction?.type === "error"}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => setConfirmAction(null)}
+        title="Error"
+        message={confirmAction?.message || ""}
+        confirmLabel="OK"
+      />
     </div>
   );
 }

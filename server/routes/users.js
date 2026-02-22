@@ -5,6 +5,7 @@ import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
 import { sendInvitation } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
+import logger from "../utils/logger.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -287,7 +288,7 @@ router.post("/:id/enroll", requireClientAdmin, async (req, res) => {
 
     res.json({ ok: true, round_number: activeRound.round_number });
   } catch (err) {
-    console.error(`Failed to enroll member ${id}:`, err);
+    logger.error({ err }, `Failed to enroll member ${id}`);
     res.status(500).json({ error: "Failed to send invitation" });
   }
 });

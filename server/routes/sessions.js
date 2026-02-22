@@ -2,6 +2,7 @@ import { Router } from "express";
 import db from "../db.js";
 import { generateSummary } from "../utils/summaryGenerator.js";
 import { notifyNewResponse } from "../utils/emailService.js";
+import logger from "../utils/logger.js";
 
 const router = Router();
 
@@ -108,7 +109,7 @@ router.get("/validate-token/:token", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Token validation error:", err);
+    logger.error({ err }, "Token validation error");
     res.status(500).json({ error: "Failed to validate token" });
   }
 });
@@ -183,7 +184,7 @@ router.patch("/:id/complete", async (req, res) => {
 
   // Generate summary asynchronously (don't block the response)
   generateSummary(id).catch((err) =>
-    console.error("Summary generation failed:", err.message)
+    logger.error("Summary generation failed: %s", err.message)
   );
 
   // Notify admins of new response asynchronously
@@ -203,10 +204,10 @@ router.patch("/:id/complete", async (req, res) => {
         clientId: session.client_id, roundNumber: round?.round_number || 0,
         respondentName, communityName: session.community_name || "",
         totalResponses: completed?.count || 0, totalInvited: round?.members_invited || 0, db
-      }).catch(err => console.error("Failed to send new response notification:", err.message));
+      }).catch(err => logger.error("Failed to send new response notification: %s", err.message));
     }
   } catch (err) {
-    console.error("Failed to prepare response notification:", err.message);
+    logger.error("Failed to prepare response notification: %s", err.message);
   }
 });
 

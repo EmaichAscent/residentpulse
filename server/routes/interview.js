@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
 import { logActivity } from "../utils/activityLog.js";
+import logger from "../utils/logger.js";
 
 const router = Router();
 const anthropic = new Anthropic();
@@ -86,7 +87,7 @@ router.get("/status", async (req, res) => {
       onboardingCompleted: admin?.onboarding_completed || false
     });
   } catch (err) {
-    console.error("Error getting interview status:", err);
+    logger.error({ err }, "Error getting interview status");
     res.status(500).json({ error: "Failed to get interview status" });
   }
 });
@@ -110,7 +111,7 @@ router.get("/:id", async (req, res) => {
 
     res.json({ interview, messages });
   } catch (err) {
-    console.error("Error getting interview:", err);
+    logger.error({ err }, "Error getting interview");
     res.status(500).json({ error: "Failed to get interview" });
   }
 });
@@ -159,7 +160,7 @@ router.post("/", async (req, res) => {
 
     res.json({ interview_id: result.lastInsertRowid, resumed: false });
   } catch (err) {
-    console.error("Error creating interview:", err);
+    logger.error({ err }, "Error creating interview");
     res.status(500).json({ error: "Failed to create interview" });
   }
 });
@@ -254,7 +255,7 @@ router.post("/:id/structured", async (req, res) => {
 
     res.json({ message: aiMessage });
   } catch (err) {
-    console.error("Error processing structured fields:", err);
+    logger.error({ err }, "Error processing structured fields");
     res.status(500).json({ error: "Failed to process structured fields" });
   }
 });
@@ -342,7 +343,7 @@ router.post("/:id/message", async (req, res) => {
 
     res.json({ message: aiMessage });
   } catch (err) {
-    console.error("Error in interview chat:", err);
+    logger.error({ err }, "Error in interview chat");
     res.status(500).json({ error: "Failed to get AI response" });
   }
 });
@@ -456,7 +457,7 @@ router.patch("/:id/confirm", async (req, res) => {
       generated_prompt: generatedPrompt
     });
   } catch (err) {
-    console.error("Error confirming interview:", err);
+    logger.error({ err }, "Error confirming interview");
     res.status(500).json({ error: "Failed to confirm interview" });
   }
 });
@@ -492,7 +493,7 @@ router.patch("/:id/abandon", async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
-    console.error("Error abandoning interview:", err);
+    logger.error({ err }, "Error abandoning interview");
     res.status(500).json({ error: "Failed to abandon interview" });
   }
 });

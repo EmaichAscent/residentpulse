@@ -2,6 +2,7 @@ import pg from "pg";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import logger from "./utils/logger.js";
 
 const { Pool } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -14,11 +15,11 @@ const pool = new Pool({
 
 // Test connection
 pool.on("connect", () => {
-  console.log("Connected to PostgreSQL database");
+  logger.info("Connected to PostgreSQL database");
 });
 
 pool.on("error", (err) => {
-  console.error("Unexpected database error:", err);
+  logger.error({ err }, "Unexpected database error");
 });
 
 // Initialize database schema
@@ -143,10 +144,10 @@ async function initializeSchema() {
       const migrationPath = join(__dirname, "migrations", "add-email-invitations.sql");
       const migrationSQL = readFileSync(migrationPath, "utf-8");
       await client.query(migrationSQL);
-      console.log("Email invitations migration applied successfully");
+      logger.info("Email invitations migration applied successfully");
     } catch (migrationErr) {
       // Migration may have already been applied, or file may not exist yet
-      console.log("Email invitations migration skipped (already applied or file not found)");
+      logger.info("Email invitations migration skipped (already applied or file not found)");
     }
 
     // Run subscriptions and signup migration
@@ -154,9 +155,9 @@ async function initializeSchema() {
       const subMigrationPath = join(__dirname, "migrations", "add-subscriptions-and-signup.sql");
       const subMigrationSQL = readFileSync(subMigrationPath, "utf-8");
       await client.query(subMigrationSQL);
-      console.log("Subscriptions and signup migration applied successfully");
+      logger.info("Subscriptions and signup migration applied successfully");
     } catch (migrationErr) {
-      console.log("Subscriptions and signup migration skipped (already applied or file not found)");
+      logger.info("Subscriptions and signup migration skipped (already applied or file not found)");
     }
 
     // Run survey rounds migration
@@ -164,9 +165,9 @@ async function initializeSchema() {
       const roundsMigrationPath = join(__dirname, "migrations", "add-survey-rounds.sql");
       const roundsMigrationSQL = readFileSync(roundsMigrationPath, "utf-8");
       await client.query(roundsMigrationSQL);
-      console.log("Survey rounds migration applied successfully");
+      logger.info("Survey rounds migration applied successfully");
     } catch (migrationErr) {
-      console.log("Survey rounds migration skipped (already applied or file not found)");
+      logger.info("Survey rounds migration skipped (already applied or file not found)");
     }
 
     // Run admin interviews migration
@@ -174,9 +175,9 @@ async function initializeSchema() {
       const interviewMigrationPath = join(__dirname, "migrations", "add-admin-interviews.sql");
       const interviewMigrationSQL = readFileSync(interviewMigrationPath, "utf-8");
       await client.query(interviewMigrationSQL);
-      console.log("Admin interviews migration applied successfully");
+      logger.info("Admin interviews migration applied successfully");
     } catch (migrationErr) {
-      console.log("Admin interviews migration skipped (already applied or file not found)");
+      logger.info("Admin interviews migration skipped (already applied or file not found)");
     }
 
     // Run dashboard redesign migration (insights + critical alerts)
@@ -184,9 +185,9 @@ async function initializeSchema() {
       const dashboardMigrationPath = join(__dirname, "migrations", "add-dashboard-redesign.sql");
       const dashboardMigrationSQL = readFileSync(dashboardMigrationPath, "utf-8");
       await client.query(dashboardMigrationSQL);
-      console.log("Dashboard redesign migration applied successfully");
+      logger.info("Dashboard redesign migration applied successfully");
     } catch (migrationErr) {
-      console.log("Dashboard redesign migration skipped (already applied or file not found)");
+      logger.info("Dashboard redesign migration skipped (already applied or file not found)");
     }
 
     // Run communities migration (paid-tier community data)
@@ -194,9 +195,9 @@ async function initializeSchema() {
       const communitiesMigrationPath = join(__dirname, "migrations", "add-communities.sql");
       const communitiesMigrationSQL = readFileSync(communitiesMigrationPath, "utf-8");
       await client.query(communitiesMigrationSQL);
-      console.log("Communities migration applied successfully");
+      logger.info("Communities migration applied successfully");
     } catch (migrationErr) {
-      console.log("Communities migration skipped (already applied or file not found)");
+      logger.info("Communities migration skipped (already applied or file not found)");
     }
 
     // Run session community_id migration (stable community reference on sessions)
@@ -204,9 +205,9 @@ async function initializeSchema() {
       const sessionCommunityPath = join(__dirname, "migrations", "add-session-community-id.sql");
       const sessionCommunitySQL = readFileSync(sessionCommunityPath, "utf-8");
       await client.query(sessionCommunitySQL);
-      console.log("Session community_id migration applied successfully");
+      logger.info("Session community_id migration applied successfully");
     } catch (migrationErr) {
-      console.log("Session community_id migration skipped (already applied or file not found)");
+      logger.info("Session community_id migration skipped (already applied or file not found)");
     }
 
     // Run alert solved state migration
@@ -214,9 +215,9 @@ async function initializeSchema() {
       const alertSolvedPath = join(__dirname, "migrations", "add-alert-solved.sql");
       const alertSolvedSQL = readFileSync(alertSolvedPath, "utf-8");
       await client.query(alertSolvedSQL);
-      console.log("Alert solved migration applied successfully");
+      logger.info("Alert solved migration applied successfully");
     } catch (migrationErr) {
-      console.log("Alert solved migration skipped (already applied or file not found)");
+      logger.info("Alert solved migration skipped (already applied or file not found)");
     }
 
     // Run email tracking migration (Resend webhook delivery status)
@@ -224,9 +225,9 @@ async function initializeSchema() {
       const emailTrackingPath = join(__dirname, "migrations", "add-email-tracking.sql");
       const emailTrackingSQL = readFileSync(emailTrackingPath, "utf-8");
       await client.query(emailTrackingSQL);
-      console.log("Email tracking migration applied successfully");
+      logger.info("Email tracking migration applied successfully");
     } catch (migrationErr) {
-      console.log("Email tracking migration skipped (already applied or file not found)");
+      logger.info("Email tracking migration skipped (already applied or file not found)");
     }
 
     // Run community deactivation + snapshots migration
@@ -234,9 +235,9 @@ async function initializeSchema() {
       const deactivationPath = join(__dirname, "migrations", "add-community-deactivation-and-snapshots.sql");
       const deactivationSQL = readFileSync(deactivationPath, "utf-8");
       await client.query(deactivationSQL);
-      console.log("Community deactivation and snapshots migration applied successfully");
+      logger.info("Community deactivation and snapshots migration applied successfully");
     } catch (migrationErr) {
-      console.log("Community deactivation and snapshots migration skipped (already applied or file not found)");
+      logger.info("Community deactivation and snapshots migration skipped (already applied or file not found)");
     }
 
     // Run round approaching reminders migration
@@ -244,9 +245,9 @@ async function initializeSchema() {
       const roundRemindersPath = join(__dirname, "migrations", "add-round-approaching-reminders.sql");
       const roundRemindersSQL = readFileSync(roundRemindersPath, "utf-8");
       await client.query(roundRemindersSQL);
-      console.log("Round approaching reminders migration applied successfully");
+      logger.info("Round approaching reminders migration applied successfully");
     } catch (migrationErr) {
-      console.log("Round approaching reminders migration skipped (already applied or file not found)");
+      logger.info("Round approaching reminders migration skipped (already applied or file not found)");
     }
 
     // Run client logo migration
@@ -254,9 +255,9 @@ async function initializeSchema() {
       const logoPath = join(__dirname, "migrations", "add-client-logo.sql");
       const logoSQL = readFileSync(logoPath, "utf-8");
       await client.query(logoSQL);
-      console.log("Client logo migration applied successfully");
+      logger.info("Client logo migration applied successfully");
     } catch (migrationErr) {
-      console.log("Client logo migration skipped (already applied or file not found)");
+      logger.info("Client logo migration skipped (already applied or file not found)");
     }
 
     // Run Zoho billing migration
@@ -264,9 +265,9 @@ async function initializeSchema() {
       const zohoBillingPath = join(__dirname, "migrations", "add-zoho-billing.sql");
       const zohoBillingSQL = readFileSync(zohoBillingPath, "utf-8");
       await client.query(zohoBillingSQL);
-      console.log("Zoho billing migration applied successfully");
+      logger.info("Zoho billing migration applied successfully");
     } catch (migrationErr) {
-      console.log("Zoho billing migration skipped (already applied or file not found)");
+      logger.info("Zoho billing migration skipped (already applied or file not found)");
     }
 
     // Run subscription management migration
@@ -274,16 +275,26 @@ async function initializeSchema() {
       const subMgmtPath = join(__dirname, "migrations", "add-subscription-management.sql");
       const subMgmtSQL = readFileSync(subMgmtPath, "utf-8");
       await client.query(subMgmtSQL);
-      console.log("Subscription management migration applied successfully");
+      logger.info("Subscription management migration applied successfully");
     } catch (migrationErr) {
-      console.log("Subscription management migration skipped (already applied or file not found)");
+      logger.info("Subscription management migration skipped (already applied or file not found)");
+    }
+
+    // Run performance indexes migration
+    try {
+      const indexPath = join(__dirname, "migrations", "add-performance-indexes.sql");
+      const indexSQL = readFileSync(indexPath, "utf-8");
+      await client.query(indexSQL);
+      logger.info("Performance indexes migration applied successfully");
+    } catch (migrationErr) {
+      logger.info("Performance indexes migration skipped (already applied or file not found)");
     }
 
     await client.query("COMMIT");
-    console.log("Database schema initialized successfully");
+    logger.info("Database schema initialized successfully");
   } catch (err) {
     await client.query("ROLLBACK");
-    console.error("Error initializing schema:", err);
+    logger.error({ err }, "Error initializing schema");
     throw err;
   } finally {
     client.release();
@@ -303,7 +314,7 @@ async function initializeSchema() {
         )
     `);
     if (result.rowCount > 0) {
-      console.log(`Auto-created ${result.rowCount} community records from board member data`);
+      logger.info(`Auto-created ${result.rowCount} community records from board member data`);
     }
   } catch (syncErr) {
     // Silently skip if communities table doesn't exist yet
@@ -331,18 +342,13 @@ async function run(sql, params = []) {
     let paramIndex = 1;
     const pgSql = sql.replace(/\?/g, () => `$${paramIndex++}`);
 
-    const result = await client.query(pgSql + " RETURNING id", params);
+    // Only add RETURNING id for INSERT statements (avoids double-execution on UPDATE/DELETE)
+    const isInsert = sql.trimStart().toUpperCase().startsWith("INSERT");
+    const finalSql = isInsert ? pgSql + " RETURNING id" : pgSql;
+
+    const result = await client.query(finalSql, params);
     return {
-      lastInsertRowid: result.rows[0]?.id || null,
-      changes: result.rowCount
-    };
-  } catch (err) {
-    // If RETURNING id fails (UPDATE/DELETE), try without it
-    let paramIndex = 1;
-    const pgSql = sql.replace(/\?/g, () => `$${paramIndex++}`);
-    const result = await client.query(pgSql, params);
-    return {
-      lastInsertRowid: null,
+      lastInsertRowid: isInsert ? (result.rows[0]?.id || null) : null,
       changes: result.rowCount
     };
   } finally {

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import AdminUserList from "./AdminUserList";
 import AddAdminUserModal from "./AddAdminUserModal";
+import ConfirmModal from "./ConfirmModal";
 
 export default function AccountSettings() {
   const [client, setClient] = useState(null);
@@ -38,6 +39,8 @@ export default function AccountSettings() {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState("");
   const [subMessage, setSubMessage] = useState(null);
+  const [removeAdminTarget, setRemoveAdminTarget] = useState(null);
+  const [cadenceConfirm, setCadenceConfirm] = useState(null);
   const { user: sessionUser } = useOutletContext();
 
   useEffect(() => {
@@ -104,8 +107,6 @@ export default function AccountSettings() {
   };
 
   const handleRemoveUser = async (userId) => {
-    if (!confirm("Are you sure you want to remove this admin user?")) return;
-
     try {
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: "DELETE",
@@ -121,6 +122,26 @@ export default function AccountSettings() {
       loadData();
     } catch (err) {
       setAdminError(err.message);
+    }
+  };
+
+  const handleCadenceChange = async (newCadence) => {
+    setCadenceConfirm(null);
+    const res = await fetch("/api/admin/account/cadence", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ survey_cadence: newCadence }),
+      credentials: "include"
+    });
+    if (res.ok) {
+      await fetch("/api/admin/survey-rounds/recalculate", {
+        method: "POST",
+        credentials: "include"
+      });
+      loadData();
+    } else {
+      const data = await res.json();
+      setCadenceError(data.error);
     }
   };
 
@@ -506,7 +527,7 @@ export default function AccountSettings() {
         )}
         <AdminUserList
           users={adminUsers}
-          onRemove={handleRemoveUser}
+          onRemove={(userId) => setRemoveAdminTarget(userId)}
           onUpdate={loadData}
           currentUserEmail={sessionUser?.email}
           onChangePassword={() => { setPwMessage(null); setPwForm({ current: "", newPw: "", confirm: "" }); setShowPwModal(true); }}
@@ -598,25 +619,9 @@ export default function AccountSettings() {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={async () => {
+                    onClick={() => {
                       if ((client.subscription.survey_cadence || 2) !== 2) {
-                        if (!confirm("Changing your cadence will recalculate future planned rounds. Already launched rounds are not affected. Continue?")) return;
-                      }
-                      const res = await fetch("/api/admin/account/cadence", {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ survey_cadence: 2 }),
-                        credentials: "include"
-                      });
-                      if (res.ok) {
-                        await fetch("/api/admin/survey-rounds/recalculate", {
-                          method: "POST",
-                          credentials: "include"
-                        });
-                        loadData();
-                      } else {
-                        const data = await res.json();
-                        setCadenceError(data.error);
+                        setCadenceConfirm(2);
                       }
                     }}
                     className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
@@ -629,25 +634,9 @@ export default function AccountSettings() {
                     2x / year
                   </button>
                   <button
-                    onClick={async () => {
+                    onClick={() => {
                       if (client.subscription.survey_cadence !== 4) {
-                        if (!confirm("Changing your cadence will recalculate future planned rounds. Already launched rounds are not affected. Continue?")) return;
-                      }
-                      const res = await fetch("/api/admin/account/cadence", {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ survey_cadence: 4 }),
-                        credentials: "include"
-                      });
-                      if (res.ok) {
-                        await fetch("/api/admin/survey-rounds/recalculate", {
-                          method: "POST",
-                          credentials: "include"
-                        });
-                        loadData();
-                      } else {
-                        const data = await res.json();
-                        setCadenceError(data.error);
+                        setCadenceConfirm(4);
                       }
                     }}
                     disabled={client.subscription.survey_rounds_per_year < 4}
@@ -962,6 +951,23 @@ export default function AccountSettings() {
         isOpen={showAddUserModal}
         onClose={() => setShowAddUserModal(false)}
         onAdd={loadData}
+      />
+      <ConfirmModal
+        isOpen={!!removeAdminTarget}
+        onClose={() => setRemoveAdminTarget(null)}
+        onConfirm={async () => { await handleRemoveUser(removeAdminTarget); setRemoveAdminTarget(null); }}
+        title="Remove Admin User"
+        message="Are you sure you want to remove this admin user?"
+        confirmLabel="Remove"
+        destructive
+      />
+      <ConfirmModal
+        isOpen={!!cadenceConfirm}
+        onClose={() => setCadenceConfirm(null)}
+        onConfirm={() => handleCadenceChange(cadenceConfirm)}
+        title="Change Survey Cadence"
+        message="Changing your cadence will recalculate future planned rounds. Already launched rounds are not affected. Continue?"
+        confirmLabel="Change Cadence"
       />
     </div>
   );

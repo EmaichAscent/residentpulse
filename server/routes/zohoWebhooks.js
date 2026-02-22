@@ -5,6 +5,7 @@ import { verifyZohoWebhook } from "../utils/zohoService.js";
 import { sendVerificationEmail } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
 import { deactivateExcessMembers } from "../utils/deactivateExcessMembers.js";
+import logger from "../utils/logger.js";
 
 const router = Router();
 
@@ -19,12 +20,12 @@ router.post("/zoho", async (req, res) => {
     const rawBody = req.rawBody || JSON.stringify(req.body);
 
     if (!verifyZohoWebhook(rawBody, signature)) {
-      console.warn("Zoho webhook signature verification failed");
+      logger.warn("Zoho webhook signature verification failed");
       return res.status(401).json({ error: "Invalid signature" });
     }
 
     const { event_type, data } = req.body;
-    console.log(`Zoho webhook received: ${event_type}`);
+    logger.info(`Zoho webhook received: ${event_type}`);
 
     switch (event_type) {
       case "subscription_created":
@@ -50,13 +51,13 @@ router.post("/zoho", async (req, res) => {
         break;
 
       default:
-        console.log(`Zoho webhook: unhandled event type ${event_type}`);
+        logger.info(`Zoho webhook: unhandled event type ${event_type}`);
     }
 
     // Always return 200 to acknowledge receipt
     res.json({ received: true });
   } catch (err) {
-    console.error("Zoho webhook processing error:", err);
+    logger.error({ err }, "Zoho webhook processing error");
     // Still return 200 to prevent retries on our errors
     res.json({ received: true, error: true });
   }
@@ -78,7 +79,7 @@ async function handleSubscriptionActivated(data) {
   );
 
   if (!clientId || isNaN(clientId)) {
-    console.error("Zoho webhook: no client_id found in subscription data", JSON.stringify(data).slice(0, 500));
+    logger.error("Zoho webhook: no client_id found in subscription data %s", JSON.stringify(data).slice(0, 500));
     return;
   }
 
@@ -114,9 +115,9 @@ async function handleSubscriptionActivated(data) {
 
       try {
         await sendVerificationEmail(admin.email, verificationToken);
-        console.log(`Verification email sent to ${admin.email} after Zoho payment`);
+        logger.info(`Verification email sent to ${admin.email} after Zoho payment`);
       } catch (emailErr) {
-        console.error("Failed to send verification email after payment:", emailErr.message);
+        logger.error("Failed to send verification email after payment: %s", emailErr.message);
       }
     }
   } else {
@@ -133,17 +134,17 @@ async function handleSubscriptionActivated(data) {
           [plan.id, zohoSubscriptionId || null, zohoCustomerId || null, clientId]
         );
         if (upgradeResult.changes > 0) {
-          console.log(`Client ${clientId} upgraded from free to ${planCode} via Zoho webhook`);
+          logger.info(`Client ${clientId} upgraded from free to ${planCode} via Zoho webhook`);
         } else {
-          console.log(`Zoho webhook: subscription for client ${clientId} already active or not found`);
+          logger.info(`Zoho webhook: subscription for client ${clientId} already active or not found`);
           return;
         }
       } else {
-        console.log(`Zoho webhook: unknown plan code ${planCode} for client ${clientId}`);
+        logger.info(`Zoho webhook: unknown plan code ${planCode} for client ${clientId}`);
         return;
       }
     } else {
-      console.log(`Zoho webhook: subscription for client ${clientId} already active or not found`);
+      logger.info(`Zoho webhook: subscription for client ${clientId} already active or not found`);
       return;
     }
   }
@@ -157,7 +158,7 @@ async function handleSubscriptionActivated(data) {
     metadata: { zoho_subscription_id: zohoSubscriptionId }
   });
 
-  console.log(`Client ${clientId} activated via Zoho webhook`);
+  logger.info(`Client ${clientId} activated via Zoho webhook`);
 }
 
 /**
@@ -170,7 +171,7 @@ async function handleSubscriptionPlanChanged(data, eventType) {
 
   const newPlanCode = subscription.plan?.plan_code || subscription.plan_code;
   if (!newPlanCode) {
-    console.error("Zoho webhook: no plan_code in plan change event", JSON.stringify(data).slice(0, 500));
+    logger.error("Zoho webhook: no plan_code in plan change event %s", JSON.stringify(data).slice(0, 500));
     return;
   }
 
@@ -181,7 +182,7 @@ async function handleSubscriptionPlanChanged(data, eventType) {
   );
 
   if (!newPlan) {
-    console.error(`Zoho webhook: unknown plan code ${newPlanCode}`);
+    logger.error(`Zoho webhook: unknown plan code ${newPlanCode}`);
     return;
   }
 
@@ -192,7 +193,7 @@ async function handleSubscriptionPlanChanged(data, eventType) {
   );
 
   if (!sub) {
-    console.error(`Zoho webhook: no subscription found for zoho_subscription_id ${zohoSubscriptionId}`);
+    logger.error(`Zoho webhook: no subscription found for zoho_subscription_id ${zohoSubscriptionId}`);
     return;
   }
 
@@ -210,7 +211,7 @@ async function handleSubscriptionPlanChanged(data, eventType) {
   if (eventType === "subscription_downgraded" && newPlan.member_limit > 0) {
     const result = await deactivateExcessMembers(sub.client_id, newPlan.member_limit);
     if (result.deactivatedCount > 0) {
-      console.log(`Deactivated ${result.deactivatedCount} excess members for client ${sub.client_id} after downgrade`);
+      logger.info(`Deactivated ${result.deactivatedCount} excess members for client ${sub.client_id} after downgrade`);
     }
   }
 
@@ -223,7 +224,7 @@ async function handleSubscriptionPlanChanged(data, eventType) {
     metadata: { zoho_subscription_id: zohoSubscriptionId, new_plan: newPlan.name }
   });
 
-  console.log(`Client ${sub.client_id} plan changed to ${newPlan.name} via Zoho webhook`);
+  logger.info(`Client ${sub.client_id} plan changed to ${newPlan.name} via Zoho webhook`);
 }
 
 /**
@@ -244,7 +245,7 @@ async function handleSubscriptionCancelled(data) {
   // Look up free plan
   const freePlan = await db.get("SELECT id, member_limit FROM subscription_plans WHERE name = 'free'");
   if (!freePlan) {
-    console.error("Zoho webhook: free plan not found in database");
+    logger.error("Zoho webhook: free plan not found in database");
     return;
   }
 
@@ -267,7 +268,7 @@ async function handleSubscriptionCancelled(data) {
   // Deactivate excess members beyond free limit
   const result = await deactivateExcessMembers(sub.client_id, freePlan.member_limit);
   if (result.deactivatedCount > 0) {
-    console.log(`Deactivated ${result.deactivatedCount} excess members for client ${sub.client_id} after cancel`);
+    logger.info(`Deactivated ${result.deactivatedCount} excess members for client ${sub.client_id} after cancel`);
   }
 
   await logActivity({
@@ -279,7 +280,7 @@ async function handleSubscriptionCancelled(data) {
     metadata: { zoho_subscription_id: zohoSubscriptionId, deactivated_members: result.deactivatedCount }
   });
 
-  console.log(`Client ${sub.client_id} downgraded to free plan after subscription cancellation`);
+  logger.info(`Client ${sub.client_id} downgraded to free plan after subscription cancellation`);
 }
 
 /**

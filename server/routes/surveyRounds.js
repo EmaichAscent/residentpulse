@@ -5,6 +5,7 @@ import { requireClientAdmin } from "../middleware/auth.js";
 import { sendInvitation, notifyRoundLaunched, notifyRoundConcluded } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
 import { generateRoundInsights, computeLiveWordFrequencies } from "../utils/insightGenerator.js";
+import logger from "../utils/logger.js";
 
 const router = Router();
 router.use(requireClientAdmin);
@@ -64,7 +65,7 @@ router.get("/", async (req, res) => {
     );
     res.json(rounds);
   } catch (err) {
-    console.error("Error fetching survey rounds:", err);
+    logger.error({ err }, "Error fetching survey rounds");
     res.status(500).json({ error: err.message });
   }
 });
@@ -126,7 +127,7 @@ router.post("/schedule", async (req, res) => {
 
     res.json(createdRounds);
   } catch (err) {
-    console.error("Error scheduling rounds:", err);
+    logger.error({ err }, "Error scheduling rounds");
     res.status(500).json({ error: err.message });
   }
 });
@@ -201,7 +202,7 @@ router.get("/trends", async (req, res) => {
 
     res.json(trendsData);
   } catch (err) {
-    console.error("Error fetching trends:", err);
+    logger.error({ err }, "Error fetching trends");
     res.status(500).json({ error: err.message });
   }
 });
@@ -580,7 +581,7 @@ router.get("/:id/dashboard", async (req, res) => {
       interview_summary: interviewResult?.interview_summary || null,
     });
   } catch (err) {
-    console.error("Error fetching round dashboard:", err);
+    logger.error({ err }, "Error fetching round dashboard");
     res.status(500).json({ error: err.message });
   }
 });
@@ -623,7 +624,7 @@ router.get("/:id/export", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename=round-${round.round_number}-results.csv`);
     res.send([header, ...rows].join("\n"));
   } catch (err) {
-    console.error("Error exporting round results:", err);
+    logger.error({ err }, "Error exporting round results");
     res.status(500).json({ error: err.message });
   }
 });
@@ -672,7 +673,7 @@ router.post("/:id/close", async (req, res) => {
 
     // Generate insights asynchronously
     generateRoundInsights(roundId, req.clientId).catch((err) =>
-      console.error(`Failed to generate insights for round ${roundId}:`, err.message)
+      logger.error(`Failed to generate insights for round ${roundId}: %s`, err.message)
     );
 
     // Notify admins asynchronously
@@ -683,11 +684,11 @@ router.post("/:id/close", async (req, res) => {
     notifyRoundConcluded({
       clientId: req.clientId, roundNumber: round.round_number,
       totalResponses: completedCount?.count || 0, totalInvited: round.members_invited || 0, db
-    }).catch(err => console.error("Failed to send round conclusion notifications:", err.message));
+    }).catch(err => logger.error("Failed to send round conclusion notifications: %s", err.message));
 
     res.json({ ok: true, message: "Round closed. AI insights are being generated." });
   } catch (err) {
-    console.error("Error closing round:", err);
+    logger.error({ err }, "Error closing round");
     res.status(500).json({ error: err.message });
   }
 });
@@ -721,7 +722,7 @@ router.post("/:id/regenerate-insights", async (req, res) => {
 
     res.json({ ok: true, insights });
   } catch (err) {
-    console.error("Error regenerating insights:", err);
+    logger.error({ err }, "Error regenerating insights");
     res.status(500).json({ error: err.message });
   }
 });
@@ -829,7 +830,7 @@ router.post("/:id/launch", async (req, res) => {
 
         sentCount++;
       } catch (err) {
-        console.error(`Failed to send invitation to ${member.email}:`, err);
+        logger.error({ err }, `Failed to send invitation to ${member.email}`);
 
         try {
           await db.run(
@@ -837,7 +838,7 @@ router.post("/:id/launch", async (req, res) => {
             [member.id, req.clientId, req.userId, "failed", err.message, roundId]
           );
         } catch (logErr) {
-          console.error("Failed to log invitation error:", logErr);
+          logger.error({ err: logErr }, "Failed to log invitation error");
         }
 
         failedCount++;
@@ -864,7 +865,7 @@ router.post("/:id/launch", async (req, res) => {
     notifyRoundLaunched({
       clientId: req.clientId, roundNumber: round.round_number,
       membersInvited: sentCount, closesAt: closesAt.toISOString(), db
-    }).catch(err => console.error("Failed to send round launch notifications:", err.message));
+    }).catch(err => logger.error("Failed to send round launch notifications: %s", err.message));
 
     res.json({
       ok: true,
@@ -873,7 +874,7 @@ router.post("/:id/launch", async (req, res) => {
       closes_at: closesAt.toISOString()
     });
   } catch (err) {
-    console.error("Error launching round:", err);
+    logger.error({ err }, "Error launching round");
     res.status(500).json({ error: err.message });
   }
 });
@@ -943,7 +944,7 @@ router.post("/recalculate", async (req, res) => {
 
     res.json(rounds);
   } catch (err) {
-    console.error("Error recalculating rounds:", err);
+    logger.error({ err }, "Error recalculating rounds");
     res.status(500).json({ error: err.message });
   }
 });

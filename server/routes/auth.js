@@ -5,6 +5,7 @@ import db from "../db.js";
 import { comparePassword, hashPassword } from "../utils/password.js";
 import { sendPasswordResetEmail } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
+import logger from "../utils/logger.js";
 
 const router = Router();
 
@@ -176,7 +177,7 @@ router.post("/admin/forgot-password", resetLimiter, async (req, res) => {
     // Always return success to avoid leaking whether email exists
     res.json({ message: "If an account exists with that email, a password reset link has been sent." });
   } catch (err) {
-    console.error("Password reset request error:", err);
+    logger.error({ err }, "Password reset request error");
     res.json({ message: "If an account exists with that email, a password reset link has been sent." });
   }
 });
@@ -212,7 +213,7 @@ router.post("/admin/reset-password", async (req, res) => {
 
     res.json({ message: "Password has been reset successfully." });
   } catch (err) {
-    console.error("Password reset error:", err);
+    logger.error({ err }, "Password reset error");
     res.status(500).json({ error: "An error occurred. Please try again." });
   }
 });
@@ -257,7 +258,7 @@ router.post("/admin/change-password", async (req, res) => {
 
     res.json({ message: "Password changed successfully" });
   } catch (err) {
-    console.error("Change password error:", err);
+    logger.error({ err }, "Change password error");
     res.status(500).json({ error: "An error occurred. Please try again." });
   }
 });
