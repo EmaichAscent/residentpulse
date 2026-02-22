@@ -1,7 +1,8 @@
 import db from "../db.js";
+import logger from "./logger.js";
 
 /**
- * Deactivate excess board members when a client downgrades to a plan with a lower member limit.
+ * Deactivate excess members when a client downgrades to a plan with a lower member limit.
  * Deactivates the most recently added members first.
  * @param {number} clientId
  * @param {number} newLimit - The new member limit
@@ -9,7 +10,7 @@ import db from "../db.js";
  */
 export async function deactivateExcessMembers(clientId, newLimit) {
   const activeCount = await db.get(
-    "SELECT COUNT(*) as count FROM board_members WHERE client_id = ? AND is_active = TRUE",
+    "SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE",
     [clientId]
   );
 
@@ -20,8 +21,8 @@ export async function deactivateExcessMembers(clientId, newLimit) {
 
   // Get the excess members (newest first)
   const excessMembers = await db.all(
-    `SELECT id, first_name, last_name, email FROM board_members
-     WHERE client_id = ? AND is_active = TRUE
+    `SELECT id, first_name, last_name, email FROM users
+     WHERE client_id = ? AND active = TRUE
      ORDER BY created_at DESC
      LIMIT ?`,
     [clientId, excess]
@@ -30,9 +31,10 @@ export async function deactivateExcessMembers(clientId, newLimit) {
   if (excessMembers.length > 0) {
     const ids = excessMembers.map(m => m.id);
     await db.run(
-      `UPDATE board_members SET is_active = FALSE WHERE id IN (${ids.map(() => "?").join(",")})`,
+      `UPDATE users SET active = FALSE WHERE id IN (${ids.map(() => "?").join(",")})`,
       ids
     );
+    logger.info({ clientId, deactivatedCount: excessMembers.length }, "Deactivated excess members after downgrade");
   }
 
   return {

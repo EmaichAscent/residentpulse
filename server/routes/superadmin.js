@@ -291,10 +291,91 @@ router.put("/prompt", async (req, res) => {
   }
 });
 
-// Get all subscription plans
+// Get all subscription plans (with client counts)
 router.get("/plans", async (req, res) => {
-  const plans = await db.all("SELECT * FROM subscription_plans ORDER BY sort_order");
+  const plans = await db.all(
+    `SELECT sp.*,
+            COUNT(cs.id) as client_count
+     FROM subscription_plans sp
+     LEFT JOIN client_subscriptions cs ON cs.plan_id = sp.id
+     GROUP BY sp.id
+     ORDER BY sp.sort_order`
+  );
   res.json(plans);
+});
+
+// Create a new subscription plan
+router.post("/plans", async (req, res) => {
+  const { name, display_name, member_limit, survey_rounds_per_year, price_cents, is_public, sort_order, zoho_plan_code } = req.body;
+
+  if (!name || !display_name) {
+    return res.status(400).json({ error: "name and display_name are required" });
+  }
+
+  const existing = await db.get("SELECT id FROM subscription_plans WHERE name = ?", [name]);
+  if (existing) {
+    return res.status(400).json({ error: "A plan with this name already exists" });
+  }
+
+  try {
+    const result = await db.run(
+      `INSERT INTO subscription_plans (name, display_name, member_limit, survey_rounds_per_year, price_cents, is_public, sort_order, zoho_plan_code)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, display_name, member_limit || 0, survey_rounds_per_year || 2, price_cents ?? null, is_public ?? true, sort_order || 0, zoho_plan_code || null]
+    );
+    const plan = await db.get("SELECT * FROM subscription_plans WHERE id = ?", [result.lastInsertRowid]);
+    res.json(plan);
+  } catch (err) {
+    logger.error({ err }, "Error creating plan");
+    res.status(500).json({ error: "Failed to create plan" });
+  }
+});
+
+// Update a subscription plan
+router.put("/plans/:id", async (req, res) => {
+  const { display_name, member_limit, survey_rounds_per_year, price_cents, is_public, sort_order, zoho_plan_code } = req.body;
+
+  if (!display_name) {
+    return res.status(400).json({ error: "display_name is required" });
+  }
+
+  try {
+    await db.run(
+      `UPDATE subscription_plans SET display_name = ?, member_limit = ?, survey_rounds_per_year = ?, price_cents = ?, is_public = ?, sort_order = ?, zoho_plan_code = ?
+       WHERE id = ?`,
+      [display_name, member_limit || 0, survey_rounds_per_year || 2, price_cents ?? null, is_public ?? true, sort_order || 0, zoho_plan_code || null, req.params.id]
+    );
+    const plan = await db.get("SELECT * FROM subscription_plans WHERE id = ?", [req.params.id]);
+    res.json(plan);
+  } catch (err) {
+    logger.error({ err }, "Error updating plan");
+    res.status(500).json({ error: "Failed to update plan" });
+  }
+});
+
+// Delete a subscription plan (only if no clients are using it)
+router.delete("/plans/:id", async (req, res) => {
+  const plan = await db.get("SELECT * FROM subscription_plans WHERE id = ?", [req.params.id]);
+  if (!plan) {
+    return res.status(404).json({ error: "Plan not found" });
+  }
+
+  if (plan.name === "free") {
+    return res.status(400).json({ error: "Cannot delete the free plan" });
+  }
+
+  const usage = await db.get("SELECT COUNT(*) as count FROM client_subscriptions WHERE plan_id = ?", [req.params.id]);
+  if (usage?.count > 0) {
+    return res.status(400).json({ error: `Cannot delete — ${usage.count} client(s) are on this plan` });
+  }
+
+  try {
+    await db.run("DELETE FROM subscription_plans WHERE id = ?", [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "Error deleting plan");
+    res.status(500).json({ error: "Failed to delete plan" });
+  }
 });
 
 // Get subscription for a specific client
