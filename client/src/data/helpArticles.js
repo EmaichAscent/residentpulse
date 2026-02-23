@@ -29,7 +29,7 @@ export const helpArticles = [
     category: "Getting Started",
     pages: ["rounds"],
     tags: ["launch", "confirm", "start", "send", "first round", "begin"],
-    body: "When your scheduled round is within 30 days of its launch date, a **Confirm & Launch** button will appear next to it on your Home page.\n\nClicking it sends a personal email invitation to every active board member on your list. Each member gets their own unique link — they don't need to create an account or remember a password.\n\nOnce launched, the round stays open for 30 days. You can track responses on your dashboard as they come in.",
+    body: "When your scheduled round is within 30 days of its launch date, a **Confirm & Launch** button will appear next to it on your Home page.\n\nClicking it starts sending personal email invitations to every active board member on your list. Invitations are sent in the background — you'll see a progress bar showing how many have been sent, and you're free to navigate around the app while they go out. Each member gets their own unique link — they don't need to create an account or remember a password.\n\nOnce launched, the round stays open for 30 days. You can track responses on your dashboard as they come in.",
   },
   {
     id: "what-is-nps",
@@ -77,7 +77,7 @@ export const helpArticles = [
     category: "Email & Invitations",
     pages: ["rounds", "members"],
     tags: ["invitation", "email", "invite", "send", "link", "board member"],
-    body: "When you launch a survey round, every active board member on your list receives a personal email invitation.\n\nThe email comes from ResidentPulse on behalf of your company. If you've uploaded a company logo (in the Account tab), it will appear at the top of the invitation email. The email includes a brief explanation of what to expect and a unique link just for that member. They don't need to create an account or log in — clicking the link takes them straight to their feedback session.\n\nThe session starts by asking them to rate your company on a scale of 0 to 10. After that, they'll have a short guided conversation (usually 5-10 minutes) where they can share what's on their mind in their own words.",
+    body: "When you launch a survey round, every active board member on your list receives a personal email invitation. Invitations are sent in the background so you can continue using the app — a progress bar on the Home page shows you how the send is going.\n\nThe email comes from ResidentPulse on behalf of your company. If you've uploaded a company logo (in the Account tab), it will appear at the top of the invitation email. The email includes a brief explanation of what to expect and a unique link just for that member. They don't need to create an account or log in — clicking the link takes them straight to their feedback session.\n\nThe session starts by asking them to rate your company on a scale of 0 to 10. After that, they'll have a short guided conversation (usually 5-10 minutes) where they can share what's on their mind in their own words.",
   },
   {
     id: "automatic-reminders",
