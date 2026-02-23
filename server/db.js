@@ -132,6 +132,10 @@ async function initializeSchema() {
     await client.query(`ALTER TABLE client_admins ADD COLUMN IF NOT EXISTS password_reset_token TEXT`);
     await client.query(`ALTER TABLE client_admins ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP`);
 
+    // Add password reset columns to admins (superadmin)
+    await client.query(`ALTER TABLE admins ADD COLUMN IF NOT EXISTS password_reset_token TEXT`);
+    await client.query(`ALTER TABLE admins ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP`);
+
     // Create indexes for performance
     await client.query(`CREATE INDEX IF NOT EXISTS idx_sessions_client_id ON sessions(client_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)`);

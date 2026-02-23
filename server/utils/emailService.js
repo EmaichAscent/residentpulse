@@ -245,9 +245,9 @@ function buildPasswordResetEmail(resetLink) {
  * @param {string} resetToken - Password reset token
  * @returns {Promise<Object>} Resend response with email ID
  */
-export async function sendPasswordResetEmail(email, resetToken) {
+export async function sendPasswordResetEmail(email, resetToken, { resetPath = "/admin/reset-password" } = {}) {
   const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
-  const resetLink = `${baseUrl}/admin/reset-password?token=${resetToken}`;
+  const resetLink = `${baseUrl}${resetPath}?token=${resetToken}`;
 
   const emailHtml = buildPasswordResetEmail(resetLink);
 

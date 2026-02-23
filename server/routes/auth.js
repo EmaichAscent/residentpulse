@@ -218,6 +218,76 @@ router.post("/admin/reset-password", async (req, res) => {
   }
 });
 
+// SuperAdmin: Request password reset
+router.post("/superadmin/forgot-password", resetLimiter, async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+
+  try {
+    const admin = await db.get(
+      "SELECT id, email FROM admins WHERE email = ?",
+      [email.toLowerCase().trim()]
+    );
+
+    if (admin) {
+      const token = crypto.randomBytes(32).toString("hex");
+      const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await db.run(
+        "UPDATE admins SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?",
+        [token, expires.toISOString(), admin.id]
+      );
+
+      await sendPasswordResetEmail(admin.email, token, { resetPath: "/superadmin/reset-password" });
+    }
+
+    // Always return success to avoid leaking whether email exists
+    res.json({ message: "If an account exists with that email, a password reset link has been sent." });
+  } catch (err) {
+    logger.error({ err }, "SuperAdmin password reset request error");
+    res.json({ message: "If an account exists with that email, a password reset link has been sent." });
+  }
+});
+
+// SuperAdmin: Reset password with token
+router.post("/superadmin/reset-password", async (req, res) => {
+  const { token, password } = req.body;
+
+  if (!token || !password) {
+    return res.status(400).json({ error: "Token and password are required" });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ error: "Password must be at least 8 characters" });
+  }
+
+  try {
+    const admin = await db.get(
+      "SELECT id FROM admins WHERE password_reset_token = ? AND password_reset_expires > NOW()",
+      [token]
+    );
+
+    if (!admin) {
+      return res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." });
+    }
+
+    const passwordHash = await hashPassword(password);
+
+    await db.run(
+      "UPDATE admins SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?",
+      [passwordHash, admin.id]
+    );
+
+    res.json({ message: "Password has been reset successfully." });
+  } catch (err) {
+    logger.error({ err }, "SuperAdmin password reset error");
+    res.status(500).json({ error: "An error occurred. Please try again." });
+  }
+});
+
 // Change password (logged-in client admin)
 router.post("/admin/change-password", async (req, res) => {
   if (!req.session?.user || req.session.user.role !== "client_admin") {

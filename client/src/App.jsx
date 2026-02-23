@@ -15,6 +15,8 @@ import PlanChangeSuccessPage from "./pages/PlanChangeSuccessPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import AdminOnboardingPage from "./pages/AdminOnboardingPage";
 import SuperAdminClientDetailPage from "./pages/SuperAdminClientDetailPage";
+import SuperAdminForgotPasswordPage from "./pages/SuperAdminForgotPasswordPage";
+import SuperAdminResetPasswordPage from "./pages/SuperAdminResetPasswordPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoundsLanding from "./components/RoundsLanding";
 import RoundDashboard from "./components/RoundDashboard";
@@ -38,6 +40,8 @@ export default function App() {
 
         {/* SuperAdmin routes */}
         <Route path="/superadmin/login" element={<SuperAdminLoginPage />} />
+        <Route path="/superadmin/forgot-password" element={<SuperAdminForgotPasswordPage />} />
+        <Route path="/superadmin/reset-password" element={<SuperAdminResetPasswordPage />} />
         <Route
           path="/superadmin"
           element={
