@@ -1,10 +1,67 @@
 import { useState, useEffect } from "react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Cell, Legend,
+  Tooltip, ResponsiveContainer, Cell, Legend, ReferenceLine, LabelList,
 } from "recharts";
 import { COLORS, npsColor } from "../utils/npsHelpers";
 import WordCloud from "./WordCloud";
+
+/* Custom dot that colors by NPS value */
+function NpsDot({ cx, cy, payload }) {
+  const color = payload.nps >= 0 ? COLORS.promoter : COLORS.detractor;
+  return (
+    <circle cx={cx} cy={cy} r={6} fill={color} stroke="#fff" strokeWidth={2} />
+  );
+}
+
+/* Custom label showing NPS value above/below each dot */
+function NpsLabel({ x, y, value }) {
+  const formatted = value > 0 ? `+${value}` : `${value}`;
+  const above = value >= 0;
+  return (
+    <text
+      x={x} y={above ? y - 14 : y + 20}
+      textAnchor="middle" fontSize={13} fontWeight={600}
+      fill={value >= 0 ? COLORS.promoter : COLORS.detractor}
+    >
+      {formatted}
+    </text>
+  );
+}
+
+/* Delta label between two NPS points */
+function DeltaLabels({ data, chart }) {
+  if (!chart || !data || data.length < 2) return null;
+  const labels = [];
+  for (let i = 1; i < data.length; i++) {
+    const prev = data[i - 1];
+    const curr = data[i];
+    const delta = curr.nps - prev.nps;
+    if (delta === 0) continue;
+
+    // Position at midpoint between two dots
+    const xScale = chart.xAxisMap?.[0];
+    const yScale = chart.yAxisMap?.[0];
+    if (!xScale || !yScale) continue;
+
+    const x1 = xScale.scale(prev.name) + (xScale.bandSize || 0) / 2;
+    const x2 = xScale.scale(curr.name) + (xScale.bandSize || 0) / 2;
+    const midX = (x1 + x2) / 2;
+    const midY = yScale.scale((prev.nps + curr.nps) / 2);
+
+    labels.push(
+      <text
+        key={i}
+        x={midX} y={midY - 8}
+        textAnchor="middle" fontSize={11} fontWeight={500}
+        fill="#6B7280"
+      >
+        {delta > 0 ? `+${delta}` : delta}
+      </text>
+    );
+  }
+  return <g>{labels}</g>;
+}
 
 export default function TrendsView() {
   const [trends, setTrends] = useState([]);
@@ -58,6 +115,11 @@ export default function TrendsView() {
     round_number: r.round_number,
   }));
 
+  // Dynamic Y-axis: pad 20 above/below the data range, snap to multiples of 10
+  const npsValues = npsData.map((d) => d.nps);
+  const npsMin = Math.floor((Math.min(...npsValues) - 20) / 10) * 10;
+  const npsMax = Math.ceil((Math.max(...npsValues) + 20) / 10) * 10;
+
   const responseData = concludedRounds.map((r) => ({
     name: `R${r.round_number}`,
     rate: r.response_rate,
@@ -82,11 +144,12 @@ export default function TrendsView() {
         <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">
           NPS Score Over Time
         </p>
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={npsData}>
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={npsData} margin={{ top: 25, right: 30, bottom: 5, left: 10 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-            <YAxis domain={[-100, 100]} tick={{ fontSize: 12 }} />
+            <YAxis domain={[npsMin, npsMax]} tick={{ fontSize: 12 }} />
+            <ReferenceLine y={0} stroke="#9CA3AF" strokeDasharray="6 4" strokeWidth={1.5} />
             <Tooltip
               formatter={(value) => [`${value > 0 ? "+" : ""}${value}`, "NPS Score"]}
               contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb" }}
@@ -94,11 +157,13 @@ export default function TrendsView() {
             <Line
               type="monotone"
               dataKey="nps"
-              stroke={COLORS.blue}
-              strokeWidth={2.5}
-              dot={{ fill: COLORS.blue, r: 5 }}
-              activeDot={{ r: 7 }}
-            />
+              stroke="#9CA3AF"
+              strokeWidth={2}
+              dot={<NpsDot />}
+              activeDot={{ r: 8, stroke: "#fff", strokeWidth: 2 }}
+            >
+              <LabelList content={<NpsLabel />} />
+            </Line>
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -109,18 +174,24 @@ export default function TrendsView() {
           Response Rate Over Time
         </p>
         <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={responseData}>
+          <BarChart data={responseData} margin={{ top: 20, right: 30, bottom: 5, left: 10 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
             <XAxis dataKey="name" tick={{ fontSize: 12 }} />
             <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} />
             <Tooltip
-              formatter={(value, name) => {
-                if (name === "rate") return [`${value}%`, "Response Rate"];
+              formatter={(value, name, entry) => {
+                if (name === "rate") return [`${entry.payload.count} of ${entry.payload.invited} (${value}%)`, "Responses"];
                 return [value, name];
               }}
               contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb" }}
             />
-            <Bar dataKey="rate" fill={COLORS.blue} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="rate" fill={COLORS.blue} radius={[4, 4, 0, 0]}>
+              <LabelList
+                formatter={(value, entry) => `${value}%`}
+                position="top"
+                style={{ fontSize: 12, fontWeight: 600, fill: "#374151" }}
+              />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
