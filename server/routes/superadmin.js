@@ -900,48 +900,57 @@ router.post("/clients/:id/reset", async (req, res) => {
     const client = await db.get("SELECT company_name FROM clients WHERE id = ?", [clientId]);
     if (!client) return res.status(404).json({ error: "Client not found" });
 
-    // 1. Delete messages for all sessions belonging to this client
-    await db.run(
-      "DELETE FROM messages WHERE session_id IN (SELECT id FROM sessions WHERE client_id = ?)",
-      [clientId]
-    );
+    // Delete order: deepest children first to avoid FK constraint issues
+    // (production tables may lack ON DELETE CASCADE)
 
-    // 2. Delete sessions
-    await db.run("DELETE FROM sessions WHERE client_id = ?", [clientId]);
-
-    // 3. Delete critical alerts
-    await db.run("DELETE FROM critical_alerts WHERE client_id = ?", [clientId]);
-
-    // 4. Delete invitation logs
-    await db.run("DELETE FROM invitation_logs WHERE client_id = ?", [clientId]);
-
-    // 5. Delete survey rounds
-    await db.run("DELETE FROM survey_rounds WHERE client_id = ?", [clientId]);
-
-    // 6. Delete admin interview messages, then interviews
+    // 1. Delete admin interview messages, then interviews
     await db.run(
       "DELETE FROM admin_interview_messages WHERE interview_id IN (SELECT id FROM admin_interviews WHERE client_id = ?)",
       [clientId]
     );
     await db.run("DELETE FROM admin_interviews WHERE client_id = ?", [clientId]);
 
-    // 7. Delete the prompt supplement setting
+    // 2. Delete messages (child of sessions)
+    await db.run(
+      "DELETE FROM messages WHERE session_id IN (SELECT id FROM sessions WHERE client_id = ?)",
+      [clientId]
+    );
+
+    // 3. Delete critical alerts (references sessions, messages, survey_rounds)
+    await db.run("DELETE FROM critical_alerts WHERE client_id = ?", [clientId]);
+
+    // 4. Delete invitation logs (references survey_rounds)
+    await db.run("DELETE FROM invitation_logs WHERE client_id = ?", [clientId]);
+
+    // 5. Delete sessions (references survey_rounds, communities)
+    await db.run("DELETE FROM sessions WHERE client_id = ?", [clientId]);
+
+    // 6. Delete round-community snapshots (references survey_rounds + communities)
+    await db.run(
+      "DELETE FROM round_community_snapshots WHERE round_id IN (SELECT id FROM survey_rounds WHERE client_id = ?)",
+      [clientId]
+    );
+
+    // 7. Delete survey rounds
+    await db.run("DELETE FROM survey_rounds WHERE client_id = ?", [clientId]);
+
+    // 8. Delete the prompt supplement setting
     await db.run(
       "DELETE FROM settings WHERE client_id = ? AND key = 'interview_prompt_supplement'",
       [clientId]
     );
 
-    // 8. Clear communities and unlink board members
+    // 9. Unlink board members from communities, then delete communities
     await db.run("UPDATE users SET community_id = NULL WHERE client_id = ?", [clientId]);
     await db.run("DELETE FROM communities WHERE client_id = ?", [clientId]);
 
-    // 9. Reset onboarding_completed on all client admins
+    // 10. Reset onboarding_completed on all client admins
     await db.run(
       "UPDATE client_admins SET onboarding_completed = FALSE WHERE client_id = ?",
       [clientId]
     );
 
-    // 10. Log the reset
+    // 11. Log the reset
     await db.run(
       "INSERT INTO activity_log (client_id, actor_type, actor_email, action) VALUES (?, 'superadmin', ?, ?)",
       [clientId, req.session.user?.email || "superadmin", `Reset client "${client.company_name}" (interviews, rounds, sessions, communities cleared)`]
@@ -950,7 +959,7 @@ router.post("/clients/:id/reset", async (req, res) => {
     res.json({ ok: true, message: `Client "${client.company_name}" has been reset. Board members preserved.` });
   } catch (err) {
     logger.error({ err }, "Client reset error");
-    res.status(500).json({ error: "Failed to reset client" });
+    res.status(500).json({ error: "Failed to reset client: " + err.message });
   }
 });
 
