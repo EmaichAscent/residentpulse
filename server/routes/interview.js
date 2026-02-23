@@ -10,56 +10,15 @@ const anthropic = new Anthropic();
 
 router.use(requireClientAdmin);
 
-const INITIAL_SYSTEM_PROMPT = `You are a professional onboarding specialist for ResidentPulse, a platform that helps residential management companies collect feedback from HOA and condo association board members.
+// Load interview prompts from DB (seeded on startup in db.js, editable via SuperAdmin Settings)
+async function getInterviewPrompt(key, fallback) {
+  const row = await db.get("SELECT value FROM settings WHERE key = ? AND client_id IS NULL", [key]);
+  return row?.value || fallback;
+}
 
-You are conducting an onboarding interview with a client admin — someone who runs a community association management (CAM) company. Your goal is to understand their business so ResidentPulse can provide better, more personalized survey experiences for their board members.
-
-You have already received their structured data (company size, years in business, geographic area, communities managed, competitive advantages). Now have a focused conversation covering:
-
-1. Their biggest concerns about their existing clients or how they do business
-2. Pain points they see in their communities (communication gaps, maintenance issues, financial transparency, etc.)
-3. What outcomes they hope to achieve by using ResidentPulse to survey their board members
-4. Any specific topics or areas they want the AI interviewer to probe with their board members
-5. Anything unique about their company culture or approach that the AI should be aware of
-
-Guidelines:
-- Greet the admin by name if provided in the context below. Your very first message should welcome them, let them know you'll be asking approximately 5-10 questions, that they can end the interview at any time and complete it later using the Finish button at the bottom, and that the more detail they share, the better their board member survey results will be
-- Keep every response to 1-2 short sentences. Never exceed 2 sentences. No filler, no preamble, no restating what they said
-- Ask 5-8 questions total, one at a time
-- Ask follow-up questions only where more detail would genuinely improve results
-- Never summarize or echo back what the admin just told you — just move to the next question
-- When you have enough information, provide a brief 2-3 sentence summary and ask "Does this sound right?"
-- Do not use markdown formatting — plain conversational text only`;
-
-const RE_INTERVIEW_SYSTEM_PROMPT = `You are a professional onboarding specialist for ResidentPulse conducting a check-in interview with a returning client admin. They have used the platform before and you have context from their previous interview.
-
-Focus this shorter conversation on:
-1. Changes in company size or number of communities managed
-2. Material changes since last time (software switches, staff turnover, elevated customer churn)
-3. Feedback on how the prior round of board member engagement went
-4. Desired outcomes for this upcoming round
-5. Any new concerns or focus areas
-
-Guidelines:
-- Greet the admin by name if provided in the context below. Your very first message should welcome them back, let them know this will be a quick check-in of about 3-5 questions, that they can end anytime using the Finish button at the bottom, and that the more they share the better the upcoming round will be
-- Keep every response to 1-2 short sentences. Never exceed 2 sentences. No filler, no preamble, no restating what they said
-- Reference what they told you last time where relevant — show you remember
-- This should be shorter than the initial interview (3-5 questions typically)
-- Never summarize or echo back what the admin just told you — just move to the next question
-- When satisfied, provide a brief 2-3 sentence summary of what's changed and ask "Does this sound right?"
-- Do not use markdown formatting — plain conversational text only`;
-
-const PROMPT_GENERATION_INSTRUCTION = `Based on the following interview with a community association management (CAM) company admin, generate a concise prompt supplement that will be appended to the system prompt used when AI interviews their board members.
-
-The supplement should:
-- Be written as instructions to the AI interviewer (second person: "you should...")
-- Include relevant company context that helps personalize conversations
-- Highlight specific areas of concern the management company wants explored
-- Note any sensitive topics or unique company characteristics
-- Be 150-300 words maximum
-- Focus on actionable guidance, not restating raw interview data
-
-Do NOT include any preamble or explanation — output ONLY the prompt supplement text.`;
+const getInitialPrompt = () => getInterviewPrompt("interview_initial_prompt", "You are a professional onboarding specialist.");
+const getReInterviewPrompt = () => getInterviewPrompt("interview_re_prompt", "You are conducting a check-in interview.");
+const getPromptGenerationInstruction = () => getInterviewPrompt("prompt_generation_instruction", "Generate a prompt supplement.");
 
 // Get interview status for the current admin
 router.get("/status", async (req, res) => {
@@ -198,11 +157,11 @@ router.post("/:id/structured", async (req, res) => {
     if (communities_managed) contextIntro += `- Communities managed: ${communities_managed}\n`;
     if (competitive_advantages) contextIntro += `- Competitive advantages: ${competitive_advantages}\n`;
 
-    let systemPrompt = INITIAL_SYSTEM_PROMPT;
+    let systemPrompt = await getInitialPrompt();
 
     // For re-interviews, include previous context
     if (interview.interview_type === "re_interview" && interview.previous_interview_id) {
-      systemPrompt = RE_INTERVIEW_SYSTEM_PROMPT;
+      systemPrompt = await getReInterviewPrompt();
 
       const prevInterview = await db.get(
         "SELECT generated_prompt, interview_summary FROM admin_interviews WHERE id = ?",
@@ -293,8 +252,8 @@ router.post("/:id/message", async (req, res) => {
 
     // Build system prompt with context
     let systemPrompt = interview.interview_type === "re_interview"
-      ? RE_INTERVIEW_SYSTEM_PROMPT
-      : INITIAL_SYSTEM_PROMPT;
+      ? await getReInterviewPrompt()
+      : await getInitialPrompt();
 
     // Add structured data context
     let contextIntro = `\n\nCURRENT STRUCTURED DATA:\n`;
@@ -384,7 +343,7 @@ router.patch("/:id/confirm", async (req, res) => {
     const promptResponse = await anthropic.messages.create({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 600,
-      system: PROMPT_GENERATION_INSTRUCTION,
+      system: await getPromptGenerationInstruction(),
       messages: [{
         role: "user",
         content: `STRUCTURED DATA:\n${structuredContext}\n\nINTERVIEW TRANSCRIPT:\n${transcript}`

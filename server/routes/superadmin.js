@@ -303,6 +303,54 @@ router.put("/prompt", async (req, res) => {
   }
 });
 
+// Get interview prompts (all three)
+router.get("/interview-prompts", async (req, res) => {
+  try {
+    const initial = await db.get("SELECT value FROM settings WHERE key = 'interview_initial_prompt' AND client_id IS NULL");
+    const re = await db.get("SELECT value FROM settings WHERE key = 'interview_re_prompt' AND client_id IS NULL");
+    const generation = await db.get("SELECT value FROM settings WHERE key = 'prompt_generation_instruction' AND client_id IS NULL");
+    res.json({
+      interview_initial_prompt: initial?.value || "",
+      interview_re_prompt: re?.value || "",
+      prompt_generation_instruction: generation?.value || "",
+    });
+  } catch (err) {
+    logger.error({ err }, "Error loading interview prompts");
+    res.status(500).json({ error: "Failed to load interview prompts" });
+  }
+});
+
+// Update an interview prompt
+router.put("/interview-prompts", async (req, res) => {
+  const { key, value } = req.body;
+  const validKeys = ["interview_initial_prompt", "interview_re_prompt", "prompt_generation_instruction"];
+
+  if (!validKeys.includes(key)) {
+    return res.status(400).json({ error: "Invalid prompt key" });
+  }
+
+  if (!value) {
+    return res.status(400).json({ error: "Prompt value is required" });
+  }
+
+  try {
+    const result = await db.run(
+      "UPDATE settings SET value = ? WHERE key = ? AND client_id IS NULL",
+      [value, key]
+    );
+    if (!result.changes) {
+      await db.run(
+        "INSERT INTO settings (key, value, client_id) VALUES (?, ?, NULL)",
+        [key, value]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "Error saving interview prompt");
+    res.status(500).json({ error: "Failed to save interview prompt" });
+  }
+});
+
 // Get saved prompt versions
 router.get("/prompt/versions", async (req, res) => {
   try {

@@ -33,6 +33,19 @@ export default function SuperAdminSettings() {
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantError, setAssistantError] = useState(null);
 
+  // ── Interview prompts state ──
+  const INTERVIEW_TABS = [
+    { key: "interview_initial_prompt", label: "Initial Onboarding", desc: "Used when a new client admin completes their first onboarding interview." },
+    { key: "interview_re_prompt", label: "Re-Interview", desc: "Used when a returning client admin does a check-in before a new survey round." },
+    { key: "prompt_generation_instruction", label: "Prompt Generation", desc: "Instructions for AI to generate the client-specific prompt supplement after an interview." },
+  ];
+  const [interviewPrompts, setInterviewPrompts] = useState({});
+  const [interviewPromptsLoading, setInterviewPromptsLoading] = useState(true);
+  const [interviewTab, setInterviewTab] = useState("interview_initial_prompt");
+  const [interviewSaving, setInterviewSaving] = useState(false);
+  const [interviewSaved, setInterviewSaved] = useState(null); // key that was just saved
+  const [interviewError, setInterviewError] = useState(null);
+
   // ── Plans state ──
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
@@ -46,6 +59,7 @@ export default function SuperAdminSettings() {
   useEffect(() => {
     loadPrompt();
     loadVersions();
+    loadInterviewPrompts();
     loadPlans();
   }, []);
 
@@ -159,7 +173,38 @@ export default function SuperAdminSettings() {
     }
   };
 
-  // ── Plans API (unchanged) ──
+  // ── Interview Prompts API ──
+  const loadInterviewPrompts = async () => {
+    try {
+      const res = await fetch("/api/superadmin/interview-prompts", { credentials: "include" });
+      if (res.ok) setInterviewPrompts(await res.json());
+    } finally {
+      setInterviewPromptsLoading(false);
+    }
+  };
+
+  const saveInterviewPrompt = async (key) => {
+    setInterviewSaving(true);
+    setInterviewSaved(null);
+    setInterviewError(null);
+    try {
+      const res = await fetch("/api/superadmin/interview-prompts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value: interviewPrompts[key] }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setInterviewSaved(key);
+      setTimeout(() => setInterviewSaved(null), 3000);
+    } catch {
+      setInterviewError("Failed to save. Please try again.");
+    } finally {
+      setInterviewSaving(false);
+    }
+  };
+
+  // ── Plans API ──
   const loadPlans = async () => {
     try {
       const res = await fetch("/api/superadmin/plans", { credentials: "include" });
@@ -400,6 +445,58 @@ export default function SuperAdminSettings() {
               </div>
             )}
           </div>
+        )}
+      </div>
+
+      {/* ━━━━ INTERVIEW PROMPTS CARD ━━━━ */}
+      <div className="bg-white rounded-xl border p-6">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Interview Prompts</h2>
+          <p className="text-sm text-gray-500">
+            Prompts used during the client admin onboarding interview and prompt supplement generation.
+          </p>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-4">
+          {INTERVIEW_TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setInterviewTab(t.key)}
+              className={`flex-1 py-2 text-sm font-medium rounded-md transition ${
+                interviewTab === t.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {interviewPromptsLoading ? (
+          <p className="text-sm text-gray-400">Loading...</p>
+        ) : (
+          <>
+            <p className="text-xs text-gray-500 mb-2">
+              {INTERVIEW_TABS.find((t) => t.key === interviewTab)?.desc}
+            </p>
+            <textarea
+              value={interviewPrompts[interviewTab] || ""}
+              onChange={(e) => setInterviewPrompts({ ...interviewPrompts, [interviewTab]: e.target.value })}
+              rows={10}
+              className="w-full px-4 py-3 text-sm border border-gray-200 rounded-lg focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition resize-y font-mono leading-relaxed"
+            />
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                onClick={() => saveInterviewPrompt(interviewTab)}
+                disabled={interviewSaving}
+                className="btn-primary-sm"
+              >
+                {interviewSaving ? "Saving..." : "Save"}
+              </button>
+              {interviewSaved === interviewTab && <span className="text-sm text-green-600 font-medium">Saved!</span>}
+              {interviewError && <span className="text-sm text-red-600 font-medium">{interviewError}</span>}
+            </div>
+          </>
         )}
       </div>
 
