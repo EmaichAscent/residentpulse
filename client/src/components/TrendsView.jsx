@@ -3,7 +3,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, ReferenceLine, LabelList,
 } from "recharts";
-import { COLORS } from "../utils/npsHelpers";
+import { COLORS, npsColor } from "../utils/npsHelpers";
 
 /* Custom dot that colors by NPS value */
 function NpsDot({ cx, cy, payload }) {
@@ -30,6 +30,7 @@ function NpsLabel({ x, y, value }) {
 
 export default function TrendsView() {
   const [trends, setTrends] = useState([]);
+  const [isPaidTier, setIsPaidTier] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,7 +42,13 @@ export default function TrendsView() {
       const res = await fetch("/api/admin/survey-rounds/trends", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        setTrends(data);
+        // Support new { is_paid_tier, rounds } shape and legacy array
+        if (Array.isArray(data)) {
+          setTrends(data);
+        } else {
+          setTrends(data.rounds || []);
+          setIsPaidTier(data.is_paid_tier || false);
+        }
       }
     } catch (err) {
       console.error("Failed to load trends:", err);
@@ -106,6 +113,41 @@ export default function TrendsView() {
       details: r.community_details || [],
     };
   });
+
+  // Revenue at Risk trend data (paid tier)
+  const revenueData = isPaidTier
+    ? concludedRounds
+        .filter((r) => r.revenue_at_risk)
+        .map((r) => ({
+          name: `R${r.round_number}`,
+          percent: r.revenue_at_risk.percent_at_risk,
+          atRisk: r.revenue_at_risk.at_risk_value,
+          total: r.revenue_at_risk.total_portfolio_value,
+        }))
+    : [];
+
+  // Manager Performance heatmap data (paid tier)
+  const managerHeatmap = (() => {
+    if (!isPaidTier) return { managers: [], roundLabels: [] };
+    const roundLabels = concludedRounds
+      .filter((r) => r.manager_performance)
+      .map((r) => `R${r.round_number}`);
+    const managerMap = {};
+    for (const r of concludedRounds) {
+      if (!r.manager_performance) continue;
+      const label = `R${r.round_number}`;
+      for (const m of r.manager_performance) {
+        if (!managerMap[m.manager]) managerMap[m.manager] = {};
+        managerMap[m.manager][label] = { nps: m.nps, respondents: m.respondents };
+      }
+    }
+    // Sort by most recent round NPS descending
+    const lastRound = roundLabels[roundLabels.length - 1];
+    const managers = Object.entries(managerMap)
+      .map(([name, rounds]) => ({ name, rounds }))
+      .sort((a, b) => (b.rounds[lastRound]?.nps ?? -101) - (a.rounds[lastRound]?.nps ?? -101));
+    return { managers, roundLabels };
+  })();
 
   // Compute trending topics between consecutive rounds
   const topicTrends = [];
@@ -211,6 +253,97 @@ export default function TrendsView() {
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      {/* Revenue at Risk Over Time (paid tier) */}
+      {revenueData.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">
+            Revenue at Risk Over Time
+          </p>
+          <p className="text-xs text-gray-400 mb-4">
+            Percentage of portfolio value in detractor-classified communities
+          </p>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={revenueData} margin={{ top: 20, right: 30, bottom: 5, left: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} />
+              <ReferenceLine y={20} stroke="#9CA3AF" strokeDasharray="6 4" strokeWidth={1}>
+                <label value="Target" position="right" fill="#9CA3AF" fontSize={11} />
+              </ReferenceLine>
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  const d = payload[0].payload;
+                  return (
+                    <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-lg text-xs">
+                      <p className="font-semibold text-gray-700 mb-1">{d.name}</p>
+                      <p className="text-red-600 font-medium">{d.percent}% at risk</p>
+                      <p className="text-gray-500">
+                        ${d.atRisk.toLocaleString()} of ${d.total.toLocaleString()}
+                      </p>
+                    </div>
+                  );
+                }}
+              />
+              <Bar dataKey="percent" fill={COLORS.detractor} fillOpacity={0.75} radius={[4, 4, 0, 0]}>
+                <LabelList
+                  dataKey="percent"
+                  position="top"
+                  formatter={(v) => `${v}%`}
+                  style={{ fontSize: 12, fontWeight: 600, fill: COLORS.detractor }}
+                />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Manager Performance Heatmap (paid tier) */}
+      {managerHeatmap.managers.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">
+            Manager Performance Over Time
+          </p>
+          <p className="text-xs text-gray-400 mb-4">
+            NPS by community manager across survey rounds
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-500">Manager</th>
+                  {managerHeatmap.roundLabels.map((label) => (
+                    <th key={label} className="text-center py-2 px-3 text-xs font-semibold text-gray-500 min-w-[64px]">
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {managerHeatmap.managers.map((mgr) => (
+                  <tr key={mgr.name} className="border-b border-gray-100 last:border-0">
+                    <td className="py-2.5 pr-4 text-gray-700 font-medium whitespace-nowrap">{mgr.name}</td>
+                    {managerHeatmap.roundLabels.map((label) => {
+                      const cell = mgr.rounds[label];
+                      if (!cell) return <td key={label} className="text-center py-2.5 px-3 text-gray-300">—</td>;
+                      const color = npsColor(cell.nps);
+                      const bgClass = cell.nps >= 50 ? "bg-green-50" : cell.nps >= 0 ? "bg-blue-50" : "bg-red-50";
+                      const formatted = cell.nps > 0 ? `+${cell.nps}` : `${cell.nps}`;
+                      return (
+                        <td key={label} className={`text-center py-2.5 px-3 ${bgClass} rounded`}>
+                          <span className="font-semibold text-sm" style={{ color }}>{formatted}</span>
+                          <span className="block text-[10px] text-gray-400">{cell.respondents} resp.</span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Community Cohorts — 100% Stacked Bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">

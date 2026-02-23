@@ -144,11 +144,20 @@ router.get("/trends", async (req, res) => {
       [req.clientId]
     );
 
+    // Check paid tier for revenue/manager analytics
+    const planResult = await db.get(
+      `SELECT sp.name as plan_name FROM client_subscriptions cs
+       JOIN subscription_plans sp ON sp.id = cs.plan_id
+       WHERE cs.client_id = ?`,
+      [req.clientId]
+    );
+    const isPaidTier = planResult && planResult.plan_name !== "free";
+
     const trendsData = [];
     for (const round of rounds) {
       // Get session stats for this round
       const sessions = await db.all(
-        `SELECT s.nps_score, COALESCE(sc.community_name, s.community_name) as community_name, s.completed
+        `SELECT s.nps_score, s.community_id, COALESCE(sc.community_name, s.community_name) as community_name, s.completed
          FROM sessions s
          LEFT JOIN communities sc ON sc.id = s.community_id
          WHERE s.round_id = ? AND s.client_id = ?`,
@@ -182,6 +191,79 @@ router.get("/trends", async (req, res) => {
         communityDetails.push({ name, median, cohort, respondents: scores.length });
       }
 
+      // Paid tier: Revenue at Risk + Manager Performance
+      let revenueAtRisk = null;
+      let managerPerformance = null;
+
+      if (isPaidTier && round.status === "concluded") {
+        // Get community metadata from snapshots (concluded) or live table
+        const hasSnapshots = await db.get(
+          "SELECT 1 FROM round_community_snapshots WHERE round_id = ? LIMIT 1", [round.id]
+        );
+        const communityData = hasSnapshots
+          ? await db.all(
+              `SELECT community_id as id, community_name, contract_value, community_manager_name
+               FROM round_community_snapshots WHERE round_id = ? AND status = 'active'`,
+              [round.id]
+            )
+          : await db.all(
+              `SELECT id, community_name, contract_value, community_manager_name
+               FROM communities WHERE client_id = ? AND status = 'active'`,
+              [req.clientId]
+            );
+
+        // Build community name lookup for matching with session data
+        const communityLookup = {};
+        for (const c of communityData) {
+          communityLookup[c.community_name.trim().toLowerCase()] = c;
+        }
+
+        // Revenue at Risk: sum contract_value for detractor communities
+        const totalPortfolioValue = communityData.reduce((sum, c) => sum + (Number(c.contract_value) || 0), 0);
+        const atRiskCommunities = communityDetails.filter(c => c.cohort === "detractor");
+        const atRiskValue = atRiskCommunities.reduce((sum, c) => {
+          const meta = communityLookup[c.name.trim().toLowerCase()];
+          return sum + (meta ? Number(meta.contract_value) || 0 : 0);
+        }, 0);
+
+        revenueAtRisk = {
+          total_portfolio_value: totalPortfolioValue,
+          at_risk_value: atRiskValue,
+          percent_at_risk: totalPortfolioValue > 0 ? Math.round((atRiskValue / totalPortfolioValue) * 100) : 0,
+        };
+
+        // Manager Performance: group session NPS by manager
+        const communityScores = {};
+        for (const s of completed) {
+          if (s.community_name && s.nps_score != null) {
+            const key = s.community_name.trim().toLowerCase();
+            if (!communityScores[key]) communityScores[key] = [];
+            communityScores[key].push(s.nps_score);
+          }
+        }
+
+        const managerScores = {};
+        for (const c of communityData) {
+          const mgr = c.community_manager_name;
+          if (!mgr) continue;
+          const key = c.community_name.trim().toLowerCase();
+          const scores = communityScores[key] || [];
+          if (!managerScores[mgr]) managerScores[mgr] = { communities: [], scores: [] };
+          managerScores[mgr].communities.push(c.community_name);
+          managerScores[mgr].scores.push(...scores);
+        }
+
+        managerPerformance = Object.entries(managerScores)
+          .filter(([_, data]) => data.scores.length > 0)
+          .map(([manager, data]) => {
+            const p = data.scores.filter(n => n >= 9).length;
+            const d = data.scores.filter(n => n <= 6).length;
+            const nps = Math.round(((p - d) / data.scores.length) * 100);
+            return { manager, communities: data.communities.length, nps, respondents: data.scores.length };
+          })
+          .sort((a, b) => b.nps - a.nps);
+      }
+
       trendsData.push({
         id: round.id,
         round_number: round.round_number,
@@ -197,10 +279,12 @@ router.get("/trends", async (req, res) => {
         community_cohorts: cohorts,
         community_details: communityDetails,
         word_frequencies: round.word_frequencies || null,
+        revenue_at_risk: revenueAtRisk,
+        manager_performance: managerPerformance,
       });
     }
 
-    res.json(trendsData);
+    res.json({ is_paid_tier: isPaidTier, rounds: trendsData });
   } catch (err) {
     logger.error({ err }, "Error fetching trends");
     res.status(500).json({ error: err.message });
