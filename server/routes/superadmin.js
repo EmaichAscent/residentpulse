@@ -925,13 +925,16 @@ router.post("/clients/:id/reset", async (req, res) => {
     // 5. Delete sessions (references survey_rounds, communities)
     await db.run("DELETE FROM sessions WHERE client_id = ?", [clientId]);
 
-    // 6. Delete round-community snapshots (references survey_rounds + communities)
+    // 6. Delete email jobs (references survey_rounds)
+    await db.run("DELETE FROM email_jobs WHERE client_id = ?", [clientId]);
+
+    // 7. Delete round-community snapshots (references survey_rounds + communities)
     await db.run(
       "DELETE FROM round_community_snapshots WHERE round_id IN (SELECT id FROM survey_rounds WHERE client_id = ?)",
       [clientId]
     );
 
-    // 7. Delete survey rounds
+    // 8. Delete survey rounds
     await db.run("DELETE FROM survey_rounds WHERE client_id = ?", [clientId]);
 
     // 8. Delete the prompt supplement setting

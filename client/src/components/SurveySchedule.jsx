@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import ReInterviewDialog from "./ReInterviewDialog";
 
 export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, cadenceUpdating, cadenceMessage, embedded, onScheduled }) {
@@ -7,10 +7,57 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
   const [firstDate, setFirstDate] = useState("");
   const [scheduling, setScheduling] = useState(false);
   const [launching, setLaunching] = useState(null);
-  const [launchResult, setLaunchResult] = useState(null);
   const [confirmLaunch, setConfirmLaunch] = useState(null);
   const [error, setError] = useState(null);
   const [reInterviewPrompt, setReInterviewPrompt] = useState(null);
+  const [activeJob, setActiveJob] = useState(null);
+  const pollRef = useRef(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback((jobId) => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/admin/survey-rounds/email-jobs/${jobId}`, { credentials: "include" });
+        if (!res.ok) return;
+        const job = await res.json();
+        setActiveJob(prev => ({ ...prev, ...job }));
+        if (job.status !== "in_progress") {
+          stopPolling();
+          loadRounds();
+        }
+      } catch {
+        // Polling error — ignore, will retry next interval
+      }
+    }, 3000);
+  }, [stopPolling]);
+
+  // Clean up polling on unmount
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
+  // Check for active job on mount (page load resume)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/survey-rounds/email-jobs/active", { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.job) {
+            setActiveJob(data.job);
+            startPolling(data.job.id);
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    })();
+  }, [startPolling]);
 
   useEffect(() => {
     loadRounds();
@@ -80,7 +127,6 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
 
   const handleLaunch = async (roundId) => {
     setLaunching(roundId);
-    setLaunchResult(null);
     setConfirmLaunch(null);
     setError(null);
 
@@ -91,7 +137,16 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
       });
       const data = await res.json();
       if (res.ok) {
-        setLaunchResult(data);
+        // API returns immediately — start polling for progress
+        setActiveJob({
+          id: data.job_id,
+          status: "in_progress",
+          total_count: data.total,
+          sent_count: 0,
+          failed_count: 0,
+          closes_at: data.closes_at,
+        });
+        startPolling(data.job_id);
         await loadRounds();
       } else {
         setError(data.error);
@@ -265,13 +320,49 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
         </div>
       )}
 
-      {launchResult && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+      {activeJob && activeJob.status === "in_progress" && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium text-blue-800">
+              Sending invitations... {activeJob.sent_count} of {activeJob.total_count} sent
+              {activeJob.failed_count > 0 && <span className="text-red-600 ml-1">({activeJob.failed_count} failed)</span>}
+            </p>
+            <span className="text-xs text-blue-500">{Math.round(((activeJob.sent_count + activeJob.failed_count) / activeJob.total_count) * 100)}%</span>
+          </div>
+          <div className="w-full bg-blue-200 rounded-full h-2">
+            <div
+              className="h-2 rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.round(((activeJob.sent_count + activeJob.failed_count) / activeJob.total_count) * 100)}%`,
+                backgroundColor: "var(--cam-blue)",
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {activeJob && activeJob.status === "completed" && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 flex items-center justify-between">
           <p className="text-sm text-green-800">
-            Round launched! {launchResult.sent} invitation{launchResult.sent !== 1 ? "s" : ""} sent
-            {launchResult.failed > 0 && `, ${launchResult.failed} failed`}.
-            Survey closes {formatDate(launchResult.closes_at)}.
+            Round launched! {activeJob.sent_count} invitation{activeJob.sent_count !== 1 ? "s" : ""} sent
+            {activeJob.failed_count > 0 && `, ${activeJob.failed_count} failed`}.
+            {activeJob.closes_at && ` Survey closes ${formatDate(activeJob.closes_at)}.`}
           </p>
+          <button onClick={() => setActiveJob(null)} className="text-xs text-green-600 hover:text-green-800 font-medium ml-3 flex-shrink-0">
+            Done
+          </button>
+        </div>
+      )}
+
+      {activeJob && activeJob.status === "failed" && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-center justify-between">
+          <p className="text-sm text-red-800">
+            Email sending failed: {activeJob.error_message || "Unknown error"}.
+            {activeJob.sent_count > 0 && ` ${activeJob.sent_count} of ${activeJob.total_count} sent before failure.`}
+          </p>
+          <button onClick={() => setActiveJob(null)} className="text-xs text-red-600 hover:text-red-800 font-medium ml-3 flex-shrink-0">
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -306,6 +397,7 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
                   ? Math.ceil((new Date(round.scheduled_date) - new Date()) / (1000 * 60 * 60 * 24))
                   : 0;
                 const tooEarly = daysUntil > 30;
+                const jobInProgress = activeJob?.status === "in_progress";
 
                 return (
                   <>
@@ -314,7 +406,7 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
                         <span className="text-xs text-gray-500">Launch now?</span>
                         <button
                           onClick={() => handleLaunch(round.id)}
-                          disabled={launching === round.id}
+                          disabled={launching === round.id || jobInProgress}
                           className="text-xs px-3 py-1.5 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
                         >
                           {launching === round.id ? "Launching..." : "Confirm"}
@@ -333,9 +425,10 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
                     ) : (
                       <button
                         onClick={() => handlePreLaunchCheck(round.id)}
-                        className="text-sm px-4 py-2 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90"
+                        disabled={jobInProgress}
+                        className="text-sm px-4 py-2 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
                       >
-                        Confirm & Launch
+                        {jobInProgress ? "Sending..." : "Confirm & Launch"}
                       </button>
                     )}
                   </>

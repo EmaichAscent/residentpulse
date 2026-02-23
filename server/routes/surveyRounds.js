@@ -727,6 +727,96 @@ router.post("/:id/regenerate-insights", async (req, res) => {
   }
 });
 
+// Background email sending for round launch
+async function processEmailJob(jobId, roundId, members, closesAt, clientId, userId, userEmail, roundNumber, companyName) {
+  let sentCount = 0;
+  let failedCount = 0;
+
+  try {
+    for (let i = 0; i < members.length; i++) {
+      const member = members[i];
+
+      try {
+        const token = crypto.randomUUID();
+
+        await db.run(
+          "UPDATE users SET invitation_token = ?, invitation_token_expires = ?, last_invited_at = CURRENT_TIMESTAMP WHERE id = ?",
+          [token, closesAt.toISOString(), member.id]
+        );
+
+        const emailResult = await sendInvitation(member, token, {
+          closesAt: closesAt.toISOString(),
+          roundNumber,
+          companyName,
+          clientId,
+        });
+
+        await db.run(
+          "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, round_id, resend_email_id) VALUES (?, ?, ?, ?, ?, ?)",
+          [member.id, clientId, userId, "sent", roundId, emailResult?.id || null]
+        );
+
+        sentCount++;
+      } catch (err) {
+        logger.error({ err }, `Failed to send invitation to ${member.email}`);
+
+        try {
+          await db.run(
+            "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, error_message, round_id) VALUES (?, ?, ?, ?, ?, ?)",
+            [member.id, clientId, userId, "failed", err.message, roundId]
+          );
+        } catch (logErr) {
+          logger.error({ err: logErr }, "Failed to log invitation error");
+        }
+
+        failedCount++;
+      }
+
+      // Update job progress every 10 emails (or on last email)
+      if ((i + 1) % 10 === 0 || i === members.length - 1) {
+        await db.run(
+          "UPDATE email_jobs SET sent_count = ?, failed_count = ? WHERE id = ?",
+          [sentCount, failedCount, jobId]
+        );
+      }
+
+      // Rate limit: 500ms between emails
+      if (i < members.length - 1) {
+        await sleep(500);
+      }
+    }
+
+    // Mark job completed
+    await db.run(
+      "UPDATE email_jobs SET status = 'completed', sent_count = ?, failed_count = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [sentCount, failedCount, jobId]
+    );
+
+    await logActivity({
+      actorType: "client_admin",
+      actorId: userId,
+      actorEmail: userEmail,
+      action: "launch_round",
+      entityType: "survey_round",
+      entityId: roundId,
+      clientId,
+      metadata: { sent: sentCount, failed: failedCount, round_number: roundNumber }
+    });
+
+    notifyRoundLaunched({
+      clientId, roundNumber,
+      membersInvited: sentCount, closesAt: closesAt.toISOString(), db
+    }).catch(err => logger.error("Failed to send round launch notifications: %s", err.message));
+
+  } catch (err) {
+    logger.error({ err }, "Email job fatal error");
+    await db.run(
+      "UPDATE email_jobs SET status = 'failed', sent_count = ?, failed_count = ?, error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [sentCount, failedCount, err.message, jobId]
+    ).catch(() => {});
+  }
+}
+
 // Launch a survey round
 router.post("/:id/launch", async (req, res) => {
   try {
@@ -800,81 +890,55 @@ router.post("/:id/launch", async (req, res) => {
       [closesAt.toISOString(), members.length, roundId]
     );
 
-    // Send invitations to all board members
-    let sentCount = 0;
-    let failedCount = 0;
+    // Create background email job
+    const jobResult = await db.run(
+      "INSERT INTO email_jobs (client_id, round_id, total_count) VALUES (?, ?, ?)",
+      [req.clientId, roundId, members.length]
+    );
+    const jobId = jobResult.lastInsertRowid;
 
-    for (const member of members) {
-      try {
-        // Generate token with expiry matching round close date
-        const token = crypto.randomUUID();
-
-        await db.run(
-          "UPDATE users SET invitation_token = ?, invitation_token_expires = ?, last_invited_at = CURRENT_TIMESTAMP WHERE id = ?",
-          [token, closesAt.toISOString(), member.id]
-        );
-
-        // Send email with round info
-        const emailResult = await sendInvitation(member, token, {
-          closesAt: closesAt.toISOString(),
-          roundNumber: round.round_number,
-          companyName,
-          clientId: req.clientId,
-        });
-
-        // Log invitation with round_id and Resend email ID
-        await db.run(
-          "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, round_id, resend_email_id) VALUES (?, ?, ?, ?, ?, ?)",
-          [member.id, req.clientId, req.userId, "sent", roundId, emailResult?.id || null]
-        );
-
-        sentCount++;
-      } catch (err) {
-        logger.error({ err }, `Failed to send invitation to ${member.email}`);
-
-        try {
-          await db.run(
-            "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, error_message, round_id) VALUES (?, ?, ?, ?, ?, ?)",
-            [member.id, req.clientId, req.userId, "failed", err.message, roundId]
-          );
-        } catch (logErr) {
-          logger.error({ err: logErr }, "Failed to log invitation error");
-        }
-
-        failedCount++;
-      }
-
-      // Rate limit: 500ms between emails
-      if (member !== members[members.length - 1]) {
-        await sleep(500);
-      }
-    }
-
-    await logActivity({
-      actorType: "client_admin",
-      actorId: req.userId,
-      actorEmail: req.userEmail,
-      action: "launch_round",
-      entityType: "survey_round",
-      entityId: roundId,
-      clientId: req.clientId,
-      metadata: { sent: sentCount, failed: failedCount, round_number: round.round_number }
-    });
-
-    // Notify admins asynchronously
-    notifyRoundLaunched({
-      clientId: req.clientId, roundNumber: round.round_number,
-      membersInvited: sentCount, closesAt: closesAt.toISOString(), db
-    }).catch(err => logger.error("Failed to send round launch notifications: %s", err.message));
-
+    // Return immediately — emails send in background
     res.json({
       ok: true,
-      sent: sentCount,
-      failed: failedCount,
+      job_id: jobId,
+      total: members.length,
       closes_at: closesAt.toISOString()
     });
+
+    // Fire-and-forget background processing
+    processEmailJob(jobId, roundId, members, closesAt, req.clientId, req.userId, req.userEmail, round.round_number, companyName)
+      .catch(err => logger.error({ err }, "Email job failed"));
+
   } catch (err) {
     logger.error({ err }, "Error launching round");
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get active email job for this client (for page load resume)
+// Must be before :jobId route so "active" isn't matched as a param
+router.get("/email-jobs/active", async (req, res) => {
+  try {
+    const job = await db.get(
+      "SELECT id, round_id, status, total_count, sent_count, failed_count, created_at FROM email_jobs WHERE client_id = ? AND status = 'in_progress' ORDER BY created_at DESC LIMIT 1",
+      [req.clientId]
+    );
+    res.json({ job: job || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get email job status (for polling)
+router.get("/email-jobs/:jobId", async (req, res) => {
+  try {
+    const job = await db.get(
+      "SELECT id, status, total_count, sent_count, failed_count, error_message, completed_at, created_at FROM email_jobs WHERE id = ? AND client_id = ?",
+      [Number(req.params.jobId), req.clientId]
+    );
+    if (!job) return res.status(404).json({ error: "Job not found" });
+    res.json(job);
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
