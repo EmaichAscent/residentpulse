@@ -109,6 +109,17 @@ async function initializeSchema() {
       )
     `);
 
+    // Create prompt_versions table (version history for system prompt)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS prompt_versions (
+        id SERIAL PRIMARY KEY,
+        prompt_text TEXT NOT NULL,
+        label TEXT,
+        created_by TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Create users table (board members)
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (

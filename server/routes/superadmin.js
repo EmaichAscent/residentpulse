@@ -1,9 +1,12 @@
 import { Router } from "express";
+import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
 import { requireSuperAdmin } from "../middleware/auth.js";
 import { hashPassword, generatePassword } from "../utils/password.js";
 import { generateClientCode } from "../utils/clientCode.js";
 import logger from "../utils/logger.js";
+
+const anthropic = new Anthropic();
 
 const router = Router();
 
@@ -261,7 +264,7 @@ router.get("/prompt", async (req, res) => {
   res.json({ prompt: setting?.value || "" });
 });
 
-// Update global system prompt
+// Update global system prompt (auto-saves previous version)
 router.put("/prompt", async (req, res) => {
   const { prompt } = req.body;
 
@@ -270,6 +273,15 @@ router.put("/prompt", async (req, res) => {
   }
 
   try {
+    // Auto-save the current live prompt as a version before overwriting
+    const current = await db.get("SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL");
+    if (current?.value && current.value !== prompt) {
+      await db.run(
+        "INSERT INTO prompt_versions (prompt_text, label, created_by) VALUES (?, ?, ?)",
+        [current.value, "Auto-save", req.session.user?.email || "unknown"]
+      );
+    }
+
     // Try UPDATE first (row seeded on startup)
     const result = await db.run(
       "UPDATE settings SET value = ? WHERE key = 'system_prompt' AND client_id IS NULL",
@@ -288,6 +300,80 @@ router.put("/prompt", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "Error saving prompt");
     res.status(500).json({ error: "Failed to save prompt" });
+  }
+});
+
+// Get saved prompt versions
+router.get("/prompt/versions", async (req, res) => {
+  try {
+    const versions = await db.all("SELECT * FROM prompt_versions ORDER BY created_at DESC");
+    res.json(versions);
+  } catch (err) {
+    logger.error({ err }, "Error loading prompt versions");
+    res.status(500).json({ error: "Failed to load versions" });
+  }
+});
+
+// Save current prompt as a named version
+router.post("/prompt/versions", async (req, res) => {
+  const { prompt_text, label } = req.body;
+
+  if (!prompt_text) {
+    return res.status(400).json({ error: "prompt_text is required" });
+  }
+
+  try {
+    const result = await db.run(
+      "INSERT INTO prompt_versions (prompt_text, label, created_by) VALUES (?, ?, ?)",
+      [prompt_text, label || "Saved version", req.session.user?.email || "unknown"]
+    );
+    const version = await db.get("SELECT * FROM prompt_versions WHERE id = ?", [result.lastInsertRowid]);
+    res.json(version);
+  } catch (err) {
+    logger.error({ err }, "Error saving prompt version");
+    res.status(500).json({ error: "Failed to save version" });
+  }
+});
+
+// Delete a prompt version
+router.delete("/prompt/versions/:id", async (req, res) => {
+  try {
+    await db.run("DELETE FROM prompt_versions WHERE id = ?", [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "Error deleting prompt version");
+    res.status(500).json({ error: "Failed to delete version" });
+  }
+});
+
+// AI Prompt Assistant — Claude refines the prompt based on instructions
+router.post("/prompt/assistant", async (req, res) => {
+  const { current_prompt, instructions } = req.body;
+
+  if (!instructions) {
+    return res.status(400).json({ error: "Instructions are required" });
+  }
+
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 2000,
+      system: "You are an expert prompt engineer. The user has an existing AI system prompt that is used to conduct NPS (Net Promoter Score) surveys with HOA board members via conversational AI. They want you to improve or modify it based on their instructions. Return ONLY the full updated prompt text with no preamble, explanation, or commentary. Do not wrap it in code blocks or quotes.",
+      messages: [
+        {
+          role: "user",
+          content: current_prompt
+            ? `Here is the current system prompt:\n\n${current_prompt}\n\nPlease make the following changes:\n${instructions}`
+            : `Please create a system prompt for an AI that conducts NPS surveys with HOA board members. Here are the requirements:\n${instructions}`
+        }
+      ]
+    });
+
+    const improvedPrompt = response.content[0].text;
+    res.json({ prompt: improvedPrompt });
+  } catch (err) {
+    logger.error({ err }, "Error calling AI assistant");
+    res.status(500).json({ error: "AI assistant failed. Please try again." });
   }
 });
 
