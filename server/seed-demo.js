@@ -413,10 +413,13 @@ async function seed() {
     for (const u of users.rows) MEMBERS[u.email] = u.id;
     console.log(`Found ${users.rows.length} members`);
 
-    // Look up community IDs
-    const comms = await client.query("SELECT id, community_name FROM communities WHERE client_id = $1", [CLIENT_ID]);
+    // Look up community IDs and metadata
+    const comms = await client.query(
+      `SELECT id, community_name, contract_value, community_manager_name,
+              property_type, number_of_units, contract_renewal_date, contract_month_to_month, status
+       FROM communities WHERE client_id = $1`, [CLIENT_ID]);
     const COMMUNITIES = {};
-    for (const c2 of comms.rows) COMMUNITIES[c2.community_name] = c2.id;
+    for (const c2 of comms.rows) COMMUNITIES[c2.community_name] = c2;
     console.log(`Found ${comms.rows.length} communities`);
 
     // Wipe existing data for this client (same order as reset endpoint)
@@ -446,7 +449,7 @@ async function seed() {
       // Create sessions and messages
       for (const sess of round.sessions) {
         const userId = MEMBERS[sess.email];
-        const communityId = COMMUNITIES[sess.community] || null;
+        const communityId = COMMUNITIES[sess.community]?.id || null;
 
         const sessionId = await insert(
           `INSERT INTO sessions (email, nps_score, completed, summary, community_name, management_company, user_id, client_id, round_id, community_id, created_at)
@@ -489,12 +492,16 @@ async function seed() {
         console.log(`  Alert: ${alert.alert_type} (${alert.email})`);
       }
 
-      // Create round-community snapshots
-      for (const [name, commId] of Object.entries(COMMUNITIES)) {
+      // Create round-community snapshots with full metadata
+      for (const [name, comm] of Object.entries(COMMUNITIES)) {
         await insert(
-          `INSERT INTO round_community_snapshots (round_id, community_id, community_name, status, created_at)
-           VALUES (?, ?, ?, 'active', ?)`,
-          [roundId, commId, name, round.concluded_at]
+          `INSERT INTO round_community_snapshots
+           (round_id, community_id, community_name, contract_value, community_manager_name,
+            property_type, number_of_units, contract_renewal_date, contract_month_to_month, status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [roundId, comm.id, name, comm.contract_value, comm.community_manager_name,
+           comm.property_type, comm.number_of_units, comm.contract_renewal_date, comm.contract_month_to_month,
+           comm.status, round.concluded_at]
         );
       }
     }
