@@ -121,7 +121,7 @@ app.use("/api/webhooks", zohoWebhookRoutes);
 app.get("/api/health", async (_req, res) => {
   try {
     await sessionPool.query("SELECT 1");
-    res.json({ status: "ok" });
+    res.json({ status: "ok", environment: process.env.ENVIRONMENT || "production" });
   } catch {
     res.status(503).json({ status: "unhealthy", error: "database unreachable" });
   }
@@ -148,7 +148,8 @@ app.use((err, _req, res, _next) => {
 startScheduler();
 
 const server = app.listen(PORT, () => {
-  logger.info(`ResidentPulse server running on http://localhost:${PORT}`);
+  const env = process.env.ENVIRONMENT || "production";
+  logger.info(`ResidentPulse server running on http://localhost:${PORT} [${env}]`);
 });
 
 // Graceful shutdown — finish in-flight requests before exiting

@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import logger from "./logger.js";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const EMAIL_FROM = process.env.EMAIL_FROM || "ResidentPulse <residentpulse@camascent.com>";
 
 /**
  * Strip HTML to plain text for email fallback
@@ -256,7 +257,7 @@ export async function sendPasswordResetEmail(email, resetToken, { resetPath = "/
   try {
     const resendClient = getResendClient();
     const { data, error } = await resendClient.emails.send({
-      from: "ResidentPulse <residentpulse@camascent.com>",
+      from: EMAIL_FROM,
       to: [email],
       subject: "Reset your password",
       html: emailHtml,
@@ -354,7 +355,7 @@ export async function sendVerificationEmail(email, token) {
   try {
     const resendClient = getResendClient();
     const { data, error } = await resendClient.emails.send({
-      from: "ResidentPulse <residentpulse@camascent.com>",
+      from: EMAIL_FROM,
       to: [email],
       subject: "Verify your email - ResidentPulse",
       html: emailHtml,
@@ -573,7 +574,7 @@ export async function sendNewAdminEmail(email, tempPassword, { firstName, compan
   try {
     const resendClient = getResendClient();
     const { data, error } = await resendClient.emails.send({
-      from: "ResidentPulse <residentpulse@camascent.com>",
+      from: EMAIL_FROM,
       to: [email],
       subject: `You've been added as an admin — ResidentPulse`,
       html: emailHtml,
@@ -603,7 +604,7 @@ async function sendAdminNotification(email, subject, emailHtml) {
   try {
     const resendClient = getResendClient();
     const { data, error } = await resendClient.emails.send({
-      from: "ResidentPulse <residentpulse@camascent.com>",
+      from: EMAIL_FROM,
       to: [email],
       subject,
       html: emailHtml,
