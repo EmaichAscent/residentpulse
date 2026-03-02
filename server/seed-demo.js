@@ -12,10 +12,10 @@
 import pg from "pg";
 const { Client } = pg;
 
-const DB_URL = "postgresql://postgres:oFEhZharorzXMamZidgnQvLSDVVrYojv@shuttle.proxy.rlwy.net:24483/railway";
+const DB_URL = process.env.DATABASE_URL || "postgresql://postgres:oFEhZharorzXMamZidgnQvLSDVVrYojv@shuttle.proxy.rlwy.net:24483/railway";
 const CLIENT_ID = 1;
 
-const client = new Client(DB_URL);
+const client = new Client({ connectionString: DB_URL, ssl: DB_URL.includes("railway") ? { rejectUnauthorized: false } : false });
 
 async function run(sql, params = []) {
   let idx = 1;
