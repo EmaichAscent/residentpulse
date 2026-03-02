@@ -147,22 +147,6 @@ async function initializeSchema() {
     await client.query(`ALTER TABLE admins ADD COLUMN IF NOT EXISTS password_reset_token TEXT`);
     await client.query(`ALTER TABLE admins ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP`);
 
-    // Create email_jobs table (background email sending progress)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS email_jobs (
-        id SERIAL PRIMARY KEY,
-        client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
-        round_id INTEGER REFERENCES survey_rounds(id) ON DELETE SET NULL,
-        status TEXT NOT NULL DEFAULT 'in_progress' CHECK(status IN ('in_progress', 'completed', 'failed')),
-        total_count INTEGER NOT NULL DEFAULT 0,
-        sent_count INTEGER NOT NULL DEFAULT 0,
-        failed_count INTEGER NOT NULL DEFAULT 0,
-        error_message TEXT,
-        completed_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
     // Create indexes for performance
     await client.query(`CREATE INDEX IF NOT EXISTS idx_sessions_client_id ON sessions(client_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)`);
@@ -200,6 +184,22 @@ async function initializeSchema() {
     } catch (migrationErr) {
       logger.info("Survey rounds migration skipped (already applied or file not found)");
     }
+
+    // Create email_jobs table (depends on survey_rounds existing)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS email_jobs (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+        round_id INTEGER REFERENCES survey_rounds(id) ON DELETE SET NULL,
+        status TEXT NOT NULL DEFAULT 'in_progress' CHECK(status IN ('in_progress', 'completed', 'failed')),
+        total_count INTEGER NOT NULL DEFAULT 0,
+        sent_count INTEGER NOT NULL DEFAULT 0,
+        failed_count INTEGER NOT NULL DEFAULT 0,
+        error_message TEXT,
+        completed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
     // Run admin interviews migration
     try {
