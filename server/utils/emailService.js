@@ -1,6 +1,8 @@
 import { Resend } from "resend";
 import logger from "./logger.js";
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
  * Strip HTML to plain text for email fallback
  */
@@ -647,9 +649,10 @@ export async function notifyRoundLaunched({ clientId, roundNumber, membersInvite
       </div>
     </div>`;
 
-  for (const admin of admins) {
-    const personalized = html.replace("{{firstName}}", admin.first_name || "there");
-    await sendAdminNotification(admin.email, `Round ${roundNumber} launched — ${membersInvited} invitations sent`, personalized);
+  for (let i = 0; i < admins.length; i++) {
+    const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
+    await sendAdminNotification(admins[i].email, `Round ${roundNumber} launched — ${membersInvited} invitations sent`, personalized);
+    if (i < admins.length - 1) await sleep(500);
   }
 }
 
@@ -678,9 +681,10 @@ export async function notifyNewResponse({ clientId, roundNumber, respondentName,
       </div>
     </div>`;
 
-  for (const admin of admins) {
-    const personalized = html.replace("{{firstName}}", admin.first_name || "there");
-    await sendAdminNotification(admin.email, `New response — Round ${roundNumber} (${totalResponses}/${totalInvited})`, personalized);
+  for (let i = 0; i < admins.length; i++) {
+    const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
+    await sendAdminNotification(admins[i].email, `New response — Round ${roundNumber} (${totalResponses}/${totalInvited})`, personalized);
+    if (i < admins.length - 1) await sleep(500);
   }
 }
 
@@ -712,9 +716,10 @@ export async function notifyRoundConcluded({ clientId, roundNumber, totalRespons
       </div>
     </div>`;
 
-  for (const admin of admins) {
-    const personalized = html.replace("{{firstName}}", admin.first_name || "there");
-    await sendAdminNotification(admin.email, `Round ${roundNumber} complete — ${responseRate}% response rate`, personalized);
+  for (let i = 0; i < admins.length; i++) {
+    const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
+    await sendAdminNotification(admins[i].email, `Round ${roundNumber} complete — ${responseRate}% response rate`, personalized);
+    if (i < admins.length - 1) await sleep(500);
   }
 }
 
@@ -753,9 +758,10 @@ export async function notifyCriticalAlert({ clientId, alertType, severity, descr
       </div>
     </div>`;
 
-  for (const admin of admins) {
-    const personalized = html.replace("{{firstName}}", admin.first_name || "there");
-    await sendAdminNotification(admin.email, `ALERT: ${alertLabel} — ${respondentName || "Board member"}`, personalized);
+  for (let i = 0; i < admins.length; i++) {
+    const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
+    await sendAdminNotification(admins[i].email, `ALERT: ${alertLabel} — ${respondentName || "Board member"}`, personalized);
+    if (i < admins.length - 1) await sleep(500);
   }
 }
 
@@ -785,9 +791,10 @@ export async function notifyBouncedInvitation({ clientId, memberEmail, memberNam
       </div>
     </div>`;
 
-  for (const admin of admins) {
-    const personalized = html.replace("{{firstName}}", admin.first_name || "there");
-    await sendAdminNotification(admin.email, `Bounced invitation — ${memberEmail}`, personalized);
+  for (let i = 0; i < admins.length; i++) {
+    const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
+    await sendAdminNotification(admins[i].email, `Bounced invitation — ${memberEmail}`, personalized);
+    if (i < admins.length - 1) await sleep(500);
   }
 }
 
@@ -825,9 +832,10 @@ export async function notifyRoundApproaching({ clientId, roundNumber, scheduledD
       </div>
     </div>`;
 
-  for (const admin of admins) {
-    const personalized = html.replace("{{firstName}}", admin.first_name || "there");
-    await sendAdminNotification(admin.email, subject, personalized);
+  for (let i = 0; i < admins.length; i++) {
+    const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
+    await sendAdminNotification(admins[i].email, subject, personalized);
+    if (i < admins.length - 1) await sleep(500);
   }
 }
 

@@ -887,6 +887,8 @@ async function processEmailJob(jobId, roundId, members, closesAt, clientId, user
       metadata: { sent: sentCount, failed: failedCount, round_number: roundNumber }
     });
 
+    // Brief delay after invitation emails before sending admin notifications
+    await sleep(1000);
     notifyRoundLaunched({
       clientId, roundNumber,
       membersInvited: sentCount, closesAt: closesAt.toISOString(), db

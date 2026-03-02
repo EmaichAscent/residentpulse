@@ -190,7 +190,12 @@ router.patch("/:id/complete", async (req, res) => {
   // Notify admins of new response asynchronously
   try {
     const session = await db.get(
-      "SELECT s.client_id, s.round_id, s.first_name, s.last_name, COALESCE(c.community_name, s.community_name) as community_name FROM sessions s LEFT JOIN communities c ON c.id = s.community_id WHERE s.id = ?",
+      `SELECT s.client_id, s.round_id, u.first_name, u.last_name,
+              COALESCE(c.community_name, s.community_name) as community_name
+       FROM sessions s
+       LEFT JOIN communities c ON c.id = s.community_id
+       LEFT JOIN users u ON u.id = s.user_id
+       WHERE s.id = ?`,
       [id]
     );
     if (session?.client_id && session?.round_id) {
