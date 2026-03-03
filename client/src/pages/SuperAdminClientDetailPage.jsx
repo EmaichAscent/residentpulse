@@ -277,33 +277,33 @@ export default function SuperAdminClientDetailPage() {
 
           {/* Editable fields */}
           {editData && (
-            <div className="border-t pt-4 space-y-3">
+            <form autoComplete="off" onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="border-t pt-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-gray-500">Company Name</label>
-                  <input type="text" value={editData.company_name || ""} onChange={(e) => setEditData({...editData, company_name: e.target.value})} className="input-field-sm mt-1" />
+                  <input type="text" autoComplete="off" value={editData.company_name || ""} onChange={(e) => setEditData({...editData, company_name: e.target.value})} className="input-field-sm mt-1" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500">Phone</label>
-                  <input type="tel" value={editData.phone_number || ""} onChange={(e) => setEditData({...editData, phone_number: e.target.value})} className="input-field-sm mt-1" />
+                  <input type="tel" autoComplete="off" value={editData.phone_number || ""} onChange={(e) => setEditData({...editData, phone_number: e.target.value})} className="input-field-sm mt-1" />
                 </div>
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500">Address</label>
-                <input type="text" value={editData.address_line1 || ""} onChange={(e) => setEditData({...editData, address_line1: e.target.value})} className="input-field-sm mt-1" placeholder="Street address" />
+                <input type="text" autoComplete="off" value={editData.address_line1 || ""} onChange={(e) => setEditData({...editData, address_line1: e.target.value})} className="input-field-sm mt-1" placeholder="Street address" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs font-medium text-gray-500">City</label>
-                  <input type="text" value={editData.city || ""} onChange={(e) => setEditData({...editData, city: e.target.value})} className="input-field-sm mt-1" />
+                  <input type="text" autoComplete="off" value={editData.city || ""} onChange={(e) => setEditData({...editData, city: e.target.value})} className="input-field-sm mt-1" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500">State</label>
-                  <input type="text" value={editData.state || ""} onChange={(e) => setEditData({...editData, state: e.target.value})} className="input-field-sm mt-1" maxLength="2" />
+                  <input type="text" autoComplete="off" value={editData.state || ""} onChange={(e) => setEditData({...editData, state: e.target.value})} className="input-field-sm mt-1" maxLength="2" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500">ZIP</label>
-                  <input type="text" value={editData.zip || ""} onChange={(e) => setEditData({...editData, zip: e.target.value})} className="input-field-sm mt-1" />
+                  <input type="text" autoComplete="off" value={editData.zip || ""} onChange={(e) => setEditData({...editData, zip: e.target.value})} className="input-field-sm mt-1" />
                 </div>
               </div>
               <div>
@@ -345,10 +345,10 @@ export default function SuperAdminClientDetailPage() {
                   </div>
                 </div>
               )}
-              <button onClick={handleSave} disabled={saving} className="btn-primary-sm">
+              <button type="submit" disabled={saving} className="btn-primary-sm">
                 {saving ? "Saving..." : "Save Changes"}
               </button>
-            </div>
+            </form>
           )}
         </div>
 

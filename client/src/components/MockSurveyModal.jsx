@@ -96,6 +96,7 @@ export default function MockSurveyModal({ clientId, onClose }) {
                   <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
                   <input
                     type="text"
+                    autoComplete="off"
                     value={genericName}
                     onChange={(e) => setGenericName(e.target.value)}
                     className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
@@ -105,6 +106,7 @@ export default function MockSurveyModal({ clientId, onClose }) {
                   <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
                   <input
                     type="email"
+                    autoComplete="off"
                     value={genericEmail}
                     onChange={(e) => setGenericEmail(e.target.value)}
                     className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
@@ -114,6 +116,7 @@ export default function MockSurveyModal({ clientId, onClose }) {
                   <label className="block text-xs font-medium text-gray-500 mb-1">Community</label>
                   <input
                     type="text"
+                    autoComplete="off"
                     value={genericCommunity}
                     onChange={(e) => setGenericCommunity(e.target.value)}
                     className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
