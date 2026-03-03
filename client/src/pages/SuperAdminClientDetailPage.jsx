@@ -218,25 +218,27 @@ export default function SuperAdminClientDetailPage() {
           <div className="flex gap-2">
             {client.status === "pending" && (
               <button onClick={() => setConfirmAction({ type: "delete" })}
-                className="px-4 py-2 text-sm font-semibold text-red-600 bg-white/90 rounded-lg hover:bg-white shadow transition">
+                className="px-4 py-2 text-sm font-semibold text-red-800 bg-red-200 rounded-lg hover:bg-red-300 shadow-sm transition">
                 Delete
               </button>
             )}
             <button onClick={() => setConfirmAction({ type: "reset" })} disabled={resetting}
-              className="px-4 py-2 text-sm font-semibold text-red-500 bg-white/90 rounded-lg hover:bg-white shadow transition disabled:opacity-40">
+              className="px-4 py-2 text-sm font-semibold text-red-800 bg-red-200 rounded-lg hover:bg-red-300 shadow-sm transition disabled:opacity-40">
               {resetting ? "Resetting..." : "Reset"}
             </button>
             <button onClick={() => setShowMockModal(true)} disabled={client.status !== "active"}
-              className="px-4 py-2 text-sm font-semibold text-purple-600 bg-white/90 rounded-lg hover:bg-white shadow transition disabled:opacity-40">
+              className="px-4 py-2 text-sm font-semibold text-purple-800 bg-purple-200 rounded-lg hover:bg-purple-300 shadow-sm transition disabled:opacity-40">
               Test Survey
             </button>
             <button onClick={() => setConfirmAction({ type: "impersonate" })} disabled={client.status !== "active"}
-              className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white/90 rounded-lg hover:bg-white shadow transition disabled:opacity-40">
+              className="px-4 py-2 text-sm font-semibold text-blue-800 bg-blue-200 rounded-lg hover:bg-blue-300 shadow-sm transition disabled:opacity-40">
               Impersonate
             </button>
             <button onClick={() => setConfirmAction({ type: "toggleStatus" })}
-              className={`px-4 py-2 text-sm font-semibold bg-white/90 rounded-lg hover:bg-white shadow transition ${
-                client.status === "active" ? "text-amber-600" : "text-emerald-600"
+              className={`px-4 py-2 text-sm font-semibold rounded-lg shadow-sm transition ${
+                client.status === "active"
+                  ? "text-amber-800 bg-amber-200 hover:bg-amber-300"
+                  : "text-emerald-800 bg-emerald-200 hover:bg-emerald-300"
               }`}>
               {client.status === "active" ? "Deactivate" : "Activate"}
             </button>

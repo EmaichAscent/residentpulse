@@ -17,7 +17,7 @@ export default function ChatPage() {
   const [npsSubmitted, setNpsSubmitted] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [listening, setListening] = useState(false);
-  const [speechEnabled, setSpeechEnabled] = useState(false);
+  const [speechEnabled, setSpeechEnabled] = useState(!!synth);
   const [speaking, setSpeaking] = useState(false);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
