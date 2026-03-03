@@ -36,7 +36,7 @@ async function concludeExpiredRounds() {
 
     // Notify admins of round conclusion
     const completedCount = await db.get(
-      "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE",
+      "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE AND is_mock IS NOT TRUE",
       [round.id, round.client_id]
     );
     const roundDetails = await db.get("SELECT members_invited FROM survey_rounds WHERE id = ?", [round.id]);

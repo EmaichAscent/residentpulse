@@ -36,7 +36,7 @@ router.get("/dashboard", async (req, res) => {
     const totalClients = await db.get("SELECT COUNT(*) as count FROM clients");
     const activeClients = await db.get("SELECT COUNT(*) as count FROM clients WHERE status = 'active'");
     const activeRounds = await db.get("SELECT COUNT(*) as count FROM survey_rounds WHERE status = 'in_progress'");
-    const totalResponses = await db.get("SELECT COUNT(*) as count FROM sessions WHERE completed = TRUE");
+    const totalResponses = await db.get("SELECT COUNT(*) as count FROM sessions WHERE completed = TRUE AND is_mock IS NOT TRUE");
     const totalMembers = await db.get("SELECT COUNT(*) as count FROM users WHERE active = TRUE");
 
     // Engagement warnings: clients with no admin login in 30+ days (or never)
@@ -756,7 +756,7 @@ router.get("/clients/:id/detail", async (req, res) => {
     // Survey rounds
     const surveyRounds = await db.all(
       `SELECT sr.*,
-              (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true) as responses_completed,
+              (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true AND s.is_mock IS NOT TRUE) as responses_completed,
               (SELECT COUNT(DISTINCT il.user_id) FROM invitation_logs il WHERE il.round_id = sr.id AND il.email_status = 'sent') as invitations_sent
        FROM survey_rounds sr
        WHERE sr.client_id = ?
@@ -1008,6 +1008,106 @@ router.delete("/clients/:id", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "Client delete error");
     res.status(500).json({ error: "Failed to delete client", detail: err.message });
+  }
+});
+
+// Get board members for a client (for mock survey picker)
+router.get("/clients/:id/members", async (req, res) => {
+  try {
+    const members = await db.all(
+      `SELECT u.id, u.email, u.first_name, u.last_name,
+              COALESCE(c.community_name, u.community_name) as community_name
+       FROM users u
+       LEFT JOIN communities c ON c.id = u.community_id
+       WHERE u.client_id = ? AND u.active = TRUE
+       ORDER BY u.first_name, u.last_name`,
+      [Number(req.params.id)]
+    );
+    res.json(members);
+  } catch (err) {
+    logger.error({ err }, "Error fetching members for mock survey");
+    res.status(500).json({ error: "Failed to load members" });
+  }
+});
+
+// Create a mock survey session for testing
+router.post("/clients/:id/mock-session", async (req, res) => {
+  const clientId = Number(req.params.id);
+  const { user_id, first_name, email, community_name } = req.body;
+
+  try {
+    const client = await db.get("SELECT * FROM clients WHERE id = ?", [clientId]);
+    if (!client) return res.status(404).json({ error: "Client not found" });
+
+    let sessionEmail, sessionFirstName, sessionCommunity, sessionUserId, sessionCommunityId;
+
+    if (user_id) {
+      // Use an existing board member's identity
+      const user = await db.get(
+        `SELECT u.id, u.email, u.first_name, u.last_name,
+                COALESCE(c.community_name, u.community_name) as community_name,
+                u.community_id
+         FROM users u
+         LEFT JOIN communities c ON c.id = u.community_id
+         WHERE u.id = ? AND u.client_id = ?`,
+        [user_id, clientId]
+      );
+      if (!user) return res.status(404).json({ error: "Board member not found" });
+      sessionEmail = user.email;
+      sessionFirstName = user.first_name;
+      sessionCommunity = user.community_name;
+      sessionUserId = user.id;
+      sessionCommunityId = user.community_id;
+    } else {
+      // Generic test identity
+      sessionEmail = email || "mock-test@residentpulse.local";
+      sessionFirstName = first_name || "Test";
+      sessionCommunity = community_name || "Test Community";
+      sessionUserId = null;
+      sessionCommunityId = null;
+    }
+
+    const result = await db.run(
+      `INSERT INTO sessions (email, user_id, community_name, management_company, client_id, round_id, community_id, is_mock)
+       VALUES (?, ?, ?, ?, ?, NULL, ?, TRUE)`,
+      [sessionEmail, sessionUserId, sessionCommunity, client.company_name, clientId, sessionCommunityId]
+    );
+
+    const hasLogo = client.logo_base64 ? true : false;
+
+    res.json({
+      session_id: result.lastInsertRowid,
+      email: sessionEmail,
+      first_name: sessionFirstName,
+      community: sessionCommunity,
+      company: client.company_name,
+      client_id: clientId,
+      has_logo: hasLogo,
+      company_name: client.company_name,
+    });
+  } catch (err) {
+    logger.error({ err }, "Error creating mock session");
+    res.status(500).json({ error: "Failed to create mock session" });
+  }
+});
+
+// Get mock sessions for a client
+router.get("/clients/:id/mock-sessions", async (req, res) => {
+  try {
+    const sessions = await db.all(
+      `SELECT s.id, s.email, s.nps_score, s.completed, s.summary, s.created_at,
+              COALESCE(c.community_name, s.community_name) as community_name,
+              (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) as message_count
+       FROM sessions s
+       LEFT JOIN communities c ON c.id = s.community_id
+       WHERE s.client_id = ? AND s.is_mock = TRUE
+       ORDER BY s.created_at DESC`,
+      [Number(req.params.id)]
+    );
+    res.json(sessions);
+  } catch (err) {
+    logger.error({ err }, "Error fetching mock sessions");
+    res.status(500).json({ error: "Failed to load mock sessions" });
   }
 });
 

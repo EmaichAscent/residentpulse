@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ChatBubble from "../components/ChatBubble";
 import ConfirmModal from "../components/ConfirmModal";
+import MockSurveyModal from "../components/MockSurveyModal";
 
 export default function SuperAdminClientDetailPage() {
   const { id } = useParams();
@@ -22,9 +23,11 @@ export default function SuperAdminClientDetailPage() {
   const [expandedAlertRound, setExpandedAlertRound] = useState(null);
   const [resetting, setResetting] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
+  const [showMockModal, setShowMockModal] = useState(false);
+  const [mockSessions, setMockSessions] = useState([]);
 
   useEffect(() => {
-    Promise.all([loadDetail(), loadInterviews(), loadPlans(), loadActivity(), loadAlerts()])
+    Promise.all([loadDetail(), loadInterviews(), loadPlans(), loadActivity(), loadAlerts(), loadMockSessions()])
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -58,6 +61,11 @@ export default function SuperAdminClientDetailPage() {
   const loadAlerts = async () => {
     const res = await fetch(`/api/superadmin/clients/${id}/alerts`, { credentials: "include" });
     if (res.ok) setAlerts(await res.json());
+  };
+
+  const loadMockSessions = async () => {
+    const res = await fetch(`/api/superadmin/clients/${id}/mock-sessions`, { credentials: "include" });
+    if (res.ok) setMockSessions(await res.json());
   };
 
   const loadTranscript = async (interviewId) => {
@@ -217,6 +225,10 @@ export default function SuperAdminClientDetailPage() {
             <button onClick={() => setConfirmAction({ type: "reset" })} disabled={resetting}
               className="px-3 py-1.5 text-xs font-medium text-red-200 border border-red-300/40 rounded-lg hover:bg-red-500/20 disabled:opacity-40">
               {resetting ? "Resetting..." : "Reset"}
+            </button>
+            <button onClick={() => setShowMockModal(true)} disabled={client.status !== "active"}
+              className="px-3 py-1.5 text-xs font-medium text-purple-200 border border-purple-300/40 rounded-lg hover:bg-purple-500/20 disabled:opacity-40">
+              Test Survey
             </button>
             <button onClick={() => setConfirmAction({ type: "impersonate" })} disabled={client.status !== "active"}
               className="px-3 py-1.5 text-xs font-medium text-white border border-white/40 rounded-lg hover:bg-white/10 disabled:opacity-40">
@@ -453,6 +465,46 @@ export default function SuperAdminClientDetailPage() {
           )}
         </div>
 
+        {/* Mock Sessions */}
+        {mockSessions.length > 0 && (
+          <div className="bg-white rounded-xl border p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Mock Sessions
+              <span className="ml-2 text-sm font-normal text-gray-400">({mockSessions.length})</span>
+            </h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 font-medium text-gray-500">Date</th>
+                    <th className="text-left py-2 font-medium text-gray-500">Email</th>
+                    <th className="text-left py-2 font-medium text-gray-500">Community</th>
+                    <th className="text-left py-2 font-medium text-gray-500">NPS</th>
+                    <th className="text-left py-2 font-medium text-gray-500">Messages</th>
+                    <th className="text-left py-2 font-medium text-gray-500">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mockSessions.map((s) => (
+                    <tr key={s.id} className="border-b last:border-0 hover:bg-gray-50">
+                      <td className="py-2 text-gray-500">{formatDateTime(s.created_at)}</td>
+                      <td className="py-2">{s.email}</td>
+                      <td className="py-2 text-gray-500">{s.community_name || "—"}</td>
+                      <td className="py-2 font-medium">{s.nps_score ?? "—"}</td>
+                      <td className="py-2 text-gray-500">{s.message_count}</td>
+                      <td className="py-2">
+                        <span className={`px-2 py-0.5 text-xs rounded-full ${
+                          s.completed ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                        }`}>{s.completed ? "Complete" : "In Progress"}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Warnings */}
         {alert_summary && alert_summary.total > 0 && (
           <div className="bg-white rounded-xl border p-6">
@@ -644,6 +696,12 @@ export default function SuperAdminClientDetailPage() {
         message={confirmAction?.message || ""}
         confirmLabel="OK"
       />
+      {showMockModal && (
+        <MockSurveyModal
+          clientId={id}
+          onClose={() => setShowMockModal(false)}
+        />
+      )}
     </div>
   );
 }

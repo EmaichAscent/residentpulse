@@ -22,7 +22,7 @@ router.get("/responses", async (req, res) => {
      FROM sessions s
      LEFT JOIN messages m ON m.session_id = s.id
      LEFT JOIN communities sc ON sc.id = s.community_id
-     WHERE s.client_id = ?
+     WHERE s.client_id = ? AND s.is_mock IS NOT TRUE
      GROUP BY s.id, sc.community_name
      ORDER BY s.created_at DESC`,
     [req.clientId]

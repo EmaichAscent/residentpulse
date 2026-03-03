@@ -63,7 +63,7 @@ export async function generateRoundInsights(roundId, clientId) {
      FROM sessions s
      LEFT JOIN users u ON u.id = s.user_id
      LEFT JOIN communities sc ON sc.id = s.community_id
-     WHERE s.round_id = ? AND s.client_id = ? AND s.completed = TRUE AND s.summary IS NOT NULL`,
+     WHERE s.round_id = ? AND s.client_id = ? AND s.completed = TRUE AND s.summary IS NOT NULL AND s.is_mock IS NOT TRUE`,
     [roundId, clientId]
   );
 
@@ -282,7 +282,7 @@ export async function generateWordFrequencies(roundId, clientId) {
     `SELECT m.content
      FROM messages m
      JOIN sessions s ON s.id = m.session_id
-     WHERE s.round_id = ? AND s.client_id = ? AND m.role = 'user'`,
+     WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND m.role = 'user'`,
     [roundId, clientId]
   );
 
@@ -349,7 +349,7 @@ async function finalizeStaleSessionsForRound(roundId, clientId) {
   const staleSessions = await db.all(
     `SELECT s.id
      FROM sessions s
-     WHERE s.round_id = ? AND s.client_id = ? AND s.completed = FALSE AND s.nps_score IS NOT NULL
+     WHERE s.round_id = ? AND s.client_id = ? AND s.completed = FALSE AND s.nps_score IS NOT NULL AND s.is_mock IS NOT TRUE
        AND (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id AND m.role = 'user') >= 2`,
     [roundId, clientId]
   );

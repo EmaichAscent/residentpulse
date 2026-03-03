@@ -187,10 +187,10 @@ router.patch("/:id/complete", async (req, res) => {
     logger.error("Summary generation failed: %s", err.message)
   );
 
-  // Notify admins of new response asynchronously
+  // Notify admins of new response asynchronously (skip mock sessions)
   try {
     const session = await db.get(
-      `SELECT s.client_id, s.round_id, u.first_name, u.last_name,
+      `SELECT s.client_id, s.round_id, s.is_mock, u.first_name, u.last_name,
               COALESCE(c.community_name, s.community_name) as community_name
        FROM sessions s
        LEFT JOIN communities c ON c.id = s.community_id
@@ -198,10 +198,10 @@ router.patch("/:id/complete", async (req, res) => {
        WHERE s.id = ?`,
       [id]
     );
-    if (session?.client_id && session?.round_id) {
+    if (session?.client_id && session?.round_id && !session.is_mock) {
       const round = await db.get("SELECT round_number, members_invited FROM survey_rounds WHERE id = ?", [session.round_id]);
       const completed = await db.get(
-        "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE",
+        "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE AND is_mock IS NOT TRUE",
         [session.round_id, session.client_id]
       );
       const respondentName = [session.first_name, session.last_name].filter(Boolean).join(" ") || "A board member";

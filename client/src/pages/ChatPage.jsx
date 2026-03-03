@@ -8,7 +8,7 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 export default function ChatPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { sessionId, email, firstName, community, company, clientId, hasLogo, companyName } = location.state || {};
+  const { sessionId, email, firstName, community, company, clientId, hasLogo, companyName, isMock } = location.state || {};
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -215,6 +215,15 @@ export default function ChatPage() {
           </div>
         </div>
 
+        {/* Mock survey banner */}
+        {isMock && (
+          <div className="bg-purple-50 border-b border-purple-200 px-5 py-2 flex-shrink-0">
+            <p className="text-sm text-purple-800 font-medium text-center">
+              Mock Survey Mode &mdash; This session will not affect analytics
+            </p>
+          </div>
+        )}
+
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-5 py-6 bg-gradient-to-b from-gray-50 to-white">
         {/* Initial greeting + NPS */}
@@ -251,6 +260,14 @@ export default function ChatPage() {
         {completed && (
           <div className="text-center py-6">
             <p className="text-lg text-gray-500">Session complete. Thank you for your feedback!</p>
+            {isMock && (
+              <button
+                onClick={() => navigate(`/superadmin/clients/${clientId}`)}
+                className="mt-3 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100"
+              >
+                Return to Client Detail
+              </button>
+            )}
           </div>
         )}
 

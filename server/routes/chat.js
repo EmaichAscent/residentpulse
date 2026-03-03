@@ -75,6 +75,7 @@ router.post("/", async (req, res) => {
     `SELECT s.nps_score, s.summary, s.created_at
      FROM sessions s
      WHERE s.email = ? AND s.id != ? AND s.completed = TRUE AND s.summary IS NOT NULL AND s.client_id = ?
+       AND s.is_mock IS NOT TRUE
      ORDER BY s.created_at DESC
      LIMIT 5`,
     [session.email, Number(session_id), session.client_id]
@@ -110,10 +111,12 @@ router.post("/", async (req, res) => {
       [Number(session_id)]
     );
 
-    // Fire critical alert detection asynchronously (don't block the response)
-    detectCriticalAlert(message, session, savedMsg?.id).catch((err) =>
-      logger.error("Critical alert detection error: %s", err.message)
-    );
+    // Fire critical alert detection asynchronously (skip for mock sessions)
+    if (!session.is_mock) {
+      detectCriticalAlert(message, session, savedMsg?.id).catch((err) =>
+        logger.error("Critical alert detection error: %s", err.message)
+      );
+    }
 
     res.json({ message: assistantMessage, timestamp: savedMsg?.created_at });
   } catch (err) {

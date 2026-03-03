@@ -50,7 +50,7 @@ router.get("/", async (req, res) => {
 
     const rounds = await db.all(
       `SELECT sr.*,
-              (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true) as responses_completed,
+              (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true AND s.is_mock IS NOT TRUE) as responses_completed,
               (SELECT COUNT(DISTINCT il.user_id) FROM invitation_logs il WHERE il.round_id = sr.id AND il.email_status = 'sent') as invitations_sent,
               (SELECT COUNT(*) FROM critical_alerts ca WHERE ca.round_id = sr.id AND ca.dismissed = FALSE AND COALESCE(ca.solved, FALSE) = FALSE) as active_alert_count,
               (SELECT COUNT(DISTINCT COALESCE(cm.community_name, u.community_name))
@@ -160,7 +160,7 @@ router.get("/trends", async (req, res) => {
         `SELECT s.nps_score, s.community_id, COALESCE(sc.community_name, s.community_name) as community_name, s.completed
          FROM sessions s
          LEFT JOIN communities sc ON sc.id = s.community_id
-         WHERE s.round_id = ? AND s.client_id = ?`,
+         WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE`,
         [round.id, req.clientId]
       );
 
@@ -348,7 +348,7 @@ router.get("/:id/dashboard", async (req, res) => {
        FROM sessions s
        LEFT JOIN users u ON u.id = s.user_id
        LEFT JOIN communities sc ON sc.id = s.community_id
-       WHERE s.round_id = ? AND s.client_id = ?${sessionFilterSQL}
+       WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE${sessionFilterSQL}
        ORDER BY s.created_at DESC`,
       sessionParams
     );
@@ -612,7 +612,7 @@ router.get("/:id/dashboard", async (req, res) => {
         `SELECT m.content
          FROM messages m
          JOIN sessions s ON s.id = m.session_id
-         WHERE s.round_id = ? AND s.client_id = ? AND m.role = 'user'${wfFilterSQL}`,
+         WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND m.role = 'user'${wfFilterSQL}`,
         wfParams
       );
       wordFrequencies = computeLiveWordFrequencies(userMessages);
@@ -688,7 +688,7 @@ router.get("/:id/export", async (req, res) => {
        FROM sessions s
        LEFT JOIN users u ON u.id = s.user_id
        LEFT JOIN communities sc ON sc.id = s.community_id
-       WHERE s.round_id = ? AND s.client_id = ?
+       WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE
        ORDER BY s.created_at DESC`,
       [roundId, req.clientId]
     );
@@ -762,7 +762,7 @@ router.post("/:id/close", async (req, res) => {
 
     // Notify admins asynchronously
     const completedCount = await db.get(
-      "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE",
+      "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE AND is_mock IS NOT TRUE",
       [roundId, req.clientId]
     );
     notifyRoundConcluded({
@@ -1084,7 +1084,7 @@ router.post("/recalculate", async (req, res) => {
     // Return updated rounds
     const rounds = await db.all(
       `SELECT sr.*,
-              (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true) as responses_completed,
+              (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true AND s.is_mock IS NOT TRUE) as responses_completed,
               (SELECT COUNT(DISTINCT il.user_id) FROM invitation_logs il WHERE il.round_id = sr.id AND il.email_status = 'sent') as invitations_sent
        FROM survey_rounds sr
        WHERE sr.client_id = ?

@@ -321,6 +321,16 @@ async function initializeSchema() {
       logger.info("Performance indexes migration skipped (already applied or file not found)");
     }
 
+    // Run mock sessions migration (SuperAdmin test surveys)
+    try {
+      const mockSessionsPath = join(__dirname, "migrations", "add-mock-sessions.sql");
+      const mockSessionsSQL = readFileSync(mockSessionsPath, "utf-8");
+      await client.query(mockSessionsSQL);
+      logger.info("Mock sessions migration applied successfully");
+    } catch (migrationErr) {
+      logger.info("Mock sessions migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     logger.info("Database schema initialized successfully");
   } catch (err) {
