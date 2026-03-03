@@ -1,12 +1,10 @@
 import { Router } from "express";
-import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
 import { requireSuperAdmin } from "../middleware/auth.js";
 import { hashPassword, generatePassword } from "../utils/password.js";
 import { generateClientCode } from "../utils/clientCode.js";
 import logger from "../utils/logger.js";
-
-const anthropic = new Anthropic();
+import { createMessage } from "../utils/anthropicClient.js";
 
 const router = Router();
 
@@ -403,7 +401,7 @@ router.post("/prompt/assistant", async (req, res) => {
   }
 
   try {
-    const response = await anthropic.messages.create({
+    const response = await createMessage({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 2000,
       system: "You are an expert prompt engineer. The user has an existing AI system prompt that is used to conduct NPS (Net Promoter Score) surveys with HOA board members via conversational AI. They want you to improve or modify it based on their instructions. Return ONLY the full updated prompt text with no preamble, explanation, or commentary. Do not wrap it in code blocks or quotes.",

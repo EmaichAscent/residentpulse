@@ -1,11 +1,10 @@
 import { Router } from "express";
-import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
 import { notifyCriticalAlert } from "../utils/emailService.js";
 import logger from "../utils/logger.js";
+import { createMessage } from "../utils/anthropicClient.js";
 
 const router = Router();
-const anthropic = new Anthropic();
 
 // Rate limiter: 10 requests per minute per session_id
 const rateLimits = new Map();
@@ -93,28 +92,12 @@ router.post("/", async (req, res) => {
   }
 
   try {
-    const apiMessages = history.map((m) => ({ role: m.role, content: m.content }));
-    let response;
-
-    // Retry once on 529 overloaded errors
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        response = await anthropic.messages.create({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 300,
-          system: systemPrompt,
-          messages: apiMessages,
-        });
-        break;
-      } catch (apiErr) {
-        if (attempt === 0 && apiErr.status === 529) {
-          logger.warn("Anthropic API overloaded (529), retrying in 2s...");
-          await new Promise((r) => setTimeout(r, 2000));
-          continue;
-        }
-        throw apiErr;
-      }
-    }
+    const response = await createMessage({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 300,
+      system: systemPrompt,
+      messages: history.map((m) => ({ role: m.role, content: m.content })),
+    });
 
     const assistantMessage = response.content[0].text;
 
@@ -150,7 +133,7 @@ async function detectCriticalAlert(userMessage, session, messageId) {
   // Skip short messages unlikely to contain actionable concerns
   if (userMessage.length < 30) return;
 
-  const result = await anthropic.messages.create({
+  const result = await createMessage({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 200,
     system: `You are a critical alert detector for a property management NPS survey platform. Analyze the board member's message for URGENT, TIME-SENSITIVE concerns that require immediate management company attention.

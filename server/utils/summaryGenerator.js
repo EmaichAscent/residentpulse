@@ -1,7 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
-
-const anthropic = new Anthropic();
+import { createMessage } from "./anthropicClient.js";
 
 /**
  * Generate an AI summary for a session from its messages.
@@ -20,7 +18,7 @@ export async function generateSummary(sessionId) {
     .map((m) => `${m.role === "user" ? "Resident" : "Interviewer"}: ${m.content}`)
     .join("\n");
 
-  const response = await anthropic.messages.create({
+  const response = await createMessage({
     model: "claude-sonnet-4-5-20250929",
     max_tokens: 300,
     system:

@@ -1,12 +1,11 @@
 import { Router } from "express";
-import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
 import { logActivity } from "../utils/activityLog.js";
 import logger from "../utils/logger.js";
+import { createMessage } from "../utils/anthropicClient.js";
 
 const router = Router();
-const anthropic = new Anthropic();
 
 router.use(requireClientAdmin);
 
@@ -193,7 +192,7 @@ router.post("/:id/structured", async (req, res) => {
     systemPrompt += `\n\nCURRENT STRUCTURED DATA:\n${contextIntro}`;
 
     // Generate first AI message
-    const response = await anthropic.messages.create({
+    const response = await createMessage({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 400,
       system: systemPrompt,
@@ -285,7 +284,7 @@ router.post("/:id/message", async (req, res) => {
     }
 
     // Get AI response
-    const response = await anthropic.messages.create({
+    const response = await createMessage({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 400,
       system: systemPrompt,
@@ -340,7 +339,7 @@ router.patch("/:id/confirm", async (req, res) => {
     if (interview.competitive_advantages) structuredContext += `Competitive advantages: ${interview.competitive_advantages}\n`;
 
     // Generate prompt supplement
-    const promptResponse = await anthropic.messages.create({
+    const promptResponse = await createMessage({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 600,
       system: await getPromptGenerationInstruction(),
@@ -353,7 +352,7 @@ router.patch("/:id/confirm", async (req, res) => {
     const generatedPrompt = promptResponse.content[0].text;
 
     // Generate a brief summary
-    const summaryResponse = await anthropic.messages.create({
+    const summaryResponse = await createMessage({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 300,
       system: "Summarize this interview in 2-3 sentences capturing the key takeaways. Output only the summary text.",

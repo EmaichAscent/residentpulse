@@ -1,11 +1,10 @@
 import { Router } from "express";
-import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
 import logger from "../utils/logger.js";
+import { createMessage } from "../utils/anthropicClient.js";
 
 const router = Router();
-const anthropic = new Anthropic();
 
 // Require authentication for insights
 router.use(requireClientAdmin);
@@ -68,7 +67,7 @@ etc.
 Focus on concrete, specific actions that can improve resident satisfaction.`;
 
   try {
-    const response = await anthropic.messages.create({
+    const response = await createMessage({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 800,
       messages: [{ role: "user", content: prompt }],

@@ -1,9 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
 import db from "../db.js";
 import { generateSummary } from "./summaryGenerator.js";
 import logger from "./logger.js";
-
-const anthropic = new Anthropic();
+import { createMessage } from "./anthropicClient.js";
 const MODEL = "claude-sonnet-4-5-20250929";
 
 // Domain-specific stop words to exclude from word cloud
@@ -215,7 +213,7 @@ Only output valid JSON array, no other text.
 ${context}`,
   };
 
-  const response = await anthropic.messages.create({
+  const response = await createMessage({
     model: MODEL,
     max_tokens: 1500,
     messages: [{ role: "user", content: prompts[passType] }],
@@ -253,7 +251,7 @@ Produce a final JSON object with these fields:
 
 Deduplicate overlapping items. Prioritize clarity and actionability. Only output valid JSON, no other text.`;
 
-  const response = await anthropic.messages.create({
+  const response = await createMessage({
     model: MODEL,
     max_tokens: 2500,
     messages: [{ role: "user", content: prompt }],
