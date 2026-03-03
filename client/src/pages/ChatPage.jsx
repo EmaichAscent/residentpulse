@@ -4,6 +4,7 @@ import ChatBubble from "../components/ChatBubble";
 import NpsScale from "../components/NpsScale";
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const synth = window.speechSynthesis;
 
 export default function ChatPage() {
   const location = useLocation();
@@ -16,9 +17,12 @@ export default function ChatPage() {
   const [npsSubmitted, setNpsSubmitted] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [listening, setListening] = useState(false);
+  const [speechEnabled, setSpeechEnabled] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const recognitionRef = useRef(null);
+  const lastSpokenIndexRef = useRef(-1);
 
   useEffect(() => {
     if (!sessionId) {
@@ -74,7 +78,44 @@ export default function ChatPage() {
     autoResize();
   }, [input, autoResize]);
 
+  // Stop speaking helper
+  const stopSpeaking = useCallback(() => {
+    if (synth) synth.cancel();
+    setSpeaking(false);
+  }, []);
+
+  // Speak text using browser Speech Synthesis
+  const speakText = useCallback((text) => {
+    if (!synth || !speechEnabled) return;
+    synth.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    // Prefer a natural-sounding voice
+    const voices = synth.getVoices();
+    const preferred = voices.find((v) => v.name.includes("Google") && v.lang.startsWith("en"))
+      || voices.find((v) => v.name.includes("Samantha"))
+      || voices.find((v) => v.lang.startsWith("en") && v.localService);
+    if (preferred) utterance.voice = preferred;
+    utterance.onstart = () => setSpeaking(true);
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    synth.speak(utterance);
+  }, [speechEnabled]);
+
+  // Auto-speak new AI messages
+  useEffect(() => {
+    if (!speechEnabled || messages.length === 0) return;
+    const lastIndex = messages.length - 1;
+    const lastMsg = messages[lastIndex];
+    if (lastMsg.role === "assistant" && lastIndex > lastSpokenIndexRef.current) {
+      lastSpokenIndexRef.current = lastIndex;
+      speakText(lastMsg.content);
+    }
+  }, [messages, speechEnabled, speakText]);
+
   const sendMessage = async (text) => {
+    stopSpeaking();
     const userMsg = { role: "user", content: text, timestamp: new Date().toISOString() };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
@@ -135,6 +176,7 @@ export default function ChatPage() {
 
   const handleEndChat = async () => {
     setCompleted(true);
+    stopSpeaking();
     // Stop mic if listening
     if (listening) recognitionRef.current?.stop();
 
@@ -149,6 +191,7 @@ export default function ChatPage() {
       recognitionRef.current?.stop();
       return;
     }
+    stopSpeaking();
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
@@ -185,9 +228,12 @@ export default function ChatPage() {
   const companyText = company ? ` on behalf of ${company}` : "";
   const roleText = community ? ` as a board member at ${community}` : " as a board member";
 
-  const welcomeContent = SpeechRecognition
-    ? `Hi ${userName}! We're collecting feedback${companyText} about how well they serve you${roleText}. You can type your responses or click the microphone button to speak (your browser will ask for permission the first time). When you're finished, click "End Chat" at any time. Let's start with a quick rating.`
-    : `Hi ${userName}! We're collecting feedback${companyText} about how well they serve you${roleText}. When you're finished, click "End Chat" at any time. Let's start with a quick rating.`;
+  const voiceHints = [];
+  if (synth) voiceHints.push("click the speaker button to hear responses read aloud");
+  if (SpeechRecognition) voiceHints.push("click the microphone button to speak your responses (your browser will ask for permission the first time)");
+  const voiceText = voiceHints.length > 0 ? ` You can type your responses, or ${voiceHints.join(", and ")}.` : "";
+
+  const welcomeContent = `Hi ${userName}! We're collecting feedback${companyText} about how well they serve you${roleText}.${voiceText} When you're finished, click "End Chat" at any time. Let's start with a quick rating.`;
 
   return (
     <div className="flex flex-col h-screen bg-brand-gradient">
@@ -298,6 +344,39 @@ export default function ChatPage() {
               style={{ maxHeight: 150 }}
               autoFocus
             />
+            {synth && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (speechEnabled) stopSpeaking();
+                  setSpeechEnabled((prev) => !prev);
+                }}
+                className={`p-4 rounded-xl transition ${
+                  speechEnabled
+                    ? speaking
+                      ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
+                      : "bg-blue-50 text-blue-500 hover:bg-blue-100"
+                    : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                }`}
+                title={speechEnabled ? (speaking ? "AI is speaking... (click to disable)" : "AI voice on (click to disable)") : "Enable AI voice"}
+              >
+                <div className="relative">
+                  {speechEnabled ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                      <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM18.584 5.106a.75.75 0 011.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 01-1.06-1.06 8.25 8.25 0 000-11.668.75.75 0 010-1.06z" />
+                      <path d="M15.932 7.757a.75.75 0 011.061 0 6 6 0 010 8.486.75.75 0 01-1.06-1.061 4.5 4.5 0 000-6.364.75.75 0 010-1.06z" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                      <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM17.78 9.22a.75.75 0 10-1.06 1.06L18.44 12l-1.72 1.72a.75.75 0 001.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 101.06-1.06L20.56 12l1.72-1.72a.75.75 0 00-1.06-1.06l-1.72 1.72-1.72-1.72z" />
+                    </svg>
+                  )}
+                  {speaking && (
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse" />
+                  )}
+                </div>
+              </button>
+            )}
             {SpeechRecognition && (
               <button
                 type="button"
