@@ -93,12 +93,28 @@ router.post("/", async (req, res) => {
   }
 
   try {
-    const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 300,
-      system: systemPrompt,
-      messages: history.map((m) => ({ role: m.role, content: m.content })),
-    });
+    const apiMessages = history.map((m) => ({ role: m.role, content: m.content }));
+    let response;
+
+    // Retry once on 529 overloaded errors
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        response = await anthropic.messages.create({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 300,
+          system: systemPrompt,
+          messages: apiMessages,
+        });
+        break;
+      } catch (apiErr) {
+        if (attempt === 0 && apiErr.status === 529) {
+          logger.warn("Anthropic API overloaded (529), retrying in 2s...");
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        throw apiErr;
+      }
+    }
 
     const assistantMessage = response.content[0].text;
 
