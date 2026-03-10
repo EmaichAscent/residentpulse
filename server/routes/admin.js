@@ -156,10 +156,13 @@ router.put("/account", async (req, res) => {
 router.put("/account/google-review", async (req, res) => {
   const { enabled, url } = req.body;
 
-  // Validate URL if provided — must be https to prevent javascript: XSS
-  const trimmedUrl = url?.trim() || "";
+  // Auto-prepend https:// if missing; block javascript: to prevent XSS
+  let trimmedUrl = url?.trim() || "";
+  if (trimmedUrl && /^javascript:/i.test(trimmedUrl)) {
+    return res.status(400).json({ error: "Invalid URL" });
+  }
   if (trimmedUrl && !/^https?:\/\//i.test(trimmedUrl)) {
-    return res.status(400).json({ error: "Review URL must start with https://" });
+    trimmedUrl = "https://" + trimmedUrl;
   }
 
   try {

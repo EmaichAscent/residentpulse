@@ -812,7 +812,7 @@ export default function AccountSettings() {
                 value={googleReviewUrl}
                 onChange={(e) => setGoogleReviewUrl(e.target.value)}
                 className="input-field-sm w-full"
-                placeholder="https://g.page/r/your-business/review"
+                placeholder="g.page/r/your-business/review"
               />
               <p className="text-xs text-gray-400 mt-1">
                 Paste your Google Business review link here.
