@@ -840,4 +840,59 @@ export async function notifyRoundApproaching({ clientId, roundNumber, scheduledD
   }
 }
 
-export default { sendInvitation, sendPasswordResetEmail, sendVerificationEmail, sendReminder, sendNewAdminEmail, notifyRoundLaunched, notifyNewResponse, notifyRoundConcluded, notifyCriticalAlert, notifyBouncedInvitation, notifyRoundApproaching };
+/**
+ * Notify all admins about a detractor (low NPS) response.
+ * If critical alerts exist for the same session, includes them to avoid separate emails.
+ */
+export async function notifyDetractorAlert({ clientId, npsScore, respondentName, communityName, roundNumber, summary, criticalAlerts, db }) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+  const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
+
+  const hasCriticalAlerts = criticalAlerts && criticalAlerts.length > 0;
+  const alertLabels = {
+    contract_termination: "Contract Termination",
+    legal_threat: "Legal Threat",
+    safety_concern: "Safety Concern",
+    other_critical: "Critical Concern",
+  };
+
+  const criticalSection = hasCriticalAlerts ? `
+        <div style="background: #fef2f2; border-left: 3px solid #dc2626; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0;">
+          <p style="margin: 0 0 8px 0; font-weight: bold; color: #dc2626; font-size: 14px;">Critical Alerts Flagged</p>
+          ${criticalAlerts.map(a => `<p style="margin: 4px 0; font-size: 14px; color: #333;"><strong>${alertLabels[a.alert_type] || "Alert"}:</strong> ${a.description}</p>`).join("")}
+        </div>` : "";
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+      <div style="background: #f59e0b; padding: 24px 32px; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 22px;">Feedback Worth Your Attention</h1>
+      </div>
+      <div style="padding: 24px 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hi {{firstName}},</p>
+        <p>A board member completed their survey with a score that may warrant follow-up.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px 0; color: #666;">Board member</td><td style="padding: 8px 0; font-weight: bold;">${respondentName || "Anonymous"}</td></tr>
+          ${communityName ? `<tr><td style="padding: 8px 0; color: #666;">Community</td><td style="padding: 8px 0; font-weight: bold;">${communityName}</td></tr>` : ""}
+          <tr><td style="padding: 8px 0; color: #666;">NPS Score</td><td style="padding: 8px 0; font-weight: bold; color: #dc2626;">${npsScore} / 10</td></tr>
+          ${roundNumber ? `<tr><td style="padding: 8px 0; color: #666;">Survey round</td><td style="padding: 8px 0; font-weight: bold;">${roundNumber}</td></tr>` : ""}
+        </table>
+        ${criticalSection}
+        ${summary ? `
+        <div style="background: #fffbeb; border-left: 3px solid #f59e0b; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0;">
+          <p style="margin: 0 0 4px 0; font-weight: bold; color: #92400e; font-size: 14px;">AI Summary</p>
+          <p style="margin: 0; font-size: 14px; color: #333; line-height: 1.5;">${summary}</p>
+        </div>` : ""}
+        <p style="font-size: 14px; color: #666; line-height: 1.5;">Consider reaching out to this board member to understand their concerns and demonstrate that their feedback is valued.</p>
+        <a href="${baseUrl}/admin" style="display: inline-block; background: #3B9FE7; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-top: 8px;">View Dashboard</a>
+        <p style="margin-top: 24px; font-size: 12px; color: #999;">ResidentPulse by CAMAscent</p>
+      </div>
+    </div>`;
+
+  for (let i = 0; i < admins.length; i++) {
+    const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
+    await sendAdminNotification(admins[i].email, `Low score feedback — ${respondentName || "Board member"} (${npsScore}/10)`, personalized);
+    if (i < admins.length - 1) await sleep(500);
+  }
+}
+
+export default { sendInvitation, sendPasswordResetEmail, sendVerificationEmail, sendReminder, sendNewAdminEmail, notifyRoundLaunched, notifyNewResponse, notifyRoundConcluded, notifyCriticalAlert, notifyBouncedInvitation, notifyRoundApproaching, notifyDetractorAlert };

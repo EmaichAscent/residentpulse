@@ -1,7 +1,7 @@
 import { Router } from "express";
 import db from "../db.js";
 import { generateSummary } from "../utils/summaryGenerator.js";
-import { notifyNewResponse } from "../utils/emailService.js";
+import { notifyNewResponse, notifyDetractorAlert } from "../utils/emailService.js";
 import logger from "../utils/logger.js";
 
 const router = Router();
@@ -182,38 +182,73 @@ router.patch("/:id/complete", async (req, res) => {
   await db.run("UPDATE sessions SET completed = TRUE WHERE id = ?", [id]);
   res.json({ ok: true });
 
-  // Generate summary asynchronously (don't block the response)
-  generateSummary(id).catch((err) =>
-    logger.error("Summary generation failed: %s", err.message)
-  );
+  // All post-completion work runs async (don't block the response)
+  (async () => {
+    try {
+      // Generate summary first (detractor email may include it)
+      let summary = null;
+      try {
+        summary = await generateSummary(id);
+      } catch (err) {
+        logger.error("Summary generation failed: %s", err.message);
+      }
 
-  // Notify admins of new response asynchronously (skip mock sessions)
-  try {
-    const session = await db.get(
-      `SELECT s.client_id, s.round_id, s.is_mock, u.first_name, u.last_name,
-              COALESCE(c.community_name, s.community_name) as community_name
-       FROM sessions s
-       LEFT JOIN communities c ON c.id = s.community_id
-       LEFT JOIN users u ON u.id = s.user_id
-       WHERE s.id = ?`,
-      [id]
-    );
-    if (session?.client_id && session?.round_id && !session.is_mock) {
+      const session = await db.get(
+        `SELECT s.client_id, s.round_id, s.is_mock, s.nps_score,
+                u.first_name, u.last_name,
+                COALESCE(c.community_name, s.community_name) as community_name
+         FROM sessions s
+         LEFT JOIN communities c ON c.id = s.community_id
+         LEFT JOIN users u ON u.id = s.user_id
+         WHERE s.id = ?`,
+        [id]
+      );
+
+      if (!session?.client_id || !session?.round_id || session.is_mock) return;
+
       const round = await db.get("SELECT round_number, members_invited FROM survey_rounds WHERE id = ?", [session.round_id]);
       const completed = await db.get(
         "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE AND is_mock IS NOT TRUE",
         [session.round_id, session.client_id]
       );
       const respondentName = [session.first_name, session.last_name].filter(Boolean).join(" ") || "A board member";
+
+      // Always notify admins of new response
       notifyNewResponse({
         clientId: session.client_id, roundNumber: round?.round_number || 0,
         respondentName, communityName: session.community_name || "",
         totalResponses: completed?.count || 0, totalInvited: round?.members_invited || 0, db
       }).catch(err => logger.error("Failed to send new response notification: %s", err.message));
+
+      // Check detractor threshold
+      const thresholdSetting = await db.get(
+        "SELECT value FROM settings WHERE key = 'detractor_alert_threshold' AND client_id = ?",
+        [session.client_id]
+      );
+      const threshold = thresholdSetting ? Number(thresholdSetting.value) : 0;
+
+      if (threshold > 0 && session.nps_score !== null && session.nps_score < threshold) {
+        // Check for critical alerts on this session (to combine into one email)
+        const criticalAlerts = await db.all(
+          "SELECT alert_type, severity, description FROM critical_alerts WHERE session_id = ?",
+          [id]
+        );
+
+        notifyDetractorAlert({
+          clientId: session.client_id,
+          npsScore: session.nps_score,
+          respondentName,
+          communityName: session.community_name || "",
+          roundNumber: round?.round_number || null,
+          summary,
+          criticalAlerts,
+          db,
+        }).catch(err => logger.error("Failed to send detractor alert: %s", err.message));
+      }
+    } catch (err) {
+      logger.error("Post-completion processing failed: %s", err.message);
     }
-  } catch (err) {
-    logger.error("Failed to prepare response notification: %s", err.message);
-  }
+  })();
 });
 
 export default router;

@@ -187,19 +187,33 @@ or
 
   logger.warn(`CRITICAL ALERT created for client ${session.client_id}, session ${session.id}: ${parsed.alert_type}`);
 
-  // Notify admins immediately
-  const respondentName = [session.first_name, session.last_name].filter(Boolean).join(" ") || "A board member";
-  const round = session.round_id ? await db.get("SELECT round_number FROM survey_rounds WHERE id = ?", [session.round_id]) : null;
-  notifyCriticalAlert({
-    clientId: session.client_id,
-    alertType: parsed.alert_type || "other_critical",
-    severity: parsed.severity || "high",
-    description: parsed.description || "Critical concern detected",
-    respondentName,
-    communityName: session.community_name || "",
-    roundNumber: round?.round_number || null,
-    db,
-  }).catch(err => logger.error("Failed to send critical alert notification: %s", err.message));
+  // Check if a detractor email will be sent on session complete (to avoid duplicate emails)
+  // If so, the critical alert info will be combined into that email instead
+  const thresholdSetting = await db.get(
+    "SELECT value FROM settings WHERE key = 'detractor_alert_threshold' AND client_id = ?",
+    [session.client_id]
+  );
+  const threshold = thresholdSetting ? Number(thresholdSetting.value) : 0;
+  const npsSession = await db.get("SELECT nps_score FROM sessions WHERE id = ?", [session.id]);
+  const willSendDetractorEmail = threshold > 0 && npsSession?.nps_score !== null && npsSession.nps_score < threshold;
+
+  if (willSendDetractorEmail) {
+    logger.info(`Skipping separate critical alert email for session ${session.id} — will be combined into detractor email`);
+  } else {
+    // Notify admins immediately via standalone critical alert email
+    const respondentName = [session.first_name, session.last_name].filter(Boolean).join(" ") || "A board member";
+    const round = session.round_id ? await db.get("SELECT round_number FROM survey_rounds WHERE id = ?", [session.round_id]) : null;
+    notifyCriticalAlert({
+      clientId: session.client_id,
+      alertType: parsed.alert_type || "other_critical",
+      severity: parsed.severity || "high",
+      description: parsed.description || "Critical concern detected",
+      respondentName,
+      communityName: session.community_name || "",
+      roundNumber: round?.round_number || null,
+      db,
+    }).catch(err => logger.error("Failed to send critical alert notification: %s", err.message));
+  }
 }
 
 export default router;

@@ -751,6 +751,12 @@ router.get("/clients/:id/detail", async (req, res) => {
       [clientId]
     );
 
+    // Detractor alert threshold
+    const detractorSetting = await db.get(
+      "SELECT value FROM settings WHERE key = 'detractor_alert_threshold' AND client_id = ?",
+      [clientId]
+    );
+
     // Survey rounds
     const surveyRounds = await db.all(
       `SELECT sr.*,
@@ -802,11 +808,43 @@ router.get("/clients/:id/detail", async (req, res) => {
         last_login: lastLogin,
         days_since_login: daysSinceLogin,
         warning: daysSinceLogin === null || daysSinceLogin > 30
-      }
+      },
+      detractor_alert_threshold: detractorSetting ? Number(detractorSetting.value) : 0
     });
   } catch (err) {
     logger.error({ err }, "Client detail error");
     res.status(500).json({ error: "Failed to load client details" });
+  }
+});
+
+// Update detractor alert threshold for a client
+router.put("/clients/:id/detractor-threshold", async (req, res) => {
+  try {
+    const clientId = Number(req.params.id);
+    const { threshold } = req.body;
+    const value = Number(threshold) || 0;
+
+    if (value < 0 || value > 10) {
+      return res.status(400).json({ error: "Threshold must be between 0 and 10" });
+    }
+
+    if (value === 0) {
+      // Disable: remove the setting
+      await db.run("DELETE FROM settings WHERE key = 'detractor_alert_threshold' AND client_id = ?", [clientId]);
+    } else {
+      // Upsert the setting
+      await db.run(
+        `INSERT INTO settings (key, value, client_id) VALUES ('detractor_alert_threshold', ?, ?)
+         ON CONFLICT (key, client_id) DO UPDATE SET value = EXCLUDED.value`,
+        [String(value), clientId]
+      );
+    }
+
+    logger.info(`Detractor alert threshold for client ${clientId} set to ${value}`);
+    res.json({ ok: true, threshold: value });
+  } catch (err) {
+    logger.error({ err }, "Failed to update detractor threshold");
+    res.status(500).json({ error: "Failed to update threshold" });
   }
 });
 

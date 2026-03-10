@@ -25,6 +25,8 @@ export default function SuperAdminClientDetailPage() {
   const [confirmAction, setConfirmAction] = useState(null);
   const [showMockModal, setShowMockModal] = useState(false);
   const [mockSessions, setMockSessions] = useState([]);
+  const [detractorThreshold, setDetractorThreshold] = useState(0);
+  const [savingThreshold, setSavingThreshold] = useState(false);
 
   useEffect(() => {
     Promise.all([loadDetail(), loadInterviews(), loadPlans(), loadActivity(), loadAlerts(), loadMockSessions()])
@@ -40,6 +42,7 @@ export default function SuperAdminClientDetailPage() {
       setEditPlanId(data.subscription?.plan_id || null);
       setCustomMemberLimit(data.subscription?.custom_member_limit || "");
       setZohoSubscriptionId(data.subscription?.zoho_subscription_id || "");
+      setDetractorThreshold(data.detractor_alert_threshold || 0);
     }
   };
 
@@ -120,6 +123,23 @@ export default function SuperAdminClientDetailPage() {
       alert("Failed to save: " + err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveThreshold = async (value) => {
+    setSavingThreshold(true);
+    try {
+      await fetch(`/api/superadmin/clients/${id}/detractor-threshold`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threshold: value }),
+        credentials: "include"
+      });
+      setDetractorThreshold(value);
+    } catch (err) {
+      alert("Failed to save threshold: " + err.message);
+    } finally {
+      setSavingThreshold(false);
     }
   };
 
@@ -352,6 +372,35 @@ export default function SuperAdminClientDetailPage() {
               </button>
             </form>
           )}
+        </div>
+
+        {/* Notification Settings */}
+        <div className="bg-white rounded-xl border p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Notification Settings</h2>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium text-gray-700 block mb-1">Detractor Alert Threshold</label>
+              <p className="text-xs text-gray-500 mb-2">
+                {detractorThreshold > 0
+                  ? `Admins will be emailed when a board member scores below ${detractorThreshold} (i.e., 0–${detractorThreshold - 1}).`
+                  : "Disabled — no detractor alert emails will be sent."}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={detractorThreshold}
+                onChange={(e) => handleSaveThreshold(Number(e.target.value))}
+                disabled={savingThreshold}
+                className="input-field-sm w-24 text-center"
+              >
+                <option value={0}>Off</option>
+                {[1,2,3,4,5,6,7].map(n => (
+                  <option key={n} value={n}>Below {n}</option>
+                ))}
+              </select>
+              {savingThreshold && <span className="text-xs text-gray-400">Saving...</span>}
+            </div>
+          </div>
         </div>
 
         {/* Interview & Prompt */}

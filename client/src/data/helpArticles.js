@@ -69,7 +69,15 @@ export const helpArticles = [
     category: "Key Concepts",
     pages: ["rounds/:roundId"],
     tags: ["alert", "warning", "urgent", "critical", "flag", "issue", "dismiss", "resolve"],
-    body: "During feedback sessions, if a board member raises something that sounds urgent or serious — like a safety concern, a legal issue, or a major service failure — our system flags it as a **Critical Alert**.\n\nAlerts appear on your round dashboard with a red warning badge. Each alert shows the community name and a brief description of the issue.\n\nYou can take two actions on alerts:\n\n**Dismiss** — If the alert isn't relevant or has already been addressed, dismiss it to remove it from your active list.\n\n**Mark as Resolved** — If you've taken action on the issue, mark it resolved. This keeps a record that you responded to the concern.",
+    body: "During feedback sessions, if a board member raises something that sounds urgent or serious — like a safety concern, a legal issue, or a major service failure — our system flags it as a **Critical Alert**.\n\nAlerts appear on your round dashboard with a red warning badge. Each alert shows the community name and a brief description of the issue.\n\nYou can take two actions on alerts:\n\n**Dismiss** — If the alert isn't relevant or has already been addressed, dismiss it to remove it from your active list.\n\n**Mark as Resolved** — If you've taken action on the issue, mark it resolved. This keeps a record that you responded to the concern.\n\nIf a board member's NPS score also falls below your detractor alert threshold, the critical alert details will be included in the detractor email rather than sent as a separate notification.",
+  },
+  {
+    id: "detractor-alerts",
+    title: "Detractor Alert Emails",
+    category: "Key Concepts",
+    pages: ["rounds/:roundId"],
+    tags: ["detractor", "low score", "alert", "email", "notification", "threshold", "follow up"],
+    body: "When enabled by the ResidentPulse team, your company can receive automatic email alerts whenever a board member submits a low NPS score.\n\nThe alert threshold is configured per company — for example, if set to \"Below 3,\" any board member who scores 0, 1, or 2 will trigger an email to all admin users on your account.\n\n**What the email includes:**\n- The board member's name and community\n- Their NPS score\n- An AI-generated summary of their key concerns\n- Any critical alerts flagged during the conversation (combined into one email)\n\nThe goal is to give you a timely heads-up so you can follow up with the board member while their feedback is fresh. These emails are designed as gentle notifications — not alarms. Consider reaching out to understand their concerns and show that their voice matters.\n\nDetractor alerts are separate from Critical Alerts, which flag urgent issues like safety concerns or legal threats. If both are triggered for the same response, they'll be combined into a single email.",
   },
   {
     id: "how-invitations-work",
