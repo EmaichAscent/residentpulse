@@ -41,6 +41,10 @@ export default function AccountSettings() {
   const [subMessage, setSubMessage] = useState(null);
   const [removeAdminTarget, setRemoveAdminTarget] = useState(null);
   const [cadenceConfirm, setCadenceConfirm] = useState(null);
+  const [googleReviewEnabled, setGoogleReviewEnabled] = useState(false);
+  const [googleReviewUrl, setGoogleReviewUrl] = useState("");
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewMessage, setReviewMessage] = useState(null);
   const { user: sessionUser } = useOutletContext();
 
   useEffect(() => {
@@ -64,6 +68,8 @@ export default function AccountSettings() {
         setState(clientData.state || "");
         setZip(clientData.zip || "");
         setPhoneNumber(clientData.phone_number || "");
+        setGoogleReviewEnabled(clientData.google_review_enabled || false);
+        setGoogleReviewUrl(clientData.google_review_url || "");
       }
 
       if (usersRes.ok) {
@@ -740,6 +746,102 @@ export default function AccountSettings() {
             No subscription information available. Contact support for assistance.
           </p>
         )}
+      </div>
+
+      {/* Google Reviews */}
+      <div className="bg-white shadow-md rounded-lg p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">Google Reviews</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          When enabled, promoters (score 9-10) will be asked during their conversation if they'd like to leave a Google review. A link will appear on their completion screen.
+        </p>
+
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={googleReviewEnabled}
+                onChange={async (e) => {
+                  const newVal = e.target.checked;
+                  setGoogleReviewEnabled(newVal);
+                  setReviewSaving(true);
+                  setReviewMessage(null);
+                  try {
+                    const res = await fetch("/api/admin/account/google-review", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ enabled: newVal, url: googleReviewUrl }),
+                      credentials: "include",
+                    });
+                    if (!res.ok) throw new Error("Failed to save");
+                    setReviewMessage({ type: "success", text: newVal ? "Google Reviews enabled." : "Google Reviews disabled." });
+                  } catch (err) {
+                    setGoogleReviewEnabled(!newVal);
+                    setReviewMessage({ type: "error", text: err.message });
+                  } finally {
+                    setReviewSaving(false);
+                  }
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-green-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+            </label>
+            <span className="text-sm font-medium text-gray-700">
+              {googleReviewEnabled ? "Enabled" : "Disabled"}
+            </span>
+            {reviewSaving && <span className="text-xs text-gray-400">Saving...</span>}
+          </div>
+
+          {googleReviewEnabled && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Google Review URL
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={googleReviewUrl}
+                  onChange={(e) => setGoogleReviewUrl(e.target.value)}
+                  className="input-field-sm flex-1"
+                  placeholder="https://g.page/r/your-business/review"
+                />
+                <button
+                  onClick={async () => {
+                    setReviewSaving(true);
+                    setReviewMessage(null);
+                    try {
+                      const res = await fetch("/api/admin/account/google-review", {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ enabled: googleReviewEnabled, url: googleReviewUrl }),
+                        credentials: "include",
+                      });
+                      if (!res.ok) throw new Error("Failed to save");
+                      setReviewMessage({ type: "success", text: "Review URL saved." });
+                    } catch (err) {
+                      setReviewMessage({ type: "error", text: err.message });
+                    } finally {
+                      setReviewSaving(false);
+                    }
+                  }}
+                  disabled={reviewSaving}
+                  className="btn-primary-sm"
+                >
+                  Save URL
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                Paste your Google Business review link here.
+              </p>
+            </div>
+          )}
+
+          {reviewMessage && (
+            <p className={`text-sm ${reviewMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
+              {reviewMessage.text}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Delete Account */}

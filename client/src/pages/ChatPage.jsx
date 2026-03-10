@@ -9,7 +9,7 @@ const synth = window.speechSynthesis;
 export default function ChatPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { sessionId, email, firstName, community, company, clientId, hasLogo, companyName, isMock } = location.state || {};
+  const { sessionId, email, firstName, community, company, clientId, hasLogo, companyName, isMock, googleReviewUrl } = location.state || {};
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -19,6 +19,7 @@ export default function ChatPage() {
   const [listening, setListening] = useState(false);
   const [speechEnabled, setSpeechEnabled] = useState(!!synth);
   const [speaking, setSpeaking] = useState(false);
+  const [reviewResponse, setReviewResponse] = useState(null); // 'yes', 'no', or null
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -183,6 +184,17 @@ export default function ChatPage() {
     await fetch(`/api/sessions/${sessionId}/complete`, {
       method: "PATCH",
     });
+
+    // Fetch review response for CTA display
+    if (googleReviewUrl) {
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setReviewResponse(data.session.google_review_response || null);
+        }
+      } catch { /* ignore */ }
+    }
   };
 
   // Speech recognition
@@ -306,6 +318,36 @@ export default function ChatPage() {
         {completed && (
           <div className="text-center py-6">
             <p className="text-lg text-gray-500">Session complete. Thank you for your feedback!</p>
+
+            {/* Google Review CTA — big button if yes/not asked, subtle link if declined */}
+            {googleReviewUrl && reviewResponse !== "no" && (
+              <a
+                href={googleReviewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 px-6 py-3 text-base font-semibold text-white rounded-xl shadow-md hover:shadow-lg transition"
+                style={{ backgroundColor: "var(--cam-blue, #2563eb)" }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                  <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clipRule="evenodd" />
+                </svg>
+                Leave a Google Review
+              </a>
+            )}
+
+            {googleReviewUrl && reviewResponse === "no" && (
+              <p className="mt-4">
+                <a
+                  href={googleReviewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-gray-400 hover:text-gray-600 underline transition"
+                >
+                  Changed your mind? We'd be grateful for a review.
+                </a>
+              </p>
+            )}
+
             {isMock && (
               <button
                 onClick={() => navigate(`/superadmin/clients/${clientId}`)}

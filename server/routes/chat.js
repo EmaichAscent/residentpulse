@@ -69,6 +69,22 @@ router.post("/", async (req, res) => {
     systemPrompt += "\n\nADDITIONAL CLIENT CONTEXT:\n" + supplement.value;
   }
 
+  // Google review prompt for promoters (NPS 9-10) — skip if already responded
+  if (session.nps_score !== null && session.nps_score >= 9 && !session.google_review_response) {
+    const reviewEnabled = await db.get(
+      "SELECT value FROM settings WHERE key = 'google_review_enabled' AND client_id = ?",
+      [session.client_id]
+    );
+    if (reviewEnabled?.value === "true") {
+      systemPrompt += `\n\nGOOGLE REVIEW REQUEST: This resident scored ${session.nps_score}/10 — they are a promoter. As your CLOSING question before wrapping up the conversation, naturally ask if they would be willing to leave a quick Google review to help the company. Be warm and grateful, not pushy. If they say yes, thank them enthusiastically and let them know a link will appear after they end the chat. If they decline, say "No problem at all" and thank them for their time. After addressing their response, suggest they click "End Chat" to finish.
+
+IMPORTANT: At the very end of your response where you address their answer about the review, include exactly one of these hidden tags (the system will strip these before display):
+- If they agreed to leave a review: [REVIEW:YES]
+- If they declined: [REVIEW:NO]
+Do NOT include any tag until the user has responded to your review question.`;
+    }
+  }
+
   // Check for prior sessions from this user to give the AI context
   const priorSessions = await db.all(
     `SELECT s.nps_score, s.summary, s.created_at
@@ -99,7 +115,15 @@ router.post("/", async (req, res) => {
       messages: history.map((m) => ({ role: m.role, content: m.content })),
     });
 
-    const assistantMessage = response.content[0].text;
+    let assistantMessage = response.content[0].text;
+
+    // Check for Google review response tags and strip them (case-insensitive, allow spaces)
+    const reviewMatch = assistantMessage.match(/\[REVIEW:\s*(YES|NO)\s*\]/i);
+    if (reviewMatch) {
+      assistantMessage = assistantMessage.replace(/\s*\[REVIEW:\s*(YES|NO)\s*\]\s*/gi, "").trim();
+      const reviewResponse = reviewMatch[1].toLowerCase();
+      await db.run("UPDATE sessions SET google_review_response = ? WHERE id = ?", [reviewResponse, Number(session_id)]);
+    }
 
     // Save assistant message
     await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'assistant', ?)", [Number(session_id), assistantMessage]);

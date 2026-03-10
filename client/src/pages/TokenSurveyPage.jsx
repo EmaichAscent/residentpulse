@@ -61,6 +61,7 @@ export default function TokenSurveyPage() {
           clientId: userData.client_id,
           hasLogo: userData.has_logo,
           companyName: userData.company_name,
+          googleReviewUrl: userData.google_review_url || null,
         }
       });
 

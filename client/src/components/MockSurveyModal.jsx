@@ -56,6 +56,7 @@ export default function MockSurveyModal({ clientId, onClose }) {
           hasLogo: data.has_logo,
           companyName: data.company_name,
           isMock: true,
+          googleReviewUrl: data.google_review_url || null,
         },
       });
     } catch {

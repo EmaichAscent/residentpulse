@@ -110,6 +110,16 @@ router.get("/account", async (req, res) => {
     surveyRoundsCount = legacyRounds?.count || 0;
   }
 
+  // Google review settings
+  const reviewEnabled = await db.get(
+    "SELECT value FROM settings WHERE key = 'google_review_enabled' AND client_id = ?",
+    [req.clientId]
+  );
+  const reviewUrl = await db.get(
+    "SELECT value FROM settings WHERE key = 'google_review_url' AND client_id = ?",
+    [req.clientId]
+  );
+
   // Don't send logo blob with account data — use separate endpoint
   const { logo_base64, ...clientWithoutLogo } = client;
 
@@ -120,7 +130,9 @@ router.get("/account", async (req, res) => {
     usage: {
       member_count: memberCount?.count || 0,
       survey_rounds_used: surveyRoundsCount
-    }
+    },
+    google_review_enabled: reviewEnabled?.value === "true",
+    google_review_url: reviewUrl?.value || "",
   });
 });
 
@@ -138,6 +150,38 @@ router.put("/account", async (req, res) => {
   );
 
   res.json({ ok: true });
+});
+
+// Update Google review settings (toggle + URL)
+router.put("/account/google-review", async (req, res) => {
+  const { enabled, url } = req.body;
+
+  // Validate URL if provided — must be https to prevent javascript: XSS
+  const trimmedUrl = url?.trim() || "";
+  if (trimmedUrl && !/^https?:\/\//i.test(trimmedUrl)) {
+    return res.status(400).json({ error: "Review URL must start with https://" });
+  }
+
+  try {
+    // Upsert enabled setting
+    await db.run(
+      `INSERT INTO settings (key, value, client_id) VALUES ('google_review_enabled', $1, $2)
+       ON CONFLICT (key, client_id) DO UPDATE SET value = EXCLUDED.value`,
+      [String(!!enabled), req.clientId]
+    );
+
+    // Upsert URL setting
+    await db.run(
+      `INSERT INTO settings (key, value, client_id) VALUES ('google_review_url', $1, $2)
+       ON CONFLICT (key, client_id) DO UPDATE SET value = EXCLUDED.value`,
+      [trimmedUrl, req.clientId]
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "Failed to save Google review settings");
+    res.status(500).json({ error: "Failed to save settings" });
+  }
 });
 
 // Upload client logo (base64, max 500KB, landscape/square only, max 3:1 aspect ratio)

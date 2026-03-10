@@ -72,6 +72,14 @@ export const helpArticles = [
     body: "During feedback sessions, if a board member raises something that sounds urgent or serious — like a safety concern, a legal issue, or a major service failure — our system flags it as a **Critical Alert**.\n\nAlerts appear on your round dashboard with a red warning badge. Each alert shows the community name and a brief description of the issue.\n\nYou can take two actions on alerts:\n\n**Dismiss** — If the alert isn't relevant or has already been addressed, dismiss it to remove it from your active list.\n\n**Mark as Resolved** — If you've taken action on the issue, mark it resolved. This keeps a record that you responded to the concern.\n\nIf a board member's NPS score also falls below your detractor alert threshold, the critical alert details will be included in the detractor email rather than sent as a separate notification.",
   },
   {
+    id: "google-reviews",
+    title: "Google Review Requests",
+    category: "Key Concepts",
+    pages: ["rounds/:roundId", "account"],
+    tags: ["google", "review", "promoter", "9", "10", "rating", "link", "request"],
+    body: "When enabled, ResidentPulse can help you collect Google reviews from your happiest board members.\n\nIf a board member scores your company a **9 or 10** (a promoter), the AI will naturally ask at the end of their conversation whether they'd be willing to leave a Google review. If they say yes, a prominent review link appears on their completion screen. If they decline, a subtle link is still available in case they change their mind.\n\n**To set up Google Reviews:**\n1. Go to the **Account** tab\n2. Find the **Google Reviews** section\n3. Toggle it **on**\n4. Paste your Google Business review URL (see the \"Finding Your Google Review Link\" help article for step-by-step instructions)\n\nThis feature works automatically once enabled — no action needed per round. It also works with Test Survey sessions so you can preview the experience before going live.",
+  },
+  {
     id: "detractor-alerts",
     title: "Detractor Alert Emails",
     category: "Key Concepts",
@@ -142,5 +150,13 @@ export const helpArticles = [
     pages: ["account"],
     tags: ["subscription", "plan", "limit", "upgrade", "member limit", "pricing", "free", "paid", "password", "change password"],
     body: "Your ResidentPulse plan determines how many board members you can include and how many survey rounds you can run per year.\n\nTo check your current plan and usage, go to the **Account** tab. You'll see your plan name, member limit, and how many members you currently have.\n\n**Changing your password:** Scroll down on the Account page to find the **Change Password** section. Enter your current password and choose a new one (at least 8 characters).\n\nIf you have more board members than your plan allows, you won't be able to launch new rounds until you're within your limit. You can either remove inactive members or upgrade your plan.\n\nPaid plans unlock additional features like quarterly survey cadence (4x per year), the Communities page with contract and manager details, and community-level analytics.",
+  },
+  {
+    id: "finding-google-review-link",
+    title: "Finding Your Google Review Link",
+    category: "Managing Your Account",
+    pages: ["account"],
+    tags: ["google", "review", "link", "url", "find", "business", "profile", "how to", "where"],
+    body: "To use the Google Reviews feature, you'll need your company's Google review link. Here's how to find it:\n\n**Option 1 — From Google Search (easiest):**\n1. Search for your company name on Google\n2. Find your Business Profile on the right side of the results\n3. Click **\"Ask for reviews\"** (or **\"Get more reviews\"**)\n4. Copy the link that appears — this is your review URL\n\n**Option 2 — From Google Business Profile Manager:**\n1. Go to business.google.com and sign in\n2. Select your business\n3. Click **\"Home\"** in the left menu\n4. Find the **\"Get more reviews\"** card\n5. Click **\"Share review form\"** and copy the link\n\n**Option 3 — Direct URL format:**\nIf you know your Google Place ID, your link follows this format:\nhttps://search.google.com/local/writereview?placeid=YOUR_PLACE_ID\n\n**Don't have a Google Business Profile?**\nYou'll need to claim or create one at business.google.com first. Google Business Profiles are free and let customers find and review your company on Google Search and Maps.\n\n**Tips:**\n- Test the link yourself before pasting it into ResidentPulse — make sure it opens to your review page\n- The link must start with https://\n- Once saved in your Account settings, the link is used automatically for all future survey rounds",
   },
 ];

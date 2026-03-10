@@ -331,6 +331,16 @@ async function initializeSchema() {
       logger.info("Mock sessions migration skipped (already applied or file not found)");
     }
 
+    // Run Google review migration (promoter review response tracking)
+    try {
+      const googleReviewPath = join(__dirname, "migrations", "add-google-review.sql");
+      const googleReviewSQL = readFileSync(googleReviewPath, "utf-8");
+      await client.query(googleReviewSQL);
+      logger.info("Google review migration applied successfully");
+    } catch (migrationErr) {
+      logger.info("Google review migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     logger.info("Database schema initialized successfully");
   } catch (err) {

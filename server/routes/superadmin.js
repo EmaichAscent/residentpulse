@@ -1111,6 +1111,17 @@ router.post("/clients/:id/mock-session", async (req, res) => {
 
     const hasLogo = client.logo_base64 ? true : false;
 
+    // Check Google review settings for this client
+    const reviewEnabled = await db.get(
+      "SELECT value FROM settings WHERE key = 'google_review_enabled' AND client_id = ?",
+      [clientId]
+    );
+    const reviewUrl = await db.get(
+      "SELECT value FROM settings WHERE key = 'google_review_url' AND client_id = ?",
+      [clientId]
+    );
+    const googleReviewUrl = (reviewEnabled?.value === "true" && reviewUrl?.value) ? reviewUrl.value : null;
+
     res.json({
       session_id: result.lastInsertRowid,
       email: sessionEmail,
@@ -1120,6 +1131,7 @@ router.post("/clients/:id/mock-session", async (req, res) => {
       client_id: clientId,
       has_logo: hasLogo,
       company_name: client.company_name,
+      google_review_url: googleReviewUrl,
     });
   } catch (err) {
     logger.error({ err }, "Error creating mock session");

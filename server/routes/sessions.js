@@ -95,6 +95,17 @@ router.get("/validate-token/:token", async (req, res) => {
       [user.client_id]
     );
 
+    // Check Google review settings
+    const reviewEnabled = await db.get(
+      "SELECT value FROM settings WHERE key = 'google_review_enabled' AND client_id = ?",
+      [user.client_id]
+    );
+    const reviewUrl = await db.get(
+      "SELECT value FROM settings WHERE key = 'google_review_url' AND client_id = ?",
+      [user.client_id]
+    );
+    const googleReviewUrl = (reviewEnabled?.value === "true" && reviewUrl?.value) ? reviewUrl.value : null;
+
     // Return user data (without sensitive info)
     res.json({
       email: user.email,
@@ -106,6 +117,7 @@ router.get("/validate-token/:token", async (req, res) => {
       client_id: user.client_id,
       company_name: clientInfo?.company_name || "",
       has_logo: clientInfo?.has_logo || false,
+      google_review_url: googleReviewUrl,
     });
 
   } catch (err) {
