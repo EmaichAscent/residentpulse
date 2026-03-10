@@ -101,7 +101,8 @@ export default function AccountSettings() {
         credentials: "include"
       });
 
-      if (!response.ok) throw new Error("Failed to save");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to save");
 
       setSaveMessage({ type: "success", text: "Account information updated." });
       loadData();
@@ -781,7 +782,8 @@ export default function AccountSettings() {
                       body: JSON.stringify({ enabled: newVal, url: googleReviewUrl }),
                       credentials: "include",
                     });
-                    if (!res.ok) throw new Error("Failed to save");
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || "Failed to save");
                     setReviewMessage({ type: "success", text: newVal ? "Google Reviews enabled." : "Google Reviews disabled." });
                   } catch (err) {
                     setGoogleReviewEnabled(!newVal);
@@ -826,7 +828,8 @@ export default function AccountSettings() {
                       body: JSON.stringify({ enabled: googleReviewEnabled, url: googleReviewUrl }),
                       credentials: "include",
                     });
-                    if (!res.ok) throw new Error("Failed to save");
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || "Failed to save");
                     setReviewMessage({ type: "success", text: "Review URL saved." });
                   } catch (err) {
                     setReviewMessage({ type: "error", text: err.message });
