@@ -254,7 +254,7 @@ export default function RoundsLanding() {
           <p className="text-gray-500 mt-1">Let's get your first survey round live.</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           {/* Left Column — Launch Checklist */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-5">Get Live in 3 Steps</h3>
@@ -446,49 +446,95 @@ export default function RoundsLanding() {
             </div>
           </div>
 
-          {/* Right Column — Philosophy */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-5">How ResidentPulse Works</h3>
-
-            <div className="space-y-5">
-              <div className="flex gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: "rgba(59, 159, 231, 0.1)" }}>
-                  <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900 text-sm">AI-Powered Interviews</p>
-                  <p className="text-sm text-gray-600 mt-0.5 leading-relaxed">
-                    Each board member has a brief, personalized conversation with our AI trained in community management. No generic surveys — real dialogue that surfaces what matters.
+          {/* Right Column — Sticky sidebar */}
+          <div className="lg:self-start lg:sticky lg:top-6 space-y-4">
+            {/* Progress Tracker */}
+            {(() => {
+              const completed = [interviewCompleted, memberCount > 0, false, hasLogo, googleReviewEnabled].filter(Boolean).length;
+              const total = 5;
+              const pct = Math.round((completed / total) * 100);
+              return (
+                <div className="bg-white rounded-2xl border border-gray-200 p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-bold text-gray-900">Your Progress</h3>
+                    <span className="text-sm font-semibold" style={{ color: "var(--cam-green)" }}>{completed}/{total}</span>
+                  </div>
+                  <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%`, backgroundColor: "var(--cam-green)" }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">
+                    {completed === 0 ? "Let's get started!" : completed < 3 ? "Great start — keep going!" : completed < 5 ? "Almost there!" : "You're all set!"}
                   </p>
                 </div>
-              </div>
+              );
+            })()}
 
-              <div className="flex gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: "rgba(26, 176, 110, 0.1)" }}>
-                  <svg className="w-5 h-5" style={{ color: "var(--cam-green)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
+            {/* How It Works */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-5">
+              <h3 className="text-sm font-bold text-gray-900 mb-4">How ResidentPulse Works</h3>
+
+              <div className="space-y-4">
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "rgba(59, 159, 231, 0.1)" }}>
+                    <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 text-sm">AI-Powered Interviews</p>
+                    <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                      Personalized conversations — not generic surveys — that surface what matters.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-gray-900 text-sm">Consistency Is Key</p>
-                  <p className="text-sm text-gray-600 mt-0.5 leading-relaxed">
-                    30-day rounds, one per member. The more consistently you run rounds, the more powerful your insights become. Track sentiment trends over time.
+
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "rgba(26, 176, 110, 0.1)" }}>
+                    <svg className="w-5 h-5" style={{ color: "var(--cam-green)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 text-sm">Consistency Is Key</p>
+                    <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                      30-day rounds build powerful sentiment trends over time.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "rgba(59, 159, 231, 0.1)" }}>
+                    <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 text-sm">Minimal Effort, Maximum Impact</p>
+                    <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                      Launch, and we handle the rest — interviews, analysis, and insights.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Value Props for Optional Features */}
+            <div className="bg-gradient-to-br from-blue-50 to-green-50 rounded-2xl border border-gray-200 p-5">
+              <h3 className="text-sm font-bold text-gray-900 mb-3">Why Personalize?</h3>
+              <div className="space-y-3">
+                <div className="flex gap-2.5">
+                  <span className="text-base mt-0.5">🎨</span>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    <span className="font-semibold text-gray-800">Your logo</span> in survey emails builds trust and increases response rates.
                   </p>
                 </div>
-              </div>
-
-              <div className="flex gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: "rgba(59, 159, 231, 0.1)" }}>
-                  <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900 text-sm">Minimal Effort, Maximum Impact</p>
-                  <p className="text-sm text-gray-600 mt-0.5 leading-relaxed">
-                    Set your schedule, add members, launch. The AI handles the interviews, and ResidentPulse handles the analysis. We handle the rest.
+                <div className="flex gap-2.5">
+                  <span className="text-base mt-0.5">⭐</span>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    <span className="font-semibold text-gray-800">Google Reviews</span> turn happy board members into public advocates for your community.
                   </p>
                 </div>
               </div>
