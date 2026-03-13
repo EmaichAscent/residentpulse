@@ -18,7 +18,13 @@ export default function RoundsLanding() {
   const [memberLimit, setMemberLimit] = useState(null);
   const [interviewCompleted, setInterviewCompleted] = useState(false);
   const [hasLogo, setHasLogo] = useState(false);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState("");
   const [googleReviewEnabled, setGoogleReviewEnabled] = useState(false);
+  const [googleReviewUrl, setGoogleReviewUrl] = useState("");
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewMessage, setReviewMessage] = useState(null);
 
   useEffect(() => {
     loadRounds();
@@ -49,6 +55,7 @@ export default function RoundsLanding() {
         setMemberLimit(data.subscription?.member_limit || null);
         setHasLogo(!!data.client?.has_logo);
         setGoogleReviewEnabled(!!data.google_review_enabled);
+        setGoogleReviewUrl(data.google_review_url || "");
       }
     } catch (err) {
       console.error("Failed to load account:", err);
@@ -130,6 +137,96 @@ export default function RoundsLanding() {
     if (!closesAt) return null;
     const diff = new Date(closesAt) - new Date();
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  };
+
+  const handleLogoSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = "";
+    setLogoError("");
+    const allowedTypes = ["image/png", "image/jpeg", "image/svg+xml"];
+    if (!allowedTypes.includes(file.type)) { setLogoError("Only PNG, JPG, and SVG files are accepted."); return; }
+    if (file.size > 500 * 1024) { setLogoError("Logo must be under 500KB."); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      if (file.type !== "image/svg+xml") {
+        const img = new Image();
+        img.onload = () => {
+          const ratio = img.width / img.height;
+          if (ratio < 0.8) { setLogoError("Portrait logos are not supported. Use a landscape or square image."); return; }
+          if (ratio > 3) { setLogoError("Logo is too wide. Maximum aspect ratio is 3:1."); return; }
+          uploadLogo(dataUrl, file.type, img.width, img.height);
+        };
+        img.src = dataUrl;
+      } else {
+        uploadLogo(dataUrl, file.type);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const uploadLogo = async (dataUrl, mimeType, width, height) => {
+    setLogoUploading(true);
+    const base64 = dataUrl.split(",")[1];
+    try {
+      const res = await fetch("/api/admin/account/logo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logo_base64: base64, logo_mime_type: mimeType, width, height }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setLogoPreview(dataUrl);
+      setHasLogo(true);
+    } catch (err) {
+      setLogoError(err.message);
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleReviewToggle = async (newVal) => {
+    setGoogleReviewEnabled(newVal);
+    setReviewSaving(true);
+    setReviewMessage(null);
+    try {
+      const res = await fetch("/api/admin/account/google-review", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: newVal, url: googleReviewUrl }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save");
+      setReviewMessage({ type: "success", text: newVal ? "Google Reviews enabled." : "Google Reviews disabled." });
+    } catch (err) {
+      setGoogleReviewEnabled(!newVal);
+      setReviewMessage({ type: "error", text: err.message });
+    } finally {
+      setReviewSaving(false);
+    }
+  };
+
+  const handleReviewUrlSave = async () => {
+    setReviewSaving(true);
+    setReviewMessage(null);
+    try {
+      const res = await fetch("/api/admin/account/google-review", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: googleReviewEnabled, url: googleReviewUrl }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save");
+      setReviewMessage({ type: "success", text: "Review URL saved." });
+    } catch (err) {
+      setReviewMessage({ type: "error", text: err.message });
+    } finally {
+      setReviewSaving(false);
+    }
   };
 
   if (loading) {
@@ -272,20 +369,18 @@ export default function RoundsLanding() {
               </div>
               <div className="flex-1">
                 <p className="font-semibold text-gray-900">Add Your Logo</p>
-                {hasLogo ? (
-                  <p className="text-sm text-green-600 font-medium mt-0.5">Logo uploaded</p>
-                ) : (
-                  <>
-                    <p className="text-sm text-gray-500 mt-0.5">Personalize survey emails and the board member experience with your company logo.</p>
-                    <button
-                      onClick={() => navigate("/admin/account")}
-                      className="mt-2 px-4 py-1.5 text-sm font-semibold rounded-lg transition hover:opacity-90 border-2"
-                      style={{ borderColor: "var(--cam-blue)", color: "var(--cam-blue)", backgroundColor: "transparent" }}
-                    >
-                      Upload Logo
-                    </button>
-                  </>
+                <p className="text-sm text-gray-500 mt-0.5">Personalize survey emails and the board member experience with your company logo.</p>
+                {(logoPreview || hasLogo) && (
+                  <img src={logoPreview || "/api/admin/account/logo"} alt="Company logo" className="mt-2 max-h-12 rounded" />
                 )}
+                <label
+                  className="mt-2 inline-block px-4 py-1.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 cursor-pointer"
+                  style={{ backgroundColor: "var(--cam-green)" }}
+                >
+                  {logoUploading ? "Uploading..." : hasLogo ? "Replace Logo" : "Upload Logo"}
+                  <input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={handleLogoSelect} disabled={logoUploading} className="hidden" />
+                </label>
+                {logoError && <p className="text-xs text-red-600 mt-1">{logoError}</p>}
               </div>
             </div>
 
@@ -306,19 +401,46 @@ export default function RoundsLanding() {
               </div>
               <div className="flex-1">
                 <p className="font-semibold text-gray-900">Activate Google Reviews</p>
-                {googleReviewEnabled ? (
-                  <p className="text-sm text-green-600 font-medium mt-0.5">Google Reviews active</p>
-                ) : (
-                  <>
-                    <p className="text-sm text-gray-500 mt-0.5">Automatically prompt happy board members to leave a Google review after their interview.</p>
+                <p className="text-sm text-gray-500 mt-0.5">Automatically prompt happy board members to leave a Google review after their interview.</p>
+                <div className="flex items-center gap-3 mt-2">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={googleReviewEnabled}
+                      onChange={(e) => handleReviewToggle(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-green-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+                  </label>
+                  <span className="text-sm font-medium text-gray-700">
+                    {googleReviewEnabled ? "Enabled" : "Disabled"}
+                  </span>
+                  {reviewSaving && <span className="text-xs text-gray-400">Saving...</span>}
+                </div>
+                {googleReviewEnabled && (
+                  <div className="mt-3">
+                    <input
+                      type="url"
+                      value={googleReviewUrl}
+                      onChange={(e) => setGoogleReviewUrl(e.target.value)}
+                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      placeholder="g.page/r/your-business/review"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Paste your Google Business review link here.</p>
                     <button
-                      onClick={() => navigate("/admin/account")}
-                      className="mt-2 px-4 py-1.5 text-sm font-semibold rounded-lg transition hover:opacity-90 border-2"
-                      style={{ borderColor: "var(--cam-blue)", color: "var(--cam-blue)", backgroundColor: "transparent" }}
+                      onClick={handleReviewUrlSave}
+                      disabled={reviewSaving}
+                      className="mt-2 px-4 py-1.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
+                      style={{ backgroundColor: "var(--cam-green)" }}
                     >
-                      Set Up Reviews
+                      {reviewSaving ? "Saving..." : "Save URL"}
                     </button>
-                  </>
+                  </div>
+                )}
+                {reviewMessage && (
+                  <p className={`text-xs mt-1 ${reviewMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
+                    {reviewMessage.text}
+                  </p>
                 )}
               </div>
             </div>
