@@ -53,7 +53,7 @@ export default function RoundsLanding() {
         setMaxCadence(data.subscription?.survey_rounds_per_year || 2);
         setMemberCount(data.usage?.member_count || 0);
         setMemberLimit(data.subscription?.member_limit || null);
-        setHasLogo(!!data.client?.has_logo);
+        setHasLogo(!!data.has_logo);
         setGoogleReviewEnabled(!!data.google_review_enabled);
         setGoogleReviewUrl(data.google_review_url || "");
       }
