@@ -17,6 +17,8 @@ export default function RoundsLanding() {
   const [memberCount, setMemberCount] = useState(0);
   const [memberLimit, setMemberLimit] = useState(null);
   const [interviewCompleted, setInterviewCompleted] = useState(false);
+  const [hasLogo, setHasLogo] = useState(false);
+  const [googleReviewEnabled, setGoogleReviewEnabled] = useState(false);
 
   useEffect(() => {
     loadRounds();
@@ -45,6 +47,8 @@ export default function RoundsLanding() {
         setMaxCadence(data.subscription?.survey_rounds_per_year || 2);
         setMemberCount(data.usage?.member_count || 0);
         setMemberLimit(data.subscription?.member_limit || null);
+        setHasLogo(!!data.client?.has_logo);
+        setGoogleReviewEnabled(!!data.google_review_enabled);
       }
     } catch (err) {
       console.error("Failed to load account:", err);
@@ -157,6 +161,7 @@ export default function RoundsLanding() {
           {/* Left Column — Launch Checklist */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-5">Get Live in 3 Steps</h3>
+            <p className="text-xs text-gray-400 mb-4 -mt-3">Plus optional extras to enhance your experience</p>
 
             {/* Step 1: AI Interview */}
             <div className="flex gap-4 mb-6">
@@ -227,7 +232,7 @@ export default function RoundsLanding() {
             </div>
 
             {/* Step 3: Schedule First Round */}
-            <div className="flex gap-4">
+            <div className="flex gap-4 mb-6">
               <div className="flex-shrink-0 mt-0.5">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${memberCount > 0 ? "text-white" : "bg-gray-200 text-gray-400"}`} style={memberCount > 0 ? { backgroundColor: "var(--cam-blue)" } : {}}>
                   3
@@ -241,6 +246,79 @@ export default function RoundsLanding() {
                   </div>
                 ) : (
                   <p className="text-sm text-gray-400 mt-0.5">Add members first to unlock scheduling.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Optional divider */}
+            <div className="border-t border-gray-100 pt-4 mb-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Optional</p>
+            </div>
+
+            {/* Step 4: Upload Logo */}
+            <div className="flex gap-4 mb-6">
+              <div className="flex-shrink-0 mt-0.5">
+                {hasLogo ? (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: "var(--cam-green)" }}>
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 border-gray-300 text-gray-400">
+                    4
+                  </div>
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-gray-900">Add Your Logo</p>
+                {hasLogo ? (
+                  <p className="text-sm text-green-600 font-medium mt-0.5">Logo uploaded</p>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-500 mt-0.5">Personalize survey emails and the board member experience with your company logo.</p>
+                    <button
+                      onClick={() => navigate("/admin/account")}
+                      className="mt-2 px-4 py-1.5 text-sm font-semibold rounded-lg transition hover:opacity-90 border-2"
+                      style={{ borderColor: "var(--cam-blue)", color: "var(--cam-blue)", backgroundColor: "transparent" }}
+                    >
+                      Upload Logo
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Step 5: Activate Google Reviews */}
+            <div className="flex gap-4">
+              <div className="flex-shrink-0 mt-0.5">
+                {googleReviewEnabled ? (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: "var(--cam-green)" }}>
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 border-gray-300 text-gray-400">
+                    5
+                  </div>
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-gray-900">Activate Google Reviews</p>
+                {googleReviewEnabled ? (
+                  <p className="text-sm text-green-600 font-medium mt-0.5">Google Reviews active</p>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-500 mt-0.5">Automatically prompt happy board members to leave a Google review after their interview.</p>
+                    <button
+                      onClick={() => navigate("/admin/account")}
+                      className="mt-2 px-4 py-1.5 text-sm font-semibold rounded-lg transition hover:opacity-90 border-2"
+                      style={{ borderColor: "var(--cam-blue)", color: "var(--cam-blue)", backgroundColor: "transparent" }}
+                    >
+                      Set Up Reviews
+                    </button>
+                  </>
                 )}
               </div>
             </div>
