@@ -1119,6 +1119,52 @@ router.post("/board-members/invite", async (req, res) => {
   }
 });
 
+// Generate a survey link for a test member (test mode only)
+router.post("/board-members/:id/survey-link", async (req, res) => {
+  if (!req.isTestMode) {
+    return res.status(403).json({ error: "Survey links can only be generated in test mode" });
+  }
+
+  const userId = Number(req.params.id);
+  const user = await db.get(
+    "SELECT id, email, first_name FROM users WHERE id = ? AND client_id = ? AND is_test = TRUE AND active = TRUE",
+    [userId, req.clientId]
+  );
+  if (!user) {
+    return res.status(404).json({ error: "Test member not found" });
+  }
+
+  // Find active test round
+  const round = await db.get(
+    "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'in_progress' AND is_test = TRUE ORDER BY launched_at DESC LIMIT 1",
+    [req.clientId]
+  );
+  if (!round) {
+    return res.status(400).json({ error: "No active test round. Switch to test mode to create one." });
+  }
+
+  // Generate token (long expiry for test mode — 30 days)
+  const token = crypto.randomUUID();
+  const expiryDate = new Date();
+  expiryDate.setDate(expiryDate.getDate() + 30);
+
+  await db.run(
+    "UPDATE users SET invitation_token = ?, invitation_token_expires = ?, last_invited_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [token, expiryDate.toISOString(), userId]
+  );
+
+  // Log as simulated invitation
+  await db.run(
+    "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, is_test) VALUES (?, ?, ?, 'simulated', TRUE)",
+    [userId, req.clientId, req.userId]
+  );
+
+  const baseUrl = process.env.SURVEY_BASE_URL || `${req.protocol}://${req.get("host")}`;
+  const surveyUrl = `${baseUrl}/survey?token=${token}`;
+
+  res.json({ url: surveyUrl, token, member: user.first_name || user.email });
+});
+
 // Get admin users for current client
 router.get("/users", async (req, res) => {
   const users = await db.all(
