@@ -45,7 +45,7 @@ router.get("/validate-token/:token", async (req, res) => {
     const user = await db.get(
       `SELECT u.id, u.email, u.first_name, u.last_name,
               COALESCE(c.community_name, u.community_name) as community_name,
-              u.management_company, u.client_id, u.invitation_token_expires
+              u.management_company, u.client_id, u.invitation_token_expires, u.is_test
        FROM users u
        LEFT JOIN communities c ON c.id = u.community_id
        WHERE u.invitation_token = ?`,
@@ -65,15 +65,16 @@ router.get("/validate-token/:token", async (req, res) => {
     }
 
     // Check if user's client has survey rounds and if one is still active
+    const userIsTest = !!user.is_test;
     const hasRounds = await db.get(
-      "SELECT id FROM survey_rounds WHERE client_id = ? LIMIT 1",
-      [user.client_id]
+      "SELECT id FROM survey_rounds WHERE client_id = ? AND is_test = ? LIMIT 1",
+      [user.client_id, userIsTest]
     );
 
     if (hasRounds) {
       const activeRound = await db.get(
-        "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'in_progress'",
-        [user.client_id]
+        "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'in_progress' AND is_test = ?",
+        [user.client_id, userIsTest]
       );
       if (!activeRound) {
         return res.status(404).json({ error: "This survey round has concluded." });
@@ -150,24 +151,26 @@ router.post("/", async (req, res) => {
   // the same email exists as a board member under multiple clients
   let user;
   if (user_id) {
-    user = await db.get("SELECT client_id, community_id FROM users WHERE id = ?", [user_id]);
+    user = await db.get("SELECT client_id, community_id, is_test FROM users WHERE id = ?", [user_id]);
   }
   if (!user) {
-    user = await db.get("SELECT client_id, community_id FROM users WHERE LOWER(email) = ?", [cleanEmail]);
+    user = await db.get("SELECT client_id, community_id, is_test FROM users WHERE LOWER(email) = ?", [cleanEmail]);
   }
   if (!user || !user.client_id) {
     return res.status(400).json({ error: "User not found or not associated with a client" });
   }
 
-  // Look up active round for this client (if any)
+  const userIsTest = !!user.is_test;
+
+  // Look up active round for this client matching test mode (if any)
   const activeRound = await db.get(
-    "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'in_progress'",
-    [user.client_id]
+    "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'in_progress' AND is_test = ?",
+    [user.client_id, userIsTest]
   );
 
   const result = await db.run(
-    "INSERT INTO sessions (email, user_id, community_name, management_company, client_id, round_id, community_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [cleanEmail, user_id || null, community_name?.trim() || null, management_company?.trim() || null, user.client_id, activeRound?.id || null, user.community_id || null]
+    "INSERT INTO sessions (email, user_id, community_name, management_company, client_id, round_id, community_id, is_test) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [cleanEmail, user_id || null, community_name?.trim() || null, management_company?.trim() || null, user.client_id, activeRound?.id || null, user.community_id || null, userIsTest]
   );
   const session = await db.get("SELECT * FROM sessions WHERE id = ?", [result.lastInsertRowid]);
   res.json(session);
@@ -206,7 +209,7 @@ router.patch("/:id/complete", async (req, res) => {
       }
 
       const session = await db.get(
-        `SELECT s.client_id, s.round_id, s.is_mock, s.nps_score,
+        `SELECT s.client_id, s.round_id, s.is_mock, s.is_test, s.nps_score,
                 u.first_name, u.last_name,
                 COALESCE(c.community_name, s.community_name) as community_name
          FROM sessions s
@@ -216,7 +219,7 @@ router.patch("/:id/complete", async (req, res) => {
         [id]
       );
 
-      if (!session?.client_id || !session?.round_id || session.is_mock) return;
+      if (!session?.client_id || !session?.round_id || session.is_mock || session.is_test) return;
 
       const round = await db.get("SELECT round_number, members_invited FROM survey_rounds WHERE id = ?", [session.round_id]);
       const completed = await db.get(

@@ -23,8 +23,8 @@ router.get("/", async (req, res) => {
     const cadence = subscription?.survey_cadence || 2;
 
     const existingRounds = await db.all(
-      "SELECT id, round_number, status, launched_at FROM survey_rounds WHERE client_id = ? ORDER BY round_number",
-      [req.clientId]
+      "SELECT id, round_number, status, launched_at FROM survey_rounds WHERE client_id = ? AND is_test = ? ORDER BY round_number",
+      [req.clientId, req.isTestMode]
     );
 
     if (existingRounds.length > 0 && existingRounds.length < cadence) {
@@ -42,26 +42,26 @@ router.get("/", async (req, res) => {
           : nextDate;
 
         await db.run(
-          "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status) VALUES (?, ?, ?, 'planned')",
-          [req.clientId, maxRoundNum + (i - existingRounds.length + 1), finalDate.toISOString()]
+          "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test) VALUES (?, ?, ?, 'planned', ?)",
+          [req.clientId, maxRoundNum + (i - existingRounds.length + 1), finalDate.toISOString(), req.isTestMode]
         );
       }
     }
 
     const rounds = await db.all(
       `SELECT sr.*,
-              (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true AND s.is_mock IS NOT TRUE) as responses_completed,
-              (SELECT COUNT(DISTINCT il.user_id) FROM invitation_logs il WHERE il.round_id = sr.id AND il.email_status = 'sent') as invitations_sent,
-              (SELECT COUNT(*) FROM critical_alerts ca WHERE ca.round_id = sr.id AND ca.dismissed = FALSE AND COALESCE(ca.solved, FALSE) = FALSE) as active_alert_count,
+              (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true AND s.is_mock IS NOT TRUE AND s.is_test = ?) as responses_completed,
+              (SELECT COUNT(DISTINCT il.user_id) FROM invitation_logs il WHERE il.round_id = sr.id AND il.email_status = 'sent' AND il.is_test = ?) as invitations_sent,
+              (SELECT COUNT(*) FROM critical_alerts ca WHERE ca.round_id = sr.id AND ca.dismissed = FALSE AND COALESCE(ca.solved, FALSE) = FALSE AND ca.is_test = ?) as active_alert_count,
               (SELECT COUNT(DISTINCT COALESCE(cm.community_name, u.community_name))
                FROM critical_alerts ca
                LEFT JOIN users u ON u.id = ca.user_id
                LEFT JOIN communities cm ON cm.id = u.community_id
-               WHERE ca.round_id = sr.id AND ca.dismissed = FALSE AND COALESCE(ca.solved, FALSE) = FALSE) as alert_community_count
+               WHERE ca.round_id = sr.id AND ca.dismissed = FALSE AND COALESCE(ca.solved, FALSE) = FALSE AND ca.is_test = ?) as alert_community_count
        FROM survey_rounds sr
-       WHERE sr.client_id = ?
+       WHERE sr.client_id = ? AND sr.is_test = ?
        ORDER BY sr.round_number`,
-      [req.clientId]
+      [req.isTestMode, req.isTestMode, req.isTestMode, req.isTestMode, req.clientId, req.isTestMode]
     );
     res.json(rounds);
   } catch (err) {
@@ -87,8 +87,8 @@ router.post("/schedule", async (req, res) => {
 
     // Check no rounds already exist
     const existing = await db.get(
-      "SELECT id FROM survey_rounds WHERE client_id = ?",
-      [req.clientId]
+      "SELECT id FROM survey_rounds WHERE client_id = ? AND is_test = ?",
+      [req.clientId, req.isTestMode]
     );
     if (existing) {
       return res.status(400).json({ error: "Survey rounds already scheduled. Use recalculate to adjust." });
@@ -113,16 +113,16 @@ router.post("/schedule", async (req, res) => {
       roundDate.setMonth(roundDate.getMonth() + (i * monthsBetween));
 
       await db.run(
-        "INSERT INTO survey_rounds (client_id, round_number, scheduled_date) VALUES (?, ?, ?)",
-        [req.clientId, i + 1, roundDate.toISOString().split("T")[0]]
+        "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, is_test) VALUES (?, ?, ?, ?)",
+        [req.clientId, i + 1, roundDate.toISOString().split("T")[0], req.isTestMode]
       );
       rounds.push({ round_number: i + 1, scheduled_date: roundDate.toISOString().split("T")[0] });
     }
 
     // Return the created rounds
     const createdRounds = await db.all(
-      "SELECT * FROM survey_rounds WHERE client_id = ? ORDER BY round_number",
-      [req.clientId]
+      "SELECT * FROM survey_rounds WHERE client_id = ? AND is_test = ? ORDER BY round_number",
+      [req.clientId, req.isTestMode]
     );
 
     res.json(createdRounds);
@@ -139,9 +139,9 @@ router.get("/trends", async (req, res) => {
       `SELECT sr.id, sr.round_number, sr.status, sr.launched_at, sr.concluded_at,
               sr.members_invited, sr.insights_json, sr.word_frequencies
        FROM survey_rounds sr
-       WHERE sr.client_id = ? AND sr.status IN ('in_progress', 'concluded')
+       WHERE sr.client_id = ? AND sr.status IN ('in_progress', 'concluded') AND sr.is_test = ?
        ORDER BY sr.round_number`,
-      [req.clientId]
+      [req.clientId, req.isTestMode]
     );
 
     // Check paid tier for revenue/manager analytics
@@ -160,8 +160,8 @@ router.get("/trends", async (req, res) => {
         `SELECT s.nps_score, s.community_id, COALESCE(sc.community_name, s.community_name) as community_name, s.completed
          FROM sessions s
          LEFT JOIN communities sc ON sc.id = s.community_id
-         WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE`,
-        [round.id, req.clientId]
+         WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND s.is_test = ?`,
+        [round.id, req.clientId, req.isTestMode]
       );
 
       const completed = sessions.filter((s) => s.completed);
@@ -302,8 +302,8 @@ router.get("/:id/dashboard", async (req, res) => {
     const filterPropertyType = req.query.property_type || null;
 
     const round = await db.get(
-      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ?",
-      [roundId, req.clientId]
+      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ? AND is_test = ?",
+      [roundId, req.clientId, req.isTestMode]
     );
     if (!round) return res.status(404).json({ error: "Round not found" });
 
@@ -315,7 +315,7 @@ router.get("/:id/dashboard", async (req, res) => {
 
     // Build filter conditions for sessions
     let sessionFilterSQL = "";
-    const sessionParams = [roundId, req.clientId];
+    const sessionParams = [roundId, req.clientId, req.isTestMode];
 
     if (filterCommunityId) {
       sessionFilterSQL += " AND s.community_id = ?";
@@ -348,14 +348,14 @@ router.get("/:id/dashboard", async (req, res) => {
        FROM sessions s
        LEFT JOIN users u ON u.id = s.user_id
        LEFT JOIN communities sc ON sc.id = s.community_id
-       WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE${sessionFilterSQL}
+       WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND s.is_test = ?${sessionFilterSQL}
        ORDER BY s.created_at DESC`,
       sessionParams
     );
 
     // Invited users (from invitation_logs) — same filters applied
     let invitedFilterSQL = "";
-    const invitedParams = [roundId];
+    const invitedParams = [roundId, req.isTestMode];
     if (filterCommunityId) {
       invitedFilterSQL += " AND u.community_id = ?";
       invitedParams.push(filterCommunityId);
@@ -385,7 +385,7 @@ router.get("/:id/dashboard", async (req, res) => {
        FROM invitation_logs il
        JOIN users u ON u.id = il.user_id
        LEFT JOIN communities c ON c.id = u.community_id
-       WHERE il.round_id = ? AND il.email_status = 'sent'${invitedFilterSQL}`,
+       WHERE il.round_id = ? AND il.is_test = ? AND il.email_status = 'sent'${invitedFilterSQL}`,
       invitedParams
     );
 
@@ -572,9 +572,9 @@ router.get("/:id/dashboard", async (req, res) => {
        FROM critical_alerts ca
        LEFT JOIN users u ON u.id = ca.user_id
        LEFT JOIN communities c ON c.id = u.community_id
-       WHERE ca.round_id = ? AND ca.client_id = ?
+       WHERE ca.round_id = ? AND ca.client_id = ? AND ca.is_test = ?
        ORDER BY ca.created_at DESC`,
-      [roundId, req.clientId]
+      [roundId, req.clientId, req.isTestMode]
     );
 
     // Word frequencies (stored for concluded unless filtered, computed live for active or filtered)
@@ -584,7 +584,7 @@ router.get("/:id/dashboard", async (req, res) => {
       wordFrequencies = round.word_frequencies;
     } else if (round.status === "in_progress" || hasFilters) {
       // Compute live from user messages (with same filters)
-      const wfParams = [roundId, req.clientId];
+      const wfParams = [roundId, req.clientId, req.isTestMode];
       let wfFilterSQL = "";
       if (filterCommunityId) {
         wfFilterSQL += " AND s.community_id = ?";
@@ -612,7 +612,7 @@ router.get("/:id/dashboard", async (req, res) => {
         `SELECT m.content
          FROM messages m
          JOIN sessions s ON s.id = m.session_id
-         WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND m.role = 'user'${wfFilterSQL}`,
+         WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND s.is_test = ? AND m.role = 'user'${wfFilterSQL}`,
         wfParams
       );
       wordFrequencies = computeLiveWordFrequencies(userMessages);
@@ -676,8 +676,8 @@ router.get("/:id/export", async (req, res) => {
     const roundId = Number(req.params.id);
 
     const round = await db.get(
-      "SELECT id, round_number FROM survey_rounds WHERE id = ? AND client_id = ?",
-      [roundId, req.clientId]
+      "SELECT id, round_number FROM survey_rounds WHERE id = ? AND client_id = ? AND is_test = ?",
+      [roundId, req.clientId, req.isTestMode]
     );
     if (!round) return res.status(404).json({ error: "Round not found" });
 
@@ -688,9 +688,9 @@ router.get("/:id/export", async (req, res) => {
        FROM sessions s
        LEFT JOIN users u ON u.id = s.user_id
        LEFT JOIN communities sc ON sc.id = s.community_id
-       WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE
+       WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND s.is_test = ?
        ORDER BY s.created_at DESC`,
-      [roundId, req.clientId]
+      [roundId, req.clientId, req.isTestMode]
     );
 
     const header = "first_name,last_name,email,community_name,nps_score,completed,summary,date";
@@ -719,8 +719,8 @@ router.post("/:id/close", async (req, res) => {
     const roundId = Number(req.params.id);
 
     const round = await db.get(
-      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ?",
-      [roundId, req.clientId]
+      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ? AND is_test = ?",
+      [roundId, req.clientId, req.isTestMode]
     );
     if (!round) return res.status(404).json({ error: "Round not found" });
     if (round.status !== "in_progress") {
@@ -728,8 +728,8 @@ router.post("/:id/close", async (req, res) => {
     }
 
     await db.run(
-      "UPDATE survey_rounds SET status = 'concluded', concluded_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [roundId]
+      "UPDATE survey_rounds SET status = 'concluded', concluded_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+      [roundId, req.isTestMode]
     );
 
     // Snapshot all client communities for historical dashboard data
@@ -762,8 +762,8 @@ router.post("/:id/close", async (req, res) => {
 
     // Notify admins asynchronously
     const completedCount = await db.get(
-      "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE AND is_mock IS NOT TRUE",
-      [roundId, req.clientId]
+      "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE AND is_mock IS NOT TRUE AND is_test = ?",
+      [roundId, req.clientId, req.isTestMode]
     );
     notifyRoundConcluded({
       clientId: req.clientId, roundNumber: round.round_number,
@@ -783,8 +783,8 @@ router.post("/:id/regenerate-insights", async (req, res) => {
     const roundId = Number(req.params.id);
 
     const round = await db.get(
-      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ?",
-      [roundId, req.clientId]
+      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ? AND is_test = ?",
+      [roundId, req.clientId, req.isTestMode]
     );
     if (!round) return res.status(404).json({ error: "Round not found" });
     if (round.status !== "concluded") {
@@ -812,7 +812,7 @@ router.post("/:id/regenerate-insights", async (req, res) => {
 });
 
 // Background email sending for round launch
-async function processEmailJob(jobId, roundId, members, closesAt, clientId, userId, userEmail, roundNumber, companyName) {
+async function processEmailJob(jobId, roundId, members, closesAt, clientId, userId, userEmail, roundNumber, companyName, isTestMode) {
   let sentCount = 0;
   let failedCount = 0;
 
@@ -824,21 +824,29 @@ async function processEmailJob(jobId, roundId, members, closesAt, clientId, user
         const token = crypto.randomUUID();
 
         await db.run(
-          "UPDATE users SET invitation_token = ?, invitation_token_expires = ?, last_invited_at = CURRENT_TIMESTAMP WHERE id = ?",
-          [token, closesAt.toISOString(), member.id]
+          "UPDATE users SET invitation_token = ?, invitation_token_expires = ?, last_invited_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+          [token, closesAt.toISOString(), member.id, isTestMode]
         );
 
-        const emailResult = await sendInvitation(member, token, {
-          closesAt: closesAt.toISOString(),
-          roundNumber,
-          companyName,
-          clientId,
-        });
+        if (isTestMode) {
+          // In test mode, skip actual email sending and log as simulated
+          await db.run(
+            "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, round_id, is_test) VALUES (?, ?, ?, ?, ?, ?)",
+            [member.id, clientId, userId, "simulated", roundId, isTestMode]
+          );
+        } else {
+          const emailResult = await sendInvitation(member, token, {
+            closesAt: closesAt.toISOString(),
+            roundNumber,
+            companyName,
+            clientId,
+          });
 
-        await db.run(
-          "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, round_id, resend_email_id) VALUES (?, ?, ?, ?, ?, ?)",
-          [member.id, clientId, userId, "sent", roundId, emailResult?.id || null]
-        );
+          await db.run(
+            "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, round_id, resend_email_id, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [member.id, clientId, userId, "sent", roundId, emailResult?.id || null, isTestMode]
+          );
+        }
 
         sentCount++;
       } catch (err) {
@@ -846,8 +854,8 @@ async function processEmailJob(jobId, roundId, members, closesAt, clientId, user
 
         try {
           await db.run(
-            "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, error_message, round_id) VALUES (?, ?, ?, ?, ?, ?)",
-            [member.id, clientId, userId, "failed", err.message, roundId]
+            "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, error_message, round_id, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [member.id, clientId, userId, "failed", err.message, roundId, isTestMode]
           );
         } catch (logErr) {
           logger.error({ err: logErr }, "Failed to log invitation error");
@@ -859,21 +867,21 @@ async function processEmailJob(jobId, roundId, members, closesAt, clientId, user
       // Update job progress every 10 emails (or on last email)
       if ((i + 1) % 10 === 0 || i === members.length - 1) {
         await db.run(
-          "UPDATE email_jobs SET sent_count = ?, failed_count = ? WHERE id = ?",
-          [sentCount, failedCount, jobId]
+          "UPDATE email_jobs SET sent_count = ?, failed_count = ? WHERE id = ? AND is_test = ?",
+          [sentCount, failedCount, jobId, isTestMode]
         );
       }
 
-      // Rate limit: 500ms between emails
-      if (i < members.length - 1) {
+      // Rate limit: 500ms between emails (skip in test mode)
+      if (i < members.length - 1 && !isTestMode) {
         await sleep(500);
       }
     }
 
     // Mark job completed
     await db.run(
-      "UPDATE email_jobs SET status = 'completed', sent_count = ?, failed_count = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [sentCount, failedCount, jobId]
+      "UPDATE email_jobs SET status = 'completed', sent_count = ?, failed_count = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+      [sentCount, failedCount, jobId, isTestMode]
     );
 
     await logActivity({
@@ -897,8 +905,8 @@ async function processEmailJob(jobId, roundId, members, closesAt, clientId, user
   } catch (err) {
     logger.error({ err }, "Email job fatal error");
     await db.run(
-      "UPDATE email_jobs SET status = 'failed', sent_count = ?, failed_count = ?, error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [sentCount, failedCount, err.message, jobId]
+      "UPDATE email_jobs SET status = 'failed', sent_count = ?, failed_count = ?, error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+      [sentCount, failedCount, err.message, jobId, isTestMode]
     ).catch(() => {});
   }
 }
@@ -910,8 +918,8 @@ router.post("/:id/launch", async (req, res) => {
 
     // Validate round belongs to client and is planned
     const round = await db.get(
-      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ?",
-      [roundId, req.clientId]
+      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ? AND is_test = ?",
+      [roundId, req.clientId, req.isTestMode]
     );
 
     if (!round) {
@@ -924,8 +932,8 @@ router.post("/:id/launch", async (req, res) => {
 
     // Check no other round is in progress
     const activeRound = await db.get(
-      "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'in_progress'",
-      [req.clientId]
+      "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'in_progress' AND is_test = ?",
+      [req.clientId, req.isTestMode]
     );
 
     if (activeRound) {
@@ -943,9 +951,9 @@ router.post("/:id/launch", async (req, res) => {
               u.management_company
        FROM users u
        LEFT JOIN communities c ON c.id = u.community_id
-       WHERE u.client_id = ? AND u.active = TRUE
+       WHERE u.client_id = ? AND u.active = TRUE AND u.is_test = ?
          AND (u.community_id IS NULL OR c.status = 'active')`,
-      [req.clientId]
+      [req.clientId, req.isTestMode]
     );
 
     if (members.length === 0) {
@@ -972,14 +980,14 @@ router.post("/:id/launch", async (req, res) => {
 
     // Update round status
     await db.run(
-      "UPDATE survey_rounds SET status = 'in_progress', launched_at = CURRENT_TIMESTAMP, closes_at = ?, members_invited = ? WHERE id = ?",
-      [closesAt.toISOString(), members.length, roundId]
+      "UPDATE survey_rounds SET status = 'in_progress', launched_at = CURRENT_TIMESTAMP, closes_at = ?, members_invited = ? WHERE id = ? AND is_test = ?",
+      [closesAt.toISOString(), members.length, roundId, req.isTestMode]
     );
 
     // Create background email job
     const jobResult = await db.run(
-      "INSERT INTO email_jobs (client_id, round_id, total_count) VALUES (?, ?, ?)",
-      [req.clientId, roundId, members.length]
+      "INSERT INTO email_jobs (client_id, round_id, total_count, is_test) VALUES (?, ?, ?, ?)",
+      [req.clientId, roundId, members.length, req.isTestMode]
     );
     const jobId = jobResult.lastInsertRowid;
 
@@ -992,7 +1000,7 @@ router.post("/:id/launch", async (req, res) => {
     });
 
     // Fire-and-forget background processing
-    processEmailJob(jobId, roundId, members, closesAt, req.clientId, req.userId, req.userEmail, round.round_number, companyName)
+    processEmailJob(jobId, roundId, members, closesAt, req.clientId, req.userId, req.userEmail, round.round_number, companyName, req.isTestMode)
       .catch(err => logger.error({ err }, "Email job failed"));
 
   } catch (err) {
@@ -1006,8 +1014,8 @@ router.post("/:id/launch", async (req, res) => {
 router.get("/email-jobs/active", async (req, res) => {
   try {
     const job = await db.get(
-      "SELECT id, round_id, status, total_count, sent_count, failed_count, created_at FROM email_jobs WHERE client_id = ? AND status = 'in_progress' ORDER BY created_at DESC LIMIT 1",
-      [req.clientId]
+      "SELECT id, round_id, status, total_count, sent_count, failed_count, created_at FROM email_jobs WHERE client_id = ? AND status = 'in_progress' AND is_test = ? ORDER BY created_at DESC LIMIT 1",
+      [req.clientId, req.isTestMode]
     );
     res.json({ job: job || null });
   } catch (err) {
@@ -1019,8 +1027,8 @@ router.get("/email-jobs/active", async (req, res) => {
 router.get("/email-jobs/:jobId", async (req, res) => {
   try {
     const job = await db.get(
-      "SELECT id, status, total_count, sent_count, failed_count, error_message, completed_at, created_at FROM email_jobs WHERE id = ? AND client_id = ?",
-      [Number(req.params.jobId), req.clientId]
+      "SELECT id, status, total_count, sent_count, failed_count, error_message, completed_at, created_at FROM email_jobs WHERE id = ? AND client_id = ? AND is_test = ?",
+      [Number(req.params.jobId), req.clientId, req.isTestMode]
     );
     if (!job) return res.status(404).json({ error: "Job not found" });
     res.json(job);
@@ -1034,15 +1042,15 @@ router.post("/recalculate", async (req, res) => {
   try {
     // Delete all planned rounds
     await db.run(
-      "DELETE FROM survey_rounds WHERE client_id = ? AND status = 'planned'",
-      [req.clientId]
+      "DELETE FROM survey_rounds WHERE client_id = ? AND status = 'planned' AND is_test = ?",
+      [req.clientId, req.isTestMode]
     );
 
     // Get the latest non-planned round as anchor
     const lastRound = await db.get(
-      `SELECT * FROM survey_rounds WHERE client_id = ? AND status IN ('in_progress', 'concluded')
+      `SELECT * FROM survey_rounds WHERE client_id = ? AND status IN ('in_progress', 'concluded') AND is_test = ?
        ORDER BY round_number DESC LIMIT 1`,
-      [req.clientId]
+      [req.clientId, req.isTestMode]
     );
 
     // Get current cadence
@@ -1064,8 +1072,8 @@ router.post("/recalculate", async (req, res) => {
 
       // Get how many total rounds already exist (concluded + in_progress)
       const existingCount = await db.get(
-        "SELECT COUNT(*) as count FROM survey_rounds WHERE client_id = ?",
-        [req.clientId]
+        "SELECT COUNT(*) as count FROM survey_rounds WHERE client_id = ? AND is_test = ?",
+        [req.clientId, req.isTestMode]
       );
 
       const remainingSlots = cadence - (existingCount?.count || 0);
@@ -1075,8 +1083,8 @@ router.post("/recalculate", async (req, res) => {
         roundDate.setMonth(roundDate.getMonth() + ((i + 1) * monthsBetween));
 
         await db.run(
-          "INSERT INTO survey_rounds (client_id, round_number, scheduled_date) VALUES (?, ?, ?)",
-          [req.clientId, nextRoundNumber + i, roundDate.toISOString().split("T")[0]]
+          "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, is_test) VALUES (?, ?, ?, ?)",
+          [req.clientId, nextRoundNumber + i, roundDate.toISOString().split("T")[0], req.isTestMode]
         );
       }
     }
@@ -1084,12 +1092,12 @@ router.post("/recalculate", async (req, res) => {
     // Return updated rounds
     const rounds = await db.all(
       `SELECT sr.*,
-              (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true AND s.is_mock IS NOT TRUE) as responses_completed,
-              (SELECT COUNT(DISTINCT il.user_id) FROM invitation_logs il WHERE il.round_id = sr.id AND il.email_status = 'sent') as invitations_sent
+              (SELECT COUNT(*) FROM sessions s WHERE s.round_id = sr.id AND s.completed = true AND s.is_mock IS NOT TRUE AND s.is_test = ?) as responses_completed,
+              (SELECT COUNT(DISTINCT il.user_id) FROM invitation_logs il WHERE il.round_id = sr.id AND il.email_status = 'sent' AND il.is_test = ?) as invitations_sent
        FROM survey_rounds sr
-       WHERE sr.client_id = ?
+       WHERE sr.client_id = ? AND sr.is_test = ?
        ORDER BY sr.round_number`,
-      [req.clientId]
+      [req.isTestMode, req.isTestMode, req.clientId, req.isTestMode]
     );
 
     res.json(rounds);

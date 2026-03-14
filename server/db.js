@@ -341,6 +341,16 @@ async function initializeSchema() {
       logger.info("Google review migration skipped (already applied or file not found)");
     }
 
+    // Run test mode (sandbox) migration
+    try {
+      const testModePath = join(__dirname, "migrations", "add-test-mode.sql");
+      const testModeSQL = readFileSync(testModePath, "utf-8");
+      await client.query(testModeSQL);
+      logger.info("Test mode migration applied successfully");
+    } catch (migrationErr) {
+      logger.info("Test mode migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     logger.info("Database schema initialized successfully");
   } catch (err) {

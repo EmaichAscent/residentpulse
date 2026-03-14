@@ -22,10 +22,10 @@ router.get("/responses", async (req, res) => {
      FROM sessions s
      LEFT JOIN messages m ON m.session_id = s.id
      LEFT JOIN communities sc ON sc.id = s.community_id
-     WHERE s.client_id = ? AND s.is_mock IS NOT TRUE
+     WHERE s.client_id = ? AND s.is_mock IS NOT TRUE AND s.is_test = ?
      GROUP BY s.id, sc.community_name
      ORDER BY s.created_at DESC`,
-    [req.clientId]
+    [req.clientId, req.isTestMode]
   );
   res.json(sessions);
 });
@@ -35,7 +35,7 @@ router.get("/responses/:id/messages", async (req, res) => {
   const id = Number(req.params.id);
 
   // Verify session belongs to this client
-  const session = await db.get("SELECT id FROM sessions WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  const session = await db.get("SELECT id FROM sessions WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
   if (!session) {
     return res.status(404).json({ error: "Session not found" });
   }
@@ -52,14 +52,108 @@ router.delete("/responses/:id", async (req, res) => {
   const id = Number(req.params.id);
 
   // Verify session belongs to this client
-  const session = await db.get("SELECT id FROM sessions WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  const session = await db.get("SELECT id FROM sessions WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
   if (!session) {
     return res.status(404).json({ error: "Session not found" });
   }
 
   await db.run("DELETE FROM messages WHERE session_id = ?", [id]);
-  await db.run("DELETE FROM sessions WHERE id = ?", [id]);
+  await db.run("DELETE FROM sessions WHERE id = ? AND is_test = ?", [id, req.isTestMode]);
   res.json({ ok: true });
+});
+
+// ── Test Mode (Sandbox) ──────────────────────────────────────────────
+
+// Get current mode status
+router.get("/mode", async (req, res) => {
+  if (process.env.FEATURE_TEST_MODE !== "true") {
+    return res.status(404).json({ error: "Not found" });
+  }
+  const admin = await db.get(
+    "SELECT current_mode, first_live_switch_confirmed FROM client_admins WHERE id = ?",
+    [req.userId]
+  );
+  const client = await db.get(
+    "SELECT test_mode_activated_at FROM clients WHERE id = ?",
+    [req.clientId]
+  );
+  res.json({
+    mode: admin?.current_mode || "live",
+    test_mode_activated: !!client?.test_mode_activated_at,
+    first_live_switch_confirmed: !!admin?.first_live_switch_confirmed,
+  });
+});
+
+// Switch mode (live <-> test)
+router.post("/mode", async (req, res) => {
+  if (process.env.FEATURE_TEST_MODE !== "true") {
+    return res.status(404).json({ error: "Not found" });
+  }
+  const { mode, confirm } = req.body;
+  if (!["live", "test"].includes(mode)) {
+    return res.status(400).json({ error: "Mode must be 'live' or 'test'" });
+  }
+
+  const admin = await db.get(
+    "SELECT current_mode, first_live_switch_confirmed FROM client_admins WHERE id = ?",
+    [req.userId]
+  );
+  const client = await db.get(
+    "SELECT test_mode_activated_at FROM clients WHERE id = ?",
+    [req.clientId]
+  );
+
+  // First time switching to test: auto-create sandbox data
+  if (mode === "test" && !client.test_mode_activated_at) {
+    await db.run("UPDATE clients SET test_mode_activated_at = CURRENT_TIMESTAMP WHERE id = ?", [req.clientId]);
+
+    // Create test community
+    const communityResult = await db.run(
+      "INSERT INTO communities (client_id, community_name, is_test) VALUES (?, 'Test Community', TRUE)",
+      [req.clientId]
+    );
+
+    // Create 5 test members
+    const testMembers = [
+      { first: "Test", last: "Member 1", email: "test1@sandbox.residentpulse.local" },
+      { first: "Test", last: "Member 2", email: "test2@sandbox.residentpulse.local" },
+      { first: "Test", last: "Member 3", email: "test3@sandbox.residentpulse.local" },
+      { first: "Test", last: "Member 4", email: "test4@sandbox.residentpulse.local" },
+      { first: "Test", last: "Member 5", email: "test5@sandbox.residentpulse.local" },
+    ];
+    for (const m of testMembers) {
+      await db.run(
+        "INSERT INTO users (client_id, first_name, last_name, email, community_id, is_test) VALUES (?, ?, ?, ?, ?, TRUE)",
+        [req.clientId, m.first, m.last, m.email, communityResult.lastInsertRowid]
+      );
+    }
+
+    // Create test survey round (in_progress)
+    await db.run(
+      `INSERT INTO survey_rounds (client_id, round_number, status, scheduled_date, launched_at, closes_at, is_test)
+       VALUES (?, 1, 'in_progress', CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_DATE + INTERVAL '30 days', TRUE)`,
+      [req.clientId]
+    );
+
+    logger.info({ clientId: req.clientId }, "Test mode sandbox created");
+  }
+
+  // First time switching from test to live: require confirmation
+  if (mode === "live" && admin.current_mode === "test" && !admin.first_live_switch_confirmed) {
+    if (!confirm) {
+      return res.json({
+        requires_confirmation: true,
+        message: "Switching to Live Mode. Your test data stays in test mode — live mode starts fresh with your real members and communities.",
+      });
+    }
+    await db.run("UPDATE client_admins SET first_live_switch_confirmed = TRUE WHERE id = ?", [req.userId]);
+  }
+
+  // Update mode
+  await db.run("UPDATE client_admins SET current_mode = ? WHERE id = ?", [mode, req.userId]);
+  req.session.user.current_mode = mode;
+
+  res.json({ mode, message: `Switched to ${mode} mode.` });
 });
 
 // Get client account information (with subscription and usage)
@@ -84,15 +178,15 @@ router.get("/account", async (req, res) => {
 
   // Current member count
   const memberCount = await db.get(
-    "SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE",
-    [req.clientId]
+    "SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = ?",
+    [req.clientId, req.isTestMode]
   );
 
   // Survey rounds used: prefer survey_rounds table, fall back to legacy invitation_logs counting
   const roundsFromTable = await db.get(
     `SELECT COUNT(*) as count FROM survey_rounds
-     WHERE client_id = ? AND status IN ('in_progress', 'concluded')`,
-    [req.clientId]
+     WHERE client_id = ? AND status IN ('in_progress', 'concluded') AND is_test = ?`,
+    [req.clientId, req.isTestMode]
   );
 
   let surveyRoundsCount;
@@ -104,8 +198,8 @@ router.get("/account", async (req, res) => {
       `SELECT COUNT(DISTINCT DATE(sent_at)) as count
        FROM invitation_logs
        WHERE client_id = ? AND email_status = 'sent'
-       AND EXTRACT(YEAR FROM sent_at) = ?`,
-      [req.clientId, currentYear]
+       AND EXTRACT(YEAR FROM sent_at) = ? AND is_test = ?`,
+      [req.clientId, currentYear, req.isTestMode]
     );
     surveyRoundsCount = legacyRounds?.count || 0;
   }
@@ -280,22 +374,22 @@ router.patch("/account/cadence", async (req, res) => {
   const intervalMonths = survey_cadence === 4 ? 3 : 6;
   const lastRound = await db.get(
     `SELECT launched_at, concluded_at FROM survey_rounds
-     WHERE client_id = ? AND status IN ('in_progress', 'concluded')
+     WHERE client_id = ? AND status IN ('in_progress', 'concluded') AND is_test = ?
      ORDER BY launched_at DESC LIMIT 1`,
-    [req.clientId]
+    [req.clientId, req.isTestMode]
   );
 
   const plannedRounds = await db.all(
     `SELECT id, round_number FROM survey_rounds
-     WHERE client_id = ? AND status = 'planned'
+     WHERE client_id = ? AND status = 'planned' AND is_test = ?
      ORDER BY round_number ASC`,
-    [req.clientId]
+    [req.clientId, req.isTestMode]
   );
 
   // Count total rounds this year (all statuses)
   const allRounds = await db.all(
-    "SELECT id, round_number, status FROM survey_rounds WHERE client_id = ? ORDER BY round_number ASC",
-    [req.clientId]
+    "SELECT id, round_number, status FROM survey_rounds WHERE client_id = ? AND is_test = ? ORDER BY round_number ASC",
+    [req.clientId, req.isTestMode]
   );
 
   // If increasing cadence and we need more planned rounds, create them
@@ -312,8 +406,8 @@ router.patch("/account/cadence", async (req, res) => {
         : nextDate;
 
       await db.run(
-        "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status) VALUES (?, ?, ?, 'planned')",
-        [req.clientId, maxRoundNum + (i - allRounds.length + 1), finalDate.toISOString()]
+        "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test) VALUES (?, ?, ?, 'planned', ?)",
+        [req.clientId, maxRoundNum + (i - allRounds.length + 1), finalDate.toISOString(), req.isTestMode]
       );
     }
   }
@@ -321,23 +415,23 @@ router.patch("/account/cadence", async (req, res) => {
   // If decreasing cadence, remove excess planned rounds (only planned, never active/concluded)
   if (survey_cadence < allRounds.length) {
     const excessPlanned = await db.all(
-      "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'planned' ORDER BY round_number DESC",
-      [req.clientId]
+      "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'planned' AND is_test = ? ORDER BY round_number DESC",
+      [req.clientId, req.isTestMode]
     );
     const nonPlannedCount = allRounds.filter(r => r.status !== "planned").length;
     const targetPlanned = Math.max(0, survey_cadence - nonPlannedCount);
     const toRemove = excessPlanned.slice(0, excessPlanned.length - targetPlanned);
     for (const r of toRemove) {
-      await db.run("DELETE FROM survey_rounds WHERE id = ?", [r.id]);
+      await db.run("DELETE FROM survey_rounds WHERE id = ? AND is_test = ?", [r.id, req.isTestMode]);
     }
   }
 
   // Re-fetch planned rounds after additions/removals
   const updatedPlanned = await db.all(
     `SELECT id, round_number FROM survey_rounds
-     WHERE client_id = ? AND status = 'planned'
+     WHERE client_id = ? AND status = 'planned' AND is_test = ?
      ORDER BY round_number ASC`,
-    [req.clientId]
+    [req.clientId, req.isTestMode]
   );
 
   let message = "";
@@ -359,14 +453,14 @@ router.patch("/account/cadence", async (req, res) => {
       if (nextDate <= now) adjustedCount++;
 
       await db.run(
-        "UPDATE survey_rounds SET scheduled_date = ? WHERE id = ?",
-        [finalDate.toISOString(), updatedPlanned[i].id]
+        "UPDATE survey_rounds SET scheduled_date = ? WHERE id = ? AND is_test = ?",
+        [finalDate.toISOString(), updatedPlanned[i].id, req.isTestMode]
       );
     }
 
     const nextPlanned = await db.get(
-      "SELECT scheduled_date FROM survey_rounds WHERE client_id = ? AND status = 'planned' ORDER BY scheduled_date ASC LIMIT 1",
-      [req.clientId]
+      "SELECT scheduled_date FROM survey_rounds WHERE client_id = ? AND status = 'planned' AND is_test = ? ORDER BY scheduled_date ASC LIMIT 1",
+      [req.clientId, req.isTestMode]
     );
 
     const nextDateStr = nextPlanned
@@ -625,15 +719,15 @@ router.get("/board-members", async (req, res) => {
      LEFT JOIN LATERAL (
        SELECT il2.delivery_status, il2.email_status
        FROM invitation_logs il2
-       JOIN survey_rounds sr ON sr.id = il2.round_id AND sr.status = 'in_progress'
-       WHERE il2.user_id = u.id AND il2.client_id = $1
+       JOIN survey_rounds sr ON sr.id = il2.round_id AND sr.status = 'in_progress' AND sr.is_test = $2
+       WHERE il2.user_id = u.id AND il2.client_id = $1 AND il2.is_test = $2
        ORDER BY il2.sent_at DESC LIMIT 1
      ) il ON TRUE
-     WHERE u.client_id = $1 AND u.active = TRUE
+     WHERE u.client_id = $1 AND u.active = TRUE AND u.is_test = $2
      ORDER BY
        CASE WHEN il.delivery_status IN ('bounced', 'complained') THEN 0 ELSE 1 END,
        u.email`,
-    [req.clientId]
+    [req.clientId, req.isTestMode]
   );
   res.json(users);
 });
@@ -646,9 +740,9 @@ router.get("/board-members/inactive", async (req, res) => {
             u.management_company, u.updated_at
      FROM users u
      LEFT JOIN communities c ON c.id = u.community_id
-     WHERE u.client_id = ? AND u.active = FALSE
+     WHERE u.client_id = ? AND u.active = FALSE AND u.is_test = ?
      ORDER BY u.updated_at DESC`,
-    [req.clientId]
+    [req.clientId, req.isTestMode]
   );
   res.json(users);
 });
@@ -657,15 +751,15 @@ router.get("/board-members/inactive", async (req, res) => {
 router.post("/board-members/:id/reactivate", async (req, res) => {
   const id = Number(req.params.id);
   const user = await db.get(
-    "SELECT id, active FROM users WHERE id = ? AND client_id = ?",
-    [id, req.clientId]
+    "SELECT id, active FROM users WHERE id = ? AND client_id = ? AND is_test = ?",
+    [id, req.clientId, req.isTestMode]
   );
   if (!user) return res.status(404).json({ error: "Member not found" });
   if (user.active) return res.status(400).json({ error: "Member is already active" });
 
   await db.run(
-    "UPDATE users SET active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    [id]
+    "UPDATE users SET active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+    [id, req.isTestMode]
   );
   const updated = await db.get("SELECT * FROM users WHERE id = ?", [id]);
   res.json(updated);
@@ -679,9 +773,9 @@ router.get("/board-members/export", async (req, res) => {
             u.management_company
      FROM users u
      LEFT JOIN communities c ON c.id = u.community_id
-     WHERE u.client_id = ? AND u.active = TRUE
+     WHERE u.client_id = ? AND u.active = TRUE AND u.is_test = ?
      ORDER BY u.email`,
-    [req.clientId]
+    [req.clientId, req.isTestMode]
   );
 
   const header = "first_name,last_name,email,community_name,management_company";
@@ -701,13 +795,13 @@ router.get("/board-members/bounce-count", async (req, res) => {
   const result = await db.get(
     `SELECT COUNT(DISTINCT il.user_id) as bounce_count
      FROM invitation_logs il
-     JOIN survey_rounds sr ON sr.id = il.round_id AND sr.status = 'in_progress' AND sr.client_id = $1
-     WHERE il.client_id = $1 AND il.delivery_status IN ('bounced', 'complained')
+     JOIN survey_rounds sr ON sr.id = il.round_id AND sr.status = 'in_progress' AND sr.client_id = $1 AND sr.is_test = $2
+     WHERE il.client_id = $1 AND il.delivery_status IN ('bounced', 'complained') AND il.is_test = $2
      AND il.sent_at = (
        SELECT MAX(il2.sent_at) FROM invitation_logs il2
        WHERE il2.user_id = il.user_id AND il2.round_id = il.round_id
      )`,
-    [req.clientId]
+    [req.clientId, req.isTestMode]
   );
   res.json({ bounce_count: parseInt(result?.bounce_count) || 0 });
 });
@@ -724,30 +818,30 @@ router.post("/board-members", async (req, res) => {
 
   // Check if email already exists for this client
   // Check if email exists (including inactive — reactivate if so)
-  const existing = await db.get("SELECT id, active FROM users WHERE email = ? AND client_id = ?", [cleanEmail, req.clientId]);
+  const existing = await db.get("SELECT id, active FROM users WHERE email = ? AND client_id = ? AND is_test = ?", [cleanEmail, req.clientId, req.isTestMode]);
   if (existing && existing.active) {
     return res.status(400).json({ error: "A board member with this email already exists" });
   }
 
   if (existing && !existing.active) {
     // Reactivate previously removed board member
-    const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name);
+    const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name, req.isTestMode);
     await db.run(
-      "UPDATE users SET active = TRUE, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [first_name || null, last_name || null, canonicalCommunity || community_name || null, management_company || null, existing.id]
+      "UPDATE users SET active = TRUE, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+      [first_name || null, last_name || null, canonicalCommunity || community_name || null, management_company || null, existing.id, req.isTestMode]
     );
-    await autoLinkUsersToCommunities(req.clientId);
+    await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
     const reactivated = await db.get("SELECT * FROM users WHERE id = ?", [existing.id]);
     return res.json(reactivated);
   }
 
-  const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name);
+  const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name, req.isTestMode);
   const result = await db.run(
-    "INSERT INTO users (client_id, email, first_name, last_name, community_name, management_company) VALUES (?, ?, ?, ?, ?, ?)",
-    [req.clientId, cleanEmail, first_name || null, last_name || null, canonicalCommunity || community_name || null, management_company || null]
+    "INSERT INTO users (client_id, email, first_name, last_name, community_name, management_company, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [req.clientId, cleanEmail, first_name || null, last_name || null, canonicalCommunity || community_name || null, management_company || null, req.isTestMode]
   );
 
-  await autoLinkUsersToCommunities(req.clientId);
+  await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
   const newUser = await db.get("SELECT * FROM users WHERE id = ?", [result.lastInsertRowid]);
   res.json(newUser);
 });
@@ -762,7 +856,7 @@ router.put("/board-members/:id", async (req, res) => {
   }
 
   // Verify the user belongs to this client
-  const user = await db.get("SELECT id FROM users WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  const user = await db.get("SELECT id FROM users WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
   if (!user) {
     return res.status(404).json({ error: "Board member not found" });
   }
@@ -770,18 +864,18 @@ router.put("/board-members/:id", async (req, res) => {
   const cleanEmail = email.toLowerCase().trim();
 
   // Check if email is already used by another user
-  const existing = await db.get("SELECT id FROM users WHERE email = ? AND client_id = ? AND id != ?", [cleanEmail, req.clientId, id]);
+  const existing = await db.get("SELECT id FROM users WHERE email = ? AND client_id = ? AND id != ? AND is_test = ?", [cleanEmail, req.clientId, id, req.isTestMode]);
   if (existing) {
     return res.status(400).json({ error: "A board member with this email already exists" });
   }
 
-  const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name);
+  const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name, req.isTestMode);
   await db.run(
-    "UPDATE users SET email = ?, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP, community_id = NULL WHERE id = ?",
-    [cleanEmail, first_name || null, last_name || null, canonicalCommunity || community_name || null, management_company || null, id]
+    "UPDATE users SET email = ?, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP, community_id = NULL WHERE id = ? AND is_test = ?",
+    [cleanEmail, first_name || null, last_name || null, canonicalCommunity || community_name || null, management_company || null, id, req.isTestMode]
   );
 
-  await autoLinkUsersToCommunities(req.clientId);
+  await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
 
   const updatedUser = await db.get("SELECT * FROM users WHERE id = ?", [id]);
   res.json(updatedUser);
@@ -792,12 +886,12 @@ router.delete("/board-members/:id", async (req, res) => {
   const { id } = req.params;
 
   // Verify the user belongs to this client
-  const user = await db.get("SELECT id FROM users WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  const user = await db.get("SELECT id FROM users WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
   if (!user) {
     return res.status(404).json({ error: "Board member not found" });
   }
 
-  await db.run("UPDATE users SET active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
+  await db.run("UPDATE users SET active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?", [id, req.isTestMode]);
   res.json({ ok: true });
 });
 
@@ -848,21 +942,21 @@ router.post("/board-members/import", async (req, res) => {
 
       try {
         // Fuzzy-match community name to prevent duplicates
-        const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name);
+        const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name, req.isTestMode);
         const finalCommunity = canonicalCommunity || community_name;
 
-        const existing = await db.get("SELECT id, active FROM users WHERE email = ? AND client_id = ?", [email, req.clientId]);
+        const existing = await db.get("SELECT id, active FROM users WHERE email = ? AND client_id = ? AND is_test = ?", [email, req.clientId, req.isTestMode]);
 
         if (existing) {
           await db.run(
-            "UPDATE users SET first_name = ?, last_name = ?, community_name = ?, management_company = ?, active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            [first_name, last_name, finalCommunity, management_company, existing.id]
+            "UPDATE users SET first_name = ?, last_name = ?, community_name = ?, management_company = ?, active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+            [first_name, last_name, finalCommunity, management_company, existing.id, req.isTestMode]
           );
           updated++;
         } else {
           await db.run(
-            "INSERT INTO users (client_id, email, first_name, last_name, community_name, management_company) VALUES (?, ?, ?, ?, ?, ?)",
-            [req.clientId, email, first_name, last_name, finalCommunity, management_company]
+            "INSERT INTO users (client_id, email, first_name, last_name, community_name, management_company, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [req.clientId, email, first_name, last_name, finalCommunity, management_company, req.isTestMode]
           );
           created++;
         }
@@ -872,7 +966,7 @@ router.post("/board-members/import", async (req, res) => {
     }
 
     // Auto-link imported members to communities if they exist
-    await autoLinkUsersToCommunities(req.clientId);
+    await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
 
     res.json({
       created,
@@ -913,15 +1007,15 @@ router.post("/board-members/invite", async (req, res) => {
         `SELECT COUNT(DISTINCT DATE(sent_at)) as count
          FROM invitation_logs
          WHERE client_id = ? AND email_status = 'sent'
-         AND EXTRACT(YEAR FROM sent_at) = ?`,
-        [req.clientId, currentYear]
+         AND EXTRACT(YEAR FROM sent_at) = ? AND is_test = ?`,
+        [req.clientId, currentYear, req.isTestMode]
       );
 
       const todayStr = new Date().toISOString().split("T")[0];
       const todayCounted = await db.get(
         `SELECT COUNT(*) as count FROM invitation_logs
-         WHERE client_id = ? AND email_status = 'sent' AND DATE(sent_at) = ?`,
-        [req.clientId, todayStr]
+         WHERE client_id = ? AND email_status = 'sent' AND DATE(sent_at) = ? AND is_test = ?`,
+        [req.clientId, todayStr, req.isTestMode]
       );
 
       const effectiveRounds = (roundsUsed?.count || 0) + (todayCounted?.count > 0 ? 0 : 1);
@@ -946,8 +1040,8 @@ router.post("/board-members/invite", async (req, res) => {
       try {
         // Verify user belongs to this client
         const user = await db.get(
-          "SELECT id, email, first_name, last_name, community_name, management_company FROM users WHERE id = ? AND client_id = ?",
-          [userId, req.clientId]
+          "SELECT id, email, first_name, last_name, community_name, management_company FROM users WHERE id = ? AND client_id = ? AND is_test = ?",
+          [userId, req.clientId, req.isTestMode]
         );
 
         if (!user) {
@@ -965,8 +1059,8 @@ router.post("/board-members/invite", async (req, res) => {
 
         // Update user with token and expiry
         await db.run(
-          "UPDATE users SET invitation_token = ?, invitation_token_expires = ?, last_invited_at = CURRENT_TIMESTAMP WHERE id = ?",
-          [token, expiryDate.toISOString(), userId]
+          "UPDATE users SET invitation_token = ?, invitation_token_expires = ?, last_invited_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+          [token, expiryDate.toISOString(), userId, req.isTestMode]
         );
 
         // Send email via Resend
@@ -974,8 +1068,8 @@ router.post("/board-members/invite", async (req, res) => {
 
         // Log invitation with Resend email ID
         await db.run(
-          "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, resend_email_id) VALUES (?, ?, ?, ?, ?)",
-          [userId, req.clientId, req.userId, "sent", emailResult?.id || null]
+          "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, resend_email_id, is_test) VALUES (?, ?, ?, ?, ?, ?)",
+          [userId, req.clientId, req.userId, "sent", emailResult?.id || null, req.isTestMode]
         );
 
         results.push({
@@ -991,8 +1085,8 @@ router.post("/board-members/invite", async (req, res) => {
         // Log failed invitation
         try {
           await db.run(
-            "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, error_message) VALUES (?, ?, ?, ?, ?)",
-            [userId, req.clientId, req.userId, "failed", err.message]
+            "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, error_message, is_test) VALUES (?, ?, ?, ?, ?, ?)",
+            [userId, req.clientId, req.userId, "failed", err.message, req.isTestMode]
           );
         } catch (logErr) {
           logger.error({ err: logErr }, "Failed to log invitation error");
@@ -1138,9 +1232,9 @@ router.get("/alerts", async (req, res) => {
        LEFT JOIN users u ON u.id = ca.user_id
        LEFT JOIN communities cm ON cm.id = u.community_id
        LEFT JOIN survey_rounds sr ON sr.id = ca.round_id
-       WHERE ca.client_id = ? AND ca.dismissed = FALSE
+       WHERE ca.client_id = ? AND ca.dismissed = FALSE AND ca.is_test = ?
        ORDER BY ca.created_at DESC`,
-      [req.clientId]
+      [req.clientId, req.isTestMode]
     );
     res.json(alerts);
   } catch (err) {
@@ -1156,8 +1250,8 @@ router.get("/alerts/round/:roundId", async (req, res) => {
 
     // Verify round belongs to client
     const round = await db.get(
-      "SELECT id FROM survey_rounds WHERE id = ? AND client_id = ?",
-      [roundId, req.clientId]
+      "SELECT id FROM survey_rounds WHERE id = ? AND client_id = ? AND is_test = ?",
+      [roundId, req.clientId, req.isTestMode]
     );
     if (!round) return res.status(404).json({ error: "Round not found" });
 
@@ -1168,9 +1262,9 @@ router.get("/alerts/round/:roundId", async (req, res) => {
        FROM critical_alerts ca
        LEFT JOIN users u ON u.id = ca.user_id
        LEFT JOIN communities cm ON cm.id = u.community_id
-       WHERE ca.round_id = ? AND ca.client_id = ?
+       WHERE ca.round_id = ? AND ca.client_id = ? AND ca.is_test = ?
        ORDER BY ca.created_at DESC`,
-      [roundId, req.clientId]
+      [roundId, req.clientId, req.isTestMode]
     );
     res.json(alerts);
   } catch (err) {
@@ -1186,14 +1280,14 @@ router.post("/alerts/:id/dismiss", async (req, res) => {
     const { reason } = req.body;
 
     const alert = await db.get(
-      "SELECT id FROM critical_alerts WHERE id = ? AND client_id = ?",
-      [alertId, req.clientId]
+      "SELECT id FROM critical_alerts WHERE id = ? AND client_id = ? AND is_test = ?",
+      [alertId, req.clientId, req.isTestMode]
     );
     if (!alert) return res.status(404).json({ error: "Alert not found" });
 
     await db.run(
-      "UPDATE critical_alerts SET dismissed = TRUE, dismissed_by = ?, dismissed_at = CURRENT_TIMESTAMP, dismiss_reason = ? WHERE id = ?",
-      [req.userId, reason || null, alertId]
+      "UPDATE critical_alerts SET dismissed = TRUE, dismissed_by = ?, dismissed_at = CURRENT_TIMESTAMP, dismiss_reason = ? WHERE id = ? AND is_test = ?",
+      [req.userId, reason || null, alertId, req.isTestMode]
     );
 
     await logActivity({
@@ -1221,14 +1315,14 @@ router.post("/alerts/:id/solve", async (req, res) => {
     const { note } = req.body;
 
     const alert = await db.get(
-      "SELECT id FROM critical_alerts WHERE id = ? AND client_id = ?",
-      [alertId, req.clientId]
+      "SELECT id FROM critical_alerts WHERE id = ? AND client_id = ? AND is_test = ?",
+      [alertId, req.clientId, req.isTestMode]
     );
     if (!alert) return res.status(404).json({ error: "Alert not found" });
 
     await db.run(
-      "UPDATE critical_alerts SET solved = TRUE, solved_by = ?, solved_at = CURRENT_TIMESTAMP, solve_note = ? WHERE id = ?",
-      [req.userId, note || null, alertId]
+      "UPDATE critical_alerts SET solved = TRUE, solved_by = ?, solved_at = CURRENT_TIMESTAMP, solve_note = ? WHERE id = ? AND is_test = ?",
+      [req.userId, note || null, alertId, req.isTestMode]
     );
 
     await logActivity({
@@ -1257,8 +1351,8 @@ router.post("/sessions/:id/finalize", async (req, res) => {
     const sessionId = Number(req.params.id);
 
     const session = await db.get(
-      "SELECT * FROM sessions WHERE id = ? AND client_id = ?",
-      [sessionId, req.clientId]
+      "SELECT * FROM sessions WHERE id = ? AND client_id = ? AND is_test = ?",
+      [sessionId, req.clientId, req.isTestMode]
     );
     if (!session) return res.status(404).json({ error: "Session not found" });
 
@@ -1276,7 +1370,7 @@ router.post("/sessions/:id/finalize", async (req, res) => {
     }
 
     // Mark complete
-    await db.run("UPDATE sessions SET completed = TRUE WHERE id = ?", [sessionId]);
+    await db.run("UPDATE sessions SET completed = TRUE WHERE id = ? AND is_test = ?", [sessionId, req.isTestMode]);
 
     // Generate summary synchronously so admin sees the result
     const summary = await generateSummary(sessionId);
@@ -1335,22 +1429,22 @@ function levenshtein(a, b) {
 // Uses fuzzy matching to prevent near-duplicate communities (e.g. "Oak Ridge" vs "Oak Ridge HOA").
 // If a close match is found, normalizes the user's community_name to the existing one.
 // Returns the canonical community_name (existing match or the new one).
-async function autoCreateCommunityIfNeeded(clientId, communityName) {
+async function autoCreateCommunityIfNeeded(clientId, communityName, isTestMode = false) {
   if (!communityName || !communityName.trim()) return null;
   const trimmed = communityName.trim();
   const normalized = trimmed.toLowerCase();
 
   // Exact match check first
   const exact = await db.get(
-    "SELECT id, community_name FROM communities WHERE client_id = ? AND LOWER(TRIM(community_name)) = LOWER(?)",
-    [clientId, trimmed]
+    "SELECT id, community_name FROM communities WHERE client_id = ? AND LOWER(TRIM(community_name)) = LOWER(?) AND is_test = ?",
+    [clientId, trimmed, isTestMode]
   );
   if (exact) return exact.community_name;
 
   // Fuzzy match: check all communities for this client
   const allCommunities = await db.all(
-    "SELECT id, community_name FROM communities WHERE client_id = ?",
-    [clientId]
+    "SELECT id, community_name FROM communities WHERE client_id = ? AND is_test = ?",
+    [clientId, isTestMode]
   );
 
   for (const c of allCommunities) {
@@ -1365,22 +1459,24 @@ async function autoCreateCommunityIfNeeded(clientId, communityName) {
 
   // No match found — create new community
   await db.run(
-    "INSERT INTO communities (client_id, community_name) VALUES (?, ?)",
-    [clientId, trimmed]
+    "INSERT INTO communities (client_id, community_name, is_test) VALUES (?, ?, ?)",
+    [clientId, trimmed, isTestMode]
   );
   return trimmed;
 }
 
 // Helper: auto-link users to communities by normalized name
-async function autoLinkUsersToCommunities(clientId) {
+async function autoLinkUsersToCommunities(clientId, isTestMode = false) {
   const result = await db.pool.query(
     `UPDATE users u SET community_id = c.id
      FROM communities c
      WHERE u.client_id = c.client_id
        AND u.client_id = $1
        AND LOWER(TRIM(u.community_name)) = LOWER(TRIM(c.community_name))
-       AND u.community_id IS NULL`,
-    [clientId]
+       AND u.community_id IS NULL
+       AND u.is_test = $2
+       AND c.is_test = $2`,
+    [clientId, isTestMode]
   );
   return result.rowCount || 0;
 }
@@ -1425,10 +1521,10 @@ router.get("/communities", async (req, res) => {
     `SELECT c.*, COUNT(u.id) as member_count
      FROM communities c
      LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
-     WHERE c.client_id = ?
+     WHERE c.client_id = ? AND c.is_test = ?
      GROUP BY c.id
      ORDER BY c.status ASC, c.community_name`,
-    [req.clientId]
+    [req.clientId, req.isTestMode]
   );
 
   // Auto-seed: if no communities exist, create them from board member community_name values
@@ -1436,29 +1532,29 @@ router.get("/communities", async (req, res) => {
     try {
       const distinctNames = await db.all(
         `SELECT DISTINCT community_name FROM users
-         WHERE client_id = ? AND community_name IS NOT NULL AND TRIM(community_name) != '' AND active = TRUE`,
-        [req.clientId]
+         WHERE client_id = ? AND community_name IS NOT NULL AND TRIM(community_name) != '' AND active = TRUE AND is_test = ?`,
+        [req.clientId, req.isTestMode]
       );
 
       for (const row of distinctNames) {
         await db.run(
-          "INSERT INTO communities (client_id, community_name) VALUES (?, ?)",
-          [req.clientId, row.community_name.trim()]
+          "INSERT INTO communities (client_id, community_name, is_test) VALUES (?, ?, ?)",
+          [req.clientId, row.community_name.trim(), req.isTestMode]
         );
       }
 
       if (distinctNames.length > 0) {
-        await autoLinkUsersToCommunities(req.clientId);
+        await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
 
         // Re-fetch with member counts
         communities = await db.all(
           `SELECT c.*, COUNT(u.id) as member_count
            FROM communities c
            LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
-           WHERE c.client_id = ?
+           WHERE c.client_id = ? AND c.is_test = ?
            GROUP BY c.id
            ORDER BY c.status ASC, c.community_name`,
-          [req.clientId]
+          [req.clientId, req.isTestMode]
         );
       }
     } catch (err) {
@@ -1477,10 +1573,10 @@ router.get("/communities/export", async (req, res) => {
             c.contract_month_to_month, c.status, COUNT(u.id) as member_count
      FROM communities c
      LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
-     WHERE c.client_id = ?
+     WHERE c.client_id = ? AND c.is_test = ?
      GROUP BY c.id
      ORDER BY c.status ASC, c.community_name`,
-    [req.clientId]
+    [req.clientId, req.isTestMode]
   );
 
   const escCSV = (val) => {
@@ -1515,14 +1611,14 @@ router.post("/communities", async (req, res) => {
     const propType = validTypes.includes(property_type) ? property_type : null;
 
     const existing = await db.get(
-      "SELECT id, community_name FROM communities WHERE LOWER(TRIM(community_name)) = ? AND client_id = ?",
-      [community_name.toLowerCase().trim(), req.clientId]
+      "SELECT id, community_name FROM communities WHERE LOWER(TRIM(community_name)) = ? AND client_id = ? AND is_test = ?",
+      [community_name.toLowerCase().trim(), req.clientId, req.isTestMode]
     );
     if (existing) return res.status(400).json({ error: "A community with that name already exists" });
 
     // Fuzzy check: warn if a similar community exists
     const allCommunities = await db.all(
-      "SELECT community_name FROM communities WHERE client_id = ?", [req.clientId]
+      "SELECT community_name FROM communities WHERE client_id = ? AND is_test = ?", [req.clientId, req.isTestMode]
     );
     const normalized = community_name.toLowerCase().trim();
     for (const c of allCommunities) {
@@ -1534,18 +1630,18 @@ router.post("/communities", async (req, res) => {
     }
 
     await db.run(
-      `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.clientId, community_name.trim(), contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false]
+      `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month, is_test)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.clientId, community_name.trim(), contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false, req.isTestMode]
     );
 
     const created = await db.get(
-      "SELECT * FROM communities WHERE client_id = ? AND LOWER(TRIM(community_name)) = ?",
-      [req.clientId, community_name.toLowerCase().trim()]
+      "SELECT * FROM communities WHERE client_id = ? AND LOWER(TRIM(community_name)) = ? AND is_test = ?",
+      [req.clientId, community_name.toLowerCase().trim(), req.isTestMode]
     );
 
     // Auto-link any board members with matching community name
-    await autoLinkUsersToCommunities(req.clientId);
+    await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
 
     res.json(created);
   } catch (err) {
@@ -1568,15 +1664,15 @@ router.post("/communities/import/preview", async (req, res) => {
 
     // Get existing community names from board members
     const existingNames = await db.all(
-      "SELECT DISTINCT community_name FROM users WHERE client_id = ? AND community_name IS NOT NULL AND active = TRUE",
-      [req.clientId]
+      "SELECT DISTINCT community_name FROM users WHERE client_id = ? AND community_name IS NOT NULL AND active = TRUE AND is_test = ?",
+      [req.clientId, req.isTestMode]
     );
     const nameList = existingNames.map((r) => r.community_name);
 
     // Get member counts per community name
     const memberCounts = await db.all(
-      "SELECT community_name, COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND community_name IS NOT NULL GROUP BY community_name",
-      [req.clientId]
+      "SELECT community_name, COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND community_name IS NOT NULL AND is_test = ? GROUP BY community_name",
+      [req.clientId, req.isTestMode]
     );
     const countMap = Object.fromEntries(memberCounts.map((r) => [r.community_name.toLowerCase().trim(), r.count]));
 
@@ -1646,14 +1742,14 @@ router.post("/communities/import", async (req, res) => {
       try {
         // Exact match first
         let existing = await db.get(
-          "SELECT id, community_name FROM communities WHERE LOWER(TRIM(community_name)) = ? AND client_id = ?",
-          [finalName.toLowerCase().trim(), req.clientId]
+          "SELECT id, community_name FROM communities WHERE LOWER(TRIM(community_name)) = ? AND client_id = ? AND is_test = ?",
+          [finalName.toLowerCase().trim(), req.clientId, req.isTestMode]
         );
 
         // Fuzzy match if no exact match and no explicit remap from preview
         if (!existing && !nameMap[row.community_name]) {
           const allCommunities = await db.all(
-            "SELECT id, community_name FROM communities WHERE client_id = ?", [req.clientId]
+            "SELECT id, community_name FROM communities WHERE client_id = ? AND is_test = ?", [req.clientId, req.isTestMode]
           );
           const normalized = finalName.toLowerCase().trim();
           for (const c of allCommunities) {
@@ -1669,15 +1765,15 @@ router.post("/communities/import", async (req, res) => {
 
         if (existing) {
           await db.run(
-            `UPDATE communities SET contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [row.contract_value, row.community_manager_name, propType, row.number_of_units, existing.id]
+            `UPDATE communities SET contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?`,
+            [row.contract_value, row.community_manager_name, propType, row.number_of_units, existing.id, req.isTestMode]
           );
           updated++;
         } else {
           await db.run(
-            `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [req.clientId, finalName, row.contract_value, row.community_manager_name, propType, row.number_of_units]
+            `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, is_test)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [req.clientId, finalName, row.contract_value, row.community_manager_name, propType, row.number_of_units, req.isTestMode]
           );
           created++;
         }
@@ -1687,7 +1783,7 @@ router.post("/communities/import", async (req, res) => {
     }
 
     // Auto-link board members to communities
-    const linked = await autoLinkUsersToCommunities(req.clientId);
+    const linked = await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
 
     res.json({ created, updated, matched_members: linked, total: created + updated, errors: errors.length > 0 ? errors : undefined });
   } catch (err) {
@@ -1698,7 +1794,7 @@ router.post("/communities/import", async (req, res) => {
 // Update a community
 router.put("/communities/:id", async (req, res) => {
   const { id } = req.params;
-  const community = await db.get("SELECT id FROM communities WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  const community = await db.get("SELECT id FROM communities WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
   if (!community) return res.status(404).json({ error: "Community not found" });
 
   const { community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month } = req.body;
@@ -1706,8 +1802,8 @@ router.put("/communities/:id", async (req, res) => {
   const propType = validTypes.includes(property_type) ? property_type : null;
 
   await db.run(
-    `UPDATE communities SET community_name = ?, contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, contract_renewal_date = ?, contract_month_to_month = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    [community_name, contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false, id]
+    `UPDATE communities SET community_name = ?, contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, contract_renewal_date = ?, contract_month_to_month = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?`,
+    [community_name, contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false, id, req.isTestMode]
   );
 
   const updated = await db.get("SELECT * FROM communities WHERE id = ?", [id]);
@@ -1717,19 +1813,19 @@ router.put("/communities/:id", async (req, res) => {
 // Deactivate/reactivate a community (toggle)
 router.delete("/communities/:id", async (req, res) => {
   const { id } = req.params;
-  const community = await db.get("SELECT id, status FROM communities WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  const community = await db.get("SELECT id, status FROM communities WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
   if (!community) return res.status(404).json({ error: "Community not found" });
 
   if (community.status === "deactivated") {
     await db.run(
-      "UPDATE communities SET status = 'active', deactivated_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [id]
+      "UPDATE communities SET status = 'active', deactivated_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+      [id, req.isTestMode]
     );
     res.json({ ok: true, status: "active" });
   } else {
     await db.run(
-      "UPDATE communities SET status = 'deactivated', deactivated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [id]
+      "UPDATE communities SET status = 'deactivated', deactivated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+      [id, req.isTestMode]
     );
     res.json({ ok: true, status: "deactivated" });
   }

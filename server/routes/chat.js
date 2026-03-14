@@ -86,14 +86,16 @@ Do NOT include any tag until the user has responded to your review question.`;
   }
 
   // Check for prior sessions from this user to give the AI context
+  // Filter by matching is_test so test sessions only see test history and vice versa
   const priorSessions = await db.all(
     `SELECT s.nps_score, s.summary, s.created_at
      FROM sessions s
      WHERE s.email = ? AND s.id != ? AND s.completed = TRUE AND s.summary IS NOT NULL AND s.client_id = ?
        AND s.is_mock IS NOT TRUE
+       AND COALESCE(s.is_test, FALSE) = COALESCE(?, FALSE)
      ORDER BY s.created_at DESC
      LIMIT 5`,
-    [session.email, Number(session_id), session.client_id]
+    [session.email, Number(session_id), session.client_id, session.is_test]
   );
 
   if (priorSessions.length > 0) {
@@ -135,6 +137,7 @@ Do NOT include any tag until the user has responded to your review question.`;
     );
 
     // Fire critical alert detection asynchronously (skip for mock sessions)
+    // Test sessions still run detection (sandbox purpose) but email is suppressed inside
     if (!session.is_mock) {
       detectCriticalAlert(message, session, savedMsg?.id).catch((err) =>
         logger.error("Critical alert detection error: %s", err.message)
@@ -220,6 +223,12 @@ or
   const threshold = thresholdSetting ? Number(thresholdSetting.value) : 0;
   const npsSession = await db.get("SELECT nps_score FROM sessions WHERE id = ?", [session.id]);
   const willSendDetractorEmail = threshold > 0 && npsSession?.nps_score !== null && npsSession.nps_score < threshold;
+
+  // Suppress email notifications for test sessions (alert record is still created above)
+  if (session.is_test) {
+    logger.info(`Skipping critical alert email for test session ${session.id}`);
+    return;
+  }
 
   if (willSendDetractorEmail) {
     logger.info(`Skipping separate critical alert email for session ${session.id} — will be combined into detractor email`);

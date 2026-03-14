@@ -15,17 +15,17 @@ router.get("/validate", async (req, res) => {
   const email = (req.query.email || "").trim().toLowerCase();
   if (!email) return res.status(400).json({ valid: false, error: "Email is required" });
 
-  const user = await db.get("SELECT id, first_name, client_id FROM users WHERE LOWER(email) = ?", [email]);
+  const user = await db.get("SELECT id, first_name, client_id, is_test FROM users WHERE LOWER(email) = ?", [email]);
   if (!user) return res.json({ valid: false });
 
-  res.json({ valid: true, user: { id: user.id, first_name: user.first_name, client_id: user.client_id } });
+  res.json({ valid: true, user: { id: user.id, first_name: user.first_name, client_id: user.client_id, is_test: user.is_test } });
 });
 
 // List all users (admin) - filtered by client
 router.get("/", requireClientAdmin, async (req, res) => {
   const users = await db.all(
-    "SELECT * FROM users WHERE client_id = ? AND active = TRUE ORDER BY updated_at DESC",
-    [req.clientId]
+    "SELECT * FROM users WHERE client_id = ? AND active = TRUE AND is_test = ? ORDER BY updated_at DESC",
+    [req.clientId, req.isTestMode]
   );
   res.json(users);
 });
@@ -49,6 +49,14 @@ router.post("/import", requireClientAdmin, upload.single("file"), async (req, re
 
   if (emailIdx === -1) return res.status(400).json({ error: "CSV must have an 'email' column" });
 
+  // Enforce 25-member cap in test mode
+  if (req.isTestMode) {
+    const testCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = TRUE", [req.clientId]);
+    if ((testCount?.count || 0) >= 25) {
+      return res.status(403).json({ error: "Test mode is limited to 25 board members." });
+    }
+  }
+
   // Check member limit before import
   const subscription = await db.get(
     `SELECT COALESCE(cs.custom_member_limit, sp.member_limit) as member_limit FROM client_subscriptions cs
@@ -56,8 +64,12 @@ router.post("/import", requireClientAdmin, upload.single("file"), async (req, re
      WHERE cs.client_id = ? AND cs.status = 'active'`,
     [req.clientId]
   );
-  const currentCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE", [req.clientId]);
+  const currentCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = ?", [req.clientId, req.isTestMode]);
   let remainingSlots = subscription ? subscription.member_limit - (currentCount?.count || 0) : Infinity;
+  if (req.isTestMode) {
+    const testCount = currentCount?.count || 0;
+    remainingSlots = Math.min(remainingSlots, 25 - testCount);
+  }
 
   let created = 0;
   let updated = 0;
@@ -76,11 +88,11 @@ router.post("/import", requireClientAdmin, upload.single("file"), async (req, re
     const firstName = firstNameIdx >= 0 ? (cols[firstNameIdx] || "").trim() : "";
     const lastName = lastNameIdx >= 0 ? (cols[lastNameIdx] || "").trim() : "";
 
-    const existing = await db.get("SELECT id, active FROM users WHERE LOWER(email) = ? AND client_id = ?", [email, req.clientId]);
+    const existing = await db.get("SELECT id, active FROM users WHERE LOWER(email) = ? AND client_id = ? AND is_test = ?", [email, req.clientId, req.isTestMode]);
     if (existing) {
       await db.run(
-        "UPDATE users SET first_name = ?, last_name = ?, community_name = ?, management_company = ?, active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        [firstName, lastName, community, company, existing.id]
+        "UPDATE users SET first_name = ?, last_name = ?, community_name = ?, management_company = ?, active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+        [firstName, lastName, community, company, existing.id, req.isTestMode]
       );
       updated++;
     } else {
@@ -89,8 +101,8 @@ router.post("/import", requireClientAdmin, upload.single("file"), async (req, re
         continue;
       }
       await db.run(
-        "INSERT INTO users (first_name, last_name, email, community_name, management_company, client_id) VALUES (?, ?, ?, ?, ?, ?)",
-        [firstName, lastName, email, community, company, req.clientId]
+        "INSERT INTO users (first_name, last_name, email, community_name, management_company, client_id, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [firstName, lastName, email, community, company, req.clientId, req.isTestMode]
       );
       created++;
       remainingSlots--;
@@ -108,6 +120,14 @@ router.post("/", requireClientAdmin, async (req, res) => {
     return res.status(400).json({ error: "Valid email is required" });
   }
 
+  // Enforce 25-member cap in test mode
+  if (req.isTestMode) {
+    const testCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = TRUE", [req.clientId]);
+    if ((testCount?.count || 0) >= 25) {
+      return res.status(403).json({ error: "Test mode is limited to 25 board members." });
+    }
+  }
+
   // Check member limit
   const subscription = await db.get(
     `SELECT COALESCE(cs.custom_member_limit, sp.member_limit) as member_limit FROM client_subscriptions cs
@@ -116,7 +136,7 @@ router.post("/", requireClientAdmin, async (req, res) => {
     [req.clientId]
   );
   if (subscription) {
-    const currentCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE", [req.clientId]);
+    const currentCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = ?", [req.clientId, req.isTestMode]);
     if ((currentCount?.count || 0) >= subscription.member_limit) {
       return res.status(403).json({
         error: `Board member limit reached (${subscription.member_limit}). Please upgrade your plan to add more board members.`
@@ -125,39 +145,40 @@ router.post("/", requireClientAdmin, async (req, res) => {
   }
 
   // Check if email exists (including inactive — reactivate if so)
-  const existing = await db.get("SELECT id, active FROM users WHERE LOWER(email) = ? AND client_id = ?", [trimmedEmail, req.clientId]);
+  const existing = await db.get("SELECT id, active FROM users WHERE LOWER(email) = ? AND client_id = ? AND is_test = ?", [trimmedEmail, req.clientId, req.isTestMode]);
   if (existing && existing.active) {
     return res.status(409).json({ error: "A user with this email already exists" });
   }
 
   if (existing && !existing.active) {
     await db.run(
-      "UPDATE users SET active = TRUE, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [(first_name || "").trim(), (last_name || "").trim(), (community_name || "").trim(), (management_company || "").trim(), existing.id]
+      "UPDATE users SET active = TRUE, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+      [(first_name || "").trim(), (last_name || "").trim(), (community_name || "").trim(), (management_company || "").trim(), existing.id, req.isTestMode]
     );
-    const reactivated = await db.get("SELECT * FROM users WHERE id = ?", [existing.id]);
+    const reactivated = await db.get("SELECT * FROM users WHERE id = ? AND is_test = ?", [existing.id, req.isTestMode]);
     return res.json(reactivated);
   }
 
   await db.run(
-    "INSERT INTO users (first_name, last_name, email, community_name, management_company, client_id) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO users (first_name, last_name, email, community_name, management_company, client_id, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
     [
       (first_name || "").trim(),
       (last_name || "").trim(),
       trimmedEmail,
       (community_name || "").trim(),
       (management_company || "").trim(),
-      req.clientId
+      req.clientId,
+      req.isTestMode
     ]
   );
-  const user = await db.get("SELECT * FROM users WHERE LOWER(email) = ? AND client_id = ?", [trimmedEmail, req.clientId]);
+  const user = await db.get("SELECT * FROM users WHERE LOWER(email) = ? AND client_id = ? AND is_test = ?", [trimmedEmail, req.clientId, req.isTestMode]);
   res.json(user);
 });
 
 // Update user (admin) - scoped to client
 router.put("/:id", requireClientAdmin, async (req, res) => {
   const id = Number(req.params.id);
-  const existing = await db.get("SELECT * FROM users WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  const existing = await db.get("SELECT * FROM users WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
   if (!existing) return res.status(404).json({ error: "User not found" });
 
   const { email, first_name, last_name, community_name, management_company } = req.body;
@@ -167,7 +188,7 @@ router.put("/:id", requireClientAdmin, async (req, res) => {
   }
 
   // Check for email conflict with another user in this client
-  const conflict = await db.get("SELECT id FROM users WHERE LOWER(email) = ? AND id != ? AND client_id = ?", [trimmedEmail, id, req.clientId]);
+  const conflict = await db.get("SELECT id FROM users WHERE LOWER(email) = ? AND id != ? AND client_id = ? AND is_test = ?", [trimmedEmail, id, req.clientId, req.isTestMode]);
   if (conflict) {
     return res.status(409).json({ error: "Another user with this email already exists" });
   }
@@ -176,7 +197,7 @@ router.put("/:id", requireClientAdmin, async (req, res) => {
   const emailChanged = oldEmail !== trimmedEmail;
 
   await db.run(
-    "UPDATE users SET first_name = ?, last_name = ?, email = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    "UPDATE users SET first_name = ?, last_name = ?, email = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
     [
       (first_name || "").trim(),
       (last_name || "").trim(),
@@ -184,21 +205,22 @@ router.put("/:id", requireClientAdmin, async (req, res) => {
       (community_name || "").trim(),
       (management_company || "").trim(),
       id,
+      req.isTestMode,
     ]
   );
-  const updated = await db.get("SELECT * FROM users WHERE id = ?", [id]);
+  const updated = await db.get("SELECT * FROM users WHERE id = ? AND is_test = ?", [id, req.isTestMode]);
 
   // If email changed, check for an active round so we can prompt re-enrollment
   if (emailChanged) {
     const activeRound = await db.get(
-      "SELECT id, round_number FROM survey_rounds WHERE client_id = ? AND status = 'in_progress' LIMIT 1",
-      [req.clientId]
+      "SELECT id, round_number FROM survey_rounds WHERE client_id = ? AND status = 'in_progress' AND is_test = ? LIMIT 1",
+      [req.clientId, req.isTestMode]
     );
     if (activeRound) {
       // Check if user already has an active session for this round
       const existingSession = await db.get(
-        "SELECT id FROM sessions WHERE user_id = ? AND round_id = ? AND client_id = ?",
-        [id, activeRound.id, req.clientId]
+        "SELECT id FROM sessions WHERE user_id = ? AND round_id = ? AND client_id = ? AND is_test = ?",
+        [id, activeRound.id, req.clientId, req.isTestMode]
       );
       if (!existingSession) {
         return res.json({ ...updated, emailChanged: true, activeRound: { id: activeRound.id, round_number: activeRound.round_number } });
@@ -214,31 +236,31 @@ router.delete("/:id", requireClientAdmin, async (req, res) => {
   const id = Number(req.params.id);
 
   // Verify user belongs to this client
-  const user = await db.get("SELECT id FROM users WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  const user = await db.get("SELECT id FROM users WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
   if (!user) {
     return res.status(404).json({ error: "User not found" });
   }
 
-  await db.run("UPDATE users SET active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
+  await db.run("UPDATE users SET active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?", [id, req.isTestMode]);
   res.json({ ok: true });
 });
 
 // Enroll a member in the active round (e.g. after email correction)
 router.post("/:id/enroll", requireClientAdmin, async (req, res) => {
   const id = Number(req.params.id);
-  const member = await db.get("SELECT * FROM users WHERE id = ? AND client_id = ? AND active = TRUE", [id, req.clientId]);
+  const member = await db.get("SELECT * FROM users WHERE id = ? AND client_id = ? AND active = TRUE AND is_test = ?", [id, req.clientId, req.isTestMode]);
   if (!member) return res.status(404).json({ error: "Member not found" });
 
   const activeRound = await db.get(
-    "SELECT id, round_number, closes_at FROM survey_rounds WHERE client_id = ? AND status = 'in_progress' LIMIT 1",
-    [req.clientId]
+    "SELECT id, round_number, closes_at FROM survey_rounds WHERE client_id = ? AND status = 'in_progress' AND is_test = ? LIMIT 1",
+    [req.clientId, req.isTestMode]
   );
   if (!activeRound) return res.status(400).json({ error: "No active round" });
 
   // Check not already invited for this round (allow resend if bounced/complained)
   const existingInvite = await db.get(
-    "SELECT id, delivery_status FROM invitation_logs WHERE user_id = ? AND round_id = ? AND client_id = ? AND email_status = 'sent' ORDER BY sent_at DESC LIMIT 1",
-    [id, activeRound.id, req.clientId]
+    "SELECT id, delivery_status FROM invitation_logs WHERE user_id = ? AND round_id = ? AND client_id = ? AND email_status = 'sent' AND is_test = ? ORDER BY sent_at DESC LIMIT 1",
+    [id, activeRound.id, req.clientId, req.isTestMode]
   );
   const isResend = existingInvite && (existingInvite.delivery_status === "bounced" || existingInvite.delivery_status === "complained");
   if (existingInvite && !isResend) return res.status(409).json({ error: "Already enrolled in this round" });
@@ -248,8 +270,8 @@ router.post("/:id/enroll", requireClientAdmin, async (req, res) => {
     const expiresAt = activeRound.closes_at || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
     await db.run(
-      "UPDATE users SET invitation_token = ?, invitation_token_expires = ?, last_invited_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [token, expiresAt, id]
+      "UPDATE users SET invitation_token = ?, invitation_token_expires = ?, last_invited_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+      [token, expiresAt, id, req.isTestMode]
     );
 
     // Get company name for email template
@@ -263,15 +285,15 @@ router.post("/:id/enroll", requireClientAdmin, async (req, res) => {
     });
 
     await db.run(
-      "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, round_id, resend_email_id) VALUES (?, ?, ?, ?, ?, ?)",
-      [id, req.clientId, req.userId, "sent", activeRound.id, emailResult?.id || null]
+      "INSERT INTO invitation_logs (user_id, client_id, sent_by, email_status, round_id, resend_email_id, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [id, req.clientId, req.userId, "sent", activeRound.id, emailResult?.id || null, req.isTestMode]
     );
 
     // Update members_invited count on the round (skip if resending to existing member)
     if (!isResend) {
       await db.run(
-        "UPDATE survey_rounds SET members_invited = members_invited + 1 WHERE id = ?",
-        [activeRound.id]
+        "UPDATE survey_rounds SET members_invited = members_invited + 1 WHERE id = ? AND is_test = ?",
+        [activeRound.id, req.isTestMode]
       );
     }
 

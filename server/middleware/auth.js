@@ -27,6 +27,10 @@ export function requireClientAdmin(req, res, next) {
   req.userId = req.session.user.id;
   req.userEmail = req.session.user.email;
 
+  // Test mode: only active when feature flag is enabled AND admin has toggled to test
+  const featureEnabled = process.env.FEATURE_TEST_MODE === "true";
+  req.isTestMode = featureEnabled && req.session.user.current_mode === "test";
+
   next();
 }
 

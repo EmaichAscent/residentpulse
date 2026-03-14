@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import HelpPanel from "../components/HelpPanel";
+import TestModeToggle from "../components/TestModeToggle";
 
 export default function AdminPage() {
   const [user, setUser] = useState(null);
@@ -72,6 +73,10 @@ export default function AdminPage() {
     }
   };
 
+  const handleModeChange = (newMode) => {
+    window.location.reload();
+  };
+
   const isPaidTier = user?.plan_name && user.plan_name !== "free";
 
   const TABS = [
@@ -102,6 +107,23 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* Test Mode Banner */}
+      {user?.current_mode === "test" && user?.test_mode_feature && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
+          <div className="max-w-4xl mx-auto flex justify-between items-center">
+            <p className="text-sm text-amber-800">
+              <span className="font-semibold">Test Mode</span> — You're viewing sandbox data. No real emails will be sent.
+            </p>
+            <button
+              onClick={() => handleModeChange("live")}
+              className="text-sm text-amber-900 hover:text-amber-700 font-medium underline"
+            >
+              Switch to Live Mode
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="shadow-sm" style={{ backgroundColor: "var(--cam-blue)" }}>
         <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
@@ -119,9 +141,12 @@ export default function AdminPage() {
               <p className="text-lg text-white/90 font-medium">{user?.company_name || "Loading..."}</p>
             </div>
           </div>
-          <button onClick={handleLogout} className="px-4 py-2 text-sm font-semibold text-white border border-white/40 rounded-lg transition hover:bg-white/10">
-            Logout
-          </button>
+          <div className="flex items-center gap-3">
+            <TestModeToggle user={user} onModeChange={handleModeChange} />
+            <button onClick={handleLogout} className="px-4 py-2 text-sm font-semibold text-white border border-white/40 rounded-lg transition hover:bg-white/10">
+              Logout
+            </button>
+          </div>
         </div>
       </div>
 

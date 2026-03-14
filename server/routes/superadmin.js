@@ -33,9 +33,9 @@ router.get("/dashboard", async (req, res) => {
   try {
     const totalClients = await db.get("SELECT COUNT(*) as count FROM clients");
     const activeClients = await db.get("SELECT COUNT(*) as count FROM clients WHERE status = 'active'");
-    const activeRounds = await db.get("SELECT COUNT(*) as count FROM survey_rounds WHERE status = 'in_progress'");
-    const totalResponses = await db.get("SELECT COUNT(*) as count FROM sessions WHERE completed = TRUE AND is_mock IS NOT TRUE");
-    const totalMembers = await db.get("SELECT COUNT(*) as count FROM users WHERE active = TRUE");
+    const activeRounds = await db.get("SELECT COUNT(*) as count FROM survey_rounds WHERE status = 'in_progress' AND is_test = FALSE");
+    const totalResponses = await db.get("SELECT COUNT(*) as count FROM sessions WHERE completed = TRUE AND is_mock IS NOT TRUE AND is_test = FALSE");
+    const totalMembers = await db.get("SELECT COUNT(*) as count FROM users WHERE active = TRUE AND is_test = FALSE");
 
     // Engagement warnings: clients with no admin login in 30+ days (or never)
     const warnings = await db.all(
@@ -95,6 +95,7 @@ router.get("/activity-log", async (req, res) => {
 router.get("/clients", async (req, res) => {
   const clients = await db.all(
     `SELECT c.id, c.company_name, c.client_code, c.status, c.created_at,
+            c.test_mode_activated_at,
             sp.display_name as plan_name, sp.name as plan_key,
             MAX(ca.last_login_at) as last_activity,
             COUNT(ca.id) as admin_count
@@ -102,7 +103,7 @@ router.get("/clients", async (req, res) => {
      LEFT JOIN client_admins ca ON ca.client_id = c.id
      LEFT JOIN client_subscriptions cs ON cs.client_id = c.id
      LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
-     GROUP BY c.id, c.company_name, c.client_code, c.status, c.created_at, sp.display_name, sp.name
+     GROUP BY c.id, c.company_name, c.client_code, c.status, c.created_at, c.test_mode_activated_at, sp.display_name, sp.name
      ORDER BY c.created_at DESC`
   );
   res.json(clients);
@@ -795,6 +796,7 @@ router.get("/clients/:id/detail", async (req, res) => {
       admins,
       member_count: memberCount?.count || 0,
       community_count: communityCount?.count || 0,
+      test_mode_active: client.test_mode_activated_at != null,
       latest_interview: latestInterview,
       prompt_supplement: promptSupplement?.value || null,
       survey_rounds: surveyRounds,

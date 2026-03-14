@@ -50,10 +50,14 @@ const STOP_WORDS = new Set([
 export async function generateRoundInsights(roundId, clientId) {
   logger.info(`Generating insights for round ${roundId}, client ${clientId}...`);
 
+  // Fetch the round to determine its is_test value
+  const round = await db.get("SELECT is_test FROM survey_rounds WHERE id = ?", [roundId]);
+  const roundIsTest = round ? !!round.is_test : false;
+
   // Auto-finalize abandoned sessions before generating insights
   await finalizeStaleSessionsForRound(roundId, clientId);
 
-  // Fetch completed sessions with summaries for this round
+  // Fetch completed sessions with summaries for this round, matching is_test
   const sessions = await db.all(
     `SELECT s.id, s.email, s.nps_score, s.summary,
             COALESCE(sc.community_name, s.community_name) as community_name,
@@ -61,8 +65,9 @@ export async function generateRoundInsights(roundId, clientId) {
      FROM sessions s
      LEFT JOIN users u ON u.id = s.user_id
      LEFT JOIN communities sc ON sc.id = s.community_id
-     WHERE s.round_id = ? AND s.client_id = ? AND s.completed = TRUE AND s.summary IS NOT NULL AND s.is_mock IS NOT TRUE`,
-    [roundId, clientId]
+     WHERE s.round_id = ? AND s.client_id = ? AND s.completed = TRUE AND s.summary IS NOT NULL AND s.is_mock IS NOT TRUE
+       AND COALESCE(s.is_test, FALSE) = ?`,
+    [roundId, clientId, roundIsTest]
   );
 
   if (sessions.length === 0) {
@@ -276,12 +281,17 @@ Deduplicate overlapping items. Prioritize clarity and actionability. Only output
  * Generate word frequency data from board member messages in a round.
  */
 export async function generateWordFrequencies(roundId, clientId) {
+  // Fetch the round to determine its is_test value
+  const round = await db.get("SELECT is_test FROM survey_rounds WHERE id = ?", [roundId]);
+  const roundIsTest = round ? !!round.is_test : false;
+
   const messages = await db.all(
     `SELECT m.content
      FROM messages m
      JOIN sessions s ON s.id = m.session_id
-     WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND m.role = 'user'`,
-    [roundId, clientId]
+     WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND m.role = 'user'
+       AND COALESCE(s.is_test, FALSE) = ?`,
+    [roundId, clientId, roundIsTest]
   );
 
   if (messages.length === 0) return;

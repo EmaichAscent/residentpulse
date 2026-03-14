@@ -56,11 +56,12 @@ async function concludeExpiredRounds() {
  * Send reminder emails to non-responders at day 10 and day 20
  */
 async function sendReminders() {
-  // Day 10 reminders
+  // Day 10 reminders (skip test rounds)
   const day10Rounds = await db.all(
     `SELECT * FROM survey_rounds
      WHERE status = 'in_progress'
        AND reminder_10_sent = false
+       AND is_test = FALSE
        AND launched_at <= CURRENT_TIMESTAMP - INTERVAL '10 days'`
   );
 
@@ -70,11 +71,12 @@ async function sendReminders() {
     logger.info(`Day 10 reminders sent for round ${round.round_number} (client ${round.client_id})`);
   }
 
-  // Day 20 reminders
+  // Day 20 reminders (skip test rounds)
   const day20Rounds = await db.all(
     `SELECT * FROM survey_rounds
      WHERE status = 'in_progress'
        AND reminder_20_sent = false
+       AND is_test = FALSE
        AND launched_at <= CURRENT_TIMESTAMP - INTERVAL '20 days'`
   );
 
@@ -136,11 +138,12 @@ async function sendRoundReminders(round, dayNumber) {
  * Notify admins when a planned round is approaching (14 days before and day-of)
  */
 async function sendApproachingRoundReminders() {
-  // 14-day reminder
+  // 14-day reminder (skip test rounds)
   const day14Rounds = await db.all(
     `SELECT id, client_id, round_number, scheduled_date FROM survey_rounds
      WHERE status = 'planned'
        AND admin_reminder_14_sent = false
+       AND is_test = FALSE
        AND scheduled_date <= CURRENT_DATE + INTERVAL '14 days'
        AND scheduled_date > CURRENT_DATE`
   );
@@ -157,11 +160,12 @@ async function sendApproachingRoundReminders() {
     logger.info(`14-day approaching reminder sent for round ${round.round_number} (client ${round.client_id})`);
   }
 
-  // Day-of reminder
+  // Day-of reminder (skip test rounds)
   const dayOfRounds = await db.all(
     `SELECT id, client_id, round_number, scheduled_date FROM survey_rounds
      WHERE status = 'planned'
        AND admin_reminder_0_sent = false
+       AND is_test = FALSE
        AND scheduled_date <= CURRENT_DATE`
   );
 
