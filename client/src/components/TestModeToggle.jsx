@@ -63,10 +63,10 @@ export default function TestModeToggle({ user, onModeChange }) {
       <button
         onClick={handleToggle}
         disabled={switching}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
+        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition border ${
           isTest
             ? "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
-            : "bg-white/15 text-white border-white/30 hover:bg-white/25"
+            : "text-white border-white/40 hover:bg-white/10"
         }`}
       >
         <span className={`w-2 h-2 rounded-full ${isTest ? "bg-amber-500" : "bg-green-400"}`} />

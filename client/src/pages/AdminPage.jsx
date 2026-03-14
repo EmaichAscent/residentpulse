@@ -132,7 +132,7 @@ export default function AdminPage() {
               <img
                 src={logoUrl}
                 alt={user?.company_name || "Company logo"}
-                className="h-10 max-w-[140px] object-contain rounded bg-white/10 p-1"
+                className="h-10 max-w-[140px] object-contain rounded bg-white p-1"
                 onError={(e) => { e.target.style.display = "none"; }}
               />
             )}
