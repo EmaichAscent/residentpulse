@@ -555,6 +555,19 @@ export default function RoundsLanding() {
                 </div>
               </div>
             </div>
+
+            {/* Test Mode CTA (only when feature is enabled and user is in live mode) */}
+            {user?.test_mode_feature && user?.current_mode !== "test" && (
+              <div className="bg-amber-50 rounded-2xl border border-amber-200 p-5">
+                <h3 className="text-sm font-bold text-amber-900 mb-2">Want to try it first?</h3>
+                <p className="text-xs text-amber-700 leading-relaxed mb-3">
+                  Switch to <span className="font-semibold">Test Mode</span> to preview the full survey experience with sample data. No real emails sent — completely safe.
+                </p>
+                <p className="text-xs text-amber-600">
+                  Use the <span className="font-semibold">Live</span> toggle in the header to get started.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

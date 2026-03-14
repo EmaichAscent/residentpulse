@@ -18,6 +18,10 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS test_mode_activated_at TIMESTAMP;
 ALTER TABLE client_admins ADD COLUMN IF NOT EXISTS current_mode TEXT DEFAULT 'live';
 ALTER TABLE client_admins ADD COLUMN IF NOT EXISTS first_live_switch_confirmed BOOLEAN DEFAULT FALSE;
 
+-- Expand invitation_logs email_status check to allow 'simulated' for test mode
+ALTER TABLE invitation_logs DROP CONSTRAINT IF EXISTS invitation_logs_email_status_check;
+ALTER TABLE invitation_logs ADD CONSTRAINT invitation_logs_email_status_check CHECK(email_status IN ('sent', 'failed', 'simulated'));
+
 -- Composite indexes for efficient mode-filtered queries
 CREATE INDEX IF NOT EXISTS idx_users_client_test ON users(client_id, is_test);
 CREATE INDEX IF NOT EXISTS idx_communities_client_test ON communities(client_id, is_test);
