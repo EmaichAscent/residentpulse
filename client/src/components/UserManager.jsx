@@ -124,13 +124,11 @@ export default function UserManager() {
   const [sortDir, setSortDir] = useState("asc");
   const [deactivateTarget, setDeactivateTarget] = useState(null);
   const [surveyLinkLoading, setSurveyLinkLoading] = useState(null);
-  const [surveyLinkCopied, setSurveyLinkCopied] = useState(null);
 
   const isTestMode = user?.test_mode_feature && user?.current_mode === "test";
 
-  const handleGetSurveyLink = async (memberId) => {
+  const handleOpenSurvey = async (memberId) => {
     setSurveyLinkLoading(memberId);
-    setSurveyLinkCopied(null);
     try {
       const res = await fetch(`/api/admin/board-members/${memberId}/survey-link`, {
         method: "POST",
@@ -138,9 +136,7 @@ export default function UserManager() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate link");
-      await navigator.clipboard.writeText(data.url);
-      setSurveyLinkCopied(memberId);
-      setTimeout(() => setSurveyLinkCopied(null), 3000);
+      window.open(data.url, "_blank");
     } catch (err) {
       alert(err.message);
     } finally {
@@ -740,21 +736,12 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                       <div className="flex gap-1">
                         {isTestMode && (
                           <button
-                            onClick={() => handleGetSurveyLink(u.id)}
+                            onClick={() => handleOpenSurvey(u.id)}
                             disabled={surveyLinkLoading === u.id}
-                            className={`p-1 transition ${surveyLinkCopied === u.id ? "text-green-500" : "text-gray-300 hover:text-green-500"}`}
-                            title={surveyLinkCopied === u.id ? "Link copied!" : "Copy survey link"}
+                            className="px-2 py-0.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition disabled:opacity-50 whitespace-nowrap"
+                            title="Open survey as this member in a new tab"
                           >
-                            {surveyLinkCopied === u.id ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-                              </svg>
-                            ) : (
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                                <path d="M12.232 4.232a2.5 2.5 0 013.536 3.536l-1.225 1.224a.75.75 0 001.061 1.06l1.224-1.224a4 4 0 00-5.656-5.656l-3 3a4 4 0 00.225 5.865.75.75 0 00.977-1.138 2.5 2.5 0 01-.142-3.667l3-3z" />
-                                <path d="M11.603 7.963a.75.75 0 00-.977 1.138 2.5 2.5 0 01.142 3.667l-3 3a2.5 2.5 0 01-3.536-3.536l1.225-1.224a.75.75 0 00-1.061-1.06l-1.224 1.224a4 4 0 105.656 5.656l3-3a4 4 0 00-.225-5.865z" />
-                              </svg>
-                            )}
+                            {surveyLinkLoading === u.id ? "Opening..." : "Take Survey"}
                           </button>
                         )}
                         <button

@@ -561,8 +561,34 @@ export default function RoundsLanding() {
     );
   }
 
+  const isTestMode = user?.test_mode_feature && user?.current_mode === "test";
+
   return (
     <div className="space-y-6">
+      {/* Test Mode Guide */}
+      {isTestMode && activeRounds.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+          <h3 className="text-sm font-bold text-amber-900 mb-3">Try the Full Survey Experience</h3>
+          <div className="space-y-2.5">
+            <div className="flex gap-3 items-start">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold">1</span>
+              <p className="text-sm text-amber-800">
+                Go to <button onClick={() => navigate("/admin/members")} className="font-semibold underline hover:text-amber-600">Members</button> and click <span className="font-semibold">Take Survey</span> next to any test member
+              </p>
+            </div>
+            <div className="flex gap-3 items-start">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold">2</span>
+              <p className="text-sm text-amber-800">Complete the AI interview — rate, chat, and finish just like a real board member would</p>
+            </div>
+            <div className="flex gap-3 items-start">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold">3</span>
+              <p className="text-sm text-amber-800">Come back here to see results populate in the dashboard — NPS scores, summaries, and insights</p>
+            </div>
+          </div>
+          <p className="text-xs text-amber-600 mt-3">Do this for multiple members to see how a real round looks with varied responses.</p>
+        </div>
+      )}
+
       {/* Active Rounds */}
       {activeRounds.map((round) => {
         const responded = round.responses_completed || 0;
