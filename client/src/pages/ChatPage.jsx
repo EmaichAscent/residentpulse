@@ -15,6 +15,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [npsSubmitted, setNpsSubmitted] = useState(false);
+  const [npsScore, setNpsScore] = useState(null);
   const [completed, setCompleted] = useState(false);
   const [listening, setListening] = useState(false);
   const [speechEnabled, setSpeechEnabled] = useState(!!synth);
@@ -50,6 +51,7 @@ export default function ChatPage() {
         // Set state based on session data
         if (data.session.nps_score !== null) {
           setNpsSubmitted(true);
+          setNpsScore(data.session.nps_score);
         }
         if (data.session.completed) {
           setCompleted(true);
@@ -148,6 +150,7 @@ export default function ChatPage() {
 
   const handleNpsSelect = async (score) => {
     setNpsSubmitted(true);
+    setNpsScore(score);
 
     // Save NPS score to session
     await fetch(`/api/sessions/${sessionId}/nps`, {
@@ -319,8 +322,8 @@ export default function ChatPage() {
           <div className="text-center py-6">
             <p className="text-lg text-gray-500">Session complete. Thank you for your feedback!</p>
 
-            {/* Google Review CTA — big button if yes/not asked, subtle link if declined */}
-            {googleReviewUrl && reviewResponse !== "no" && (
+            {/* Google Review CTA — only for promoters (NPS 9-10) */}
+            {googleReviewUrl && npsScore >= 9 && reviewResponse !== "no" && (
               <a
                 href={googleReviewUrl}
                 target="_blank"
@@ -335,7 +338,7 @@ export default function ChatPage() {
               </a>
             )}
 
-            {googleReviewUrl && reviewResponse === "no" && (
+            {googleReviewUrl && npsScore >= 9 && reviewResponse === "no" && (
               <p className="mt-4">
                 <a
                   href={googleReviewUrl}
