@@ -334,7 +334,7 @@ export default function AccountSettings() {
                 />
               )}
               <div className="flex items-center gap-2">
-                <label className="px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition text-gray-600">
+                <label className="px-3 py-1.5 text-sm font-medium rounded-lg cursor-pointer transition text-white" style={{ backgroundColor: "var(--cam-green, #1AB06E)" }}>
                   {logoUploading ? "Uploading..." : (client?.has_logo || logoPreview) ? "Replace" : "Upload Logo"}
                   <input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={handleLogoSelect} disabled={logoUploading} className="hidden" />
                 </label>
