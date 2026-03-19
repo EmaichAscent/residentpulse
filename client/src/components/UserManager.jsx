@@ -379,8 +379,8 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
     return list;
   }, [users, search, sortKey, sortDir]);
 
-  // Show email delivery column if any user has invitation status (active round exists)
-  const hasActiveRound = useMemo(() => users.some((u) => u.invite_status), [users]);
+  // Show email delivery column if any user has delivery data (from any round)
+  const hasDeliveryData = useMemo(() => users.some((u) => u.invite_status || u.delivery_status), [users]);
 
   // Unique community names for autocomplete (merged from board members + communities table)
   const communityOptions = useMemo(() => {
@@ -603,7 +603,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                     </button>
                   </th>
                 ))}
-                {hasActiveRound && <th className="px-5 py-3 w-24">Invite</th>}
+                {hasDeliveryData && <th className="px-5 py-3 w-24">Email</th>}
                 <th className="px-5 py-3 w-20"></th>
               </tr>
             </thead>
@@ -614,7 +614,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                     <td className="px-5 py-3 text-center">
                       <TrendArrow sessions={sessions} email={u.email} />
                     </td>
-                    <td className="px-5 py-2" colSpan={hasActiveRound ? 5 : 4}>
+                    <td className="px-5 py-2" colSpan={hasDeliveryData ? 5 : 4}>
                       <div className="space-y-2">
                         <div className="grid grid-cols-2 gap-2">
                           <input
@@ -689,7 +689,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                     <td className="px-5 py-3 text-gray-700">{u.email}</td>
                     <td className="px-5 py-3 text-gray-500">{u.community_name || "—"}</td>
                     <td className="px-5 py-3 text-gray-500">{u.management_company || "—"}</td>
-                    {hasActiveRound && (
+                    {hasDeliveryData && (
                       <td className="px-5 py-3">
                         {u.delivery_status === "delivered" ? (
                           <span className="inline-flex items-center gap-1 text-xs text-green-700">
