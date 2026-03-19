@@ -150,7 +150,7 @@ async function sendApproachingRoundReminders() {
 
   for (const round of day14Rounds) {
     const daysUntil = Math.ceil((new Date(round.scheduled_date) - new Date()) / (1000 * 60 * 60 * 24));
-    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE", [round.client_id]);
+    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = FALSE", [round.client_id]);
     await notifyRoundApproaching({
       clientId: round.client_id, roundNumber: round.round_number,
       scheduledDate: round.scheduled_date, daysUntil,
@@ -170,7 +170,7 @@ async function sendApproachingRoundReminders() {
   );
 
   for (const round of dayOfRounds) {
-    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE", [round.client_id]);
+    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = FALSE", [round.client_id]);
     await notifyRoundApproaching({
       clientId: round.client_id, roundNumber: round.round_number,
       scheduledDate: round.scheduled_date, daysUntil: 0,

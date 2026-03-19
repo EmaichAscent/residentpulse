@@ -24,8 +24,8 @@ router.post("/", async (req, res) => {
             s.management_company
      FROM sessions s
      LEFT JOIN communities sc ON sc.id = s.community_id
-     WHERE s.id IN (${placeholders}) AND s.summary IS NOT NULL AND s.client_id = ?`,
-    [...session_ids, req.clientId]
+     WHERE s.id IN (${placeholders}) AND s.summary IS NOT NULL AND s.client_id = ? AND s.is_test = ?`,
+    [...session_ids, req.clientId, req.isTestMode]
   );
 
   if (sessions.length === 0) {
@@ -44,7 +44,10 @@ router.post("/", async (req, res) => {
     })
     .join("\n\n");
 
-  const avgNps = (sessions.reduce((sum, s) => sum + s.nps_score, 0) / sessions.length).toFixed(1);
+  const scoredSessions = sessions.filter((s) => s.nps_score != null);
+  const avgNps = scoredSessions.length > 0
+    ? (scoredSessions.reduce((sum, s) => sum + s.nps_score, 0) / scoredSessions.length).toFixed(1)
+    : "N/A";
 
   const prompt = `You are analyzing resident feedback for a property management company. Below are ${sessions.length} survey responses that make up the current NPS calculation (average NPS: ${avgNps}).
 

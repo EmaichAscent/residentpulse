@@ -145,7 +145,7 @@ export default function UserManager() {
   };
 
   const fetchUsers = () => {
-    fetch("/api/admin/board-members")
+    fetch("/api/admin/board-members", { credentials: "include" })
       .then((r) => r.json())
       .then((data) => setUsers(data))
       .catch(() => {})
@@ -214,6 +214,7 @@ export default function UserManager() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
+        credentials: "include",
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -229,7 +230,7 @@ export default function UserManager() {
 
   const handleDelete = async (id) => {
     try {
-      await fetch(`/api/admin/board-members/${id}`, { method: "DELETE" });
+      await fetch(`/api/admin/board-members/${id}`, { method: "DELETE", credentials: "include" });
       setUsers((prev) => prev.filter((u) => u.id !== id));
       if (editingId === id) setEditingId(null);
     } catch {
@@ -269,6 +270,7 @@ export default function UserManager() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editForm),
+        credentials: "include",
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
