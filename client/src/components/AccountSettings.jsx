@@ -45,6 +45,8 @@ export default function AccountSettings() {
   const [googleReviewUrl, setGoogleReviewUrl] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewMessage, setReviewMessage] = useState(null);
+  const [detractorThreshold, setDetractorThreshold] = useState(0);
+  const [savingThreshold, setSavingThreshold] = useState(false);
   const { user: sessionUser } = useOutletContext();
 
   useEffect(() => {
@@ -70,6 +72,7 @@ export default function AccountSettings() {
         setPhoneNumber(clientData.phone_number || "");
         setGoogleReviewEnabled(clientData.google_review_enabled || false);
         setGoogleReviewUrl(clientData.google_review_url || "");
+        setDetractorThreshold(clientData.detractor_alert_threshold || 0);
       }
 
       if (usersRes.ok) {
@@ -850,6 +853,60 @@ export default function AccountSettings() {
               {reviewMessage.text}
             </p>
           )}
+        </div>
+      </div>
+
+      {/* Detractor Alert Notifications */}
+      <div className="bg-white shadow-md rounded-lg p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+          <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          Detractor Alerts
+        </h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Get an email notification when a board member gives a low score, so you can follow up quickly.
+        </p>
+
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <p className="text-xs text-gray-500">
+              {detractorThreshold > 0
+                ? `You'll be emailed when a board member scores below ${detractorThreshold} (i.e., 0–${detractorThreshold - 1}).`
+                : "Disabled — no detractor alert emails will be sent."}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={detractorThreshold}
+              onChange={async (e) => {
+                const value = Number(e.target.value);
+                setSavingThreshold(true);
+                try {
+                  const res = await fetch("/api/admin/account/detractor-threshold", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ threshold: value }),
+                    credentials: "include",
+                  });
+                  if (!res.ok) throw new Error("Failed to save");
+                  setDetractorThreshold(value);
+                } catch (err) {
+                  alert("Failed to save threshold: " + err.message);
+                } finally {
+                  setSavingThreshold(false);
+                }
+              }}
+              disabled={savingThreshold}
+              className="input-field-sm w-24 text-center"
+            >
+              <option value={0}>Off</option>
+              {[1,2,3,4,5,6,7].map(n => (
+                <option key={n} value={n}>Below {n}</option>
+              ))}
+            </select>
+            {savingThreshold && <span className="text-xs text-gray-400">Saving...</span>}
+          </div>
         </div>
       </div>
 

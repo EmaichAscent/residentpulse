@@ -214,6 +214,12 @@ router.get("/account", async (req, res) => {
     [req.clientId]
   );
 
+  // Detractor alert threshold
+  const detractorSetting = await db.get(
+    "SELECT value FROM settings WHERE key = 'detractor_alert_threshold' AND client_id = ?",
+    [req.clientId]
+  );
+
   // Don't send logo blob with account data — use separate endpoint
   const { logo_base64, ...clientWithoutLogo } = client;
 
@@ -227,6 +233,7 @@ router.get("/account", async (req, res) => {
     },
     google_review_enabled: reviewEnabled?.value === "true",
     google_review_url: reviewUrl?.value || "",
+    detractor_alert_threshold: detractorSetting ? Number(detractorSetting.value) : 0,
   });
 });
 
@@ -278,6 +285,33 @@ router.put("/account/google-review", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "Failed to save Google review settings");
     res.status(500).json({ error: "Failed to save settings" });
+  }
+});
+
+// Update detractor alert threshold
+router.put("/account/detractor-threshold", async (req, res) => {
+  try {
+    const { threshold } = req.body;
+    const value = Number(threshold) || 0;
+
+    if (value < 0 || value > 10) {
+      return res.status(400).json({ error: "Threshold must be between 0 and 10" });
+    }
+
+    if (value === 0) {
+      await db.run("DELETE FROM settings WHERE key = 'detractor_alert_threshold' AND client_id = ?", [req.clientId]);
+    } else {
+      await db.run(
+        `INSERT INTO settings (key, value, client_id) VALUES ('detractor_alert_threshold', $1, $2)
+         ON CONFLICT (key, client_id) DO UPDATE SET value = EXCLUDED.value`,
+        [String(value), req.clientId]
+      );
+    }
+
+    res.json({ ok: true, threshold: value });
+  } catch (err) {
+    logger.error({ err }, "Failed to update detractor threshold");
+    res.status(500).json({ error: "Failed to update threshold" });
   }
 });
 
