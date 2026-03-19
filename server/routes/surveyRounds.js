@@ -618,6 +618,23 @@ router.get("/:id/dashboard", async (req, res) => {
       wordFrequencies = computeLiveWordFrequencies(userMessages);
     }
 
+    // Email delivery summary for this round
+    const deliveryStats = await db.all(
+      `SELECT email_status, COUNT(*) as count
+       FROM invitation_logs
+       WHERE round_id = ? AND is_test = ?
+       GROUP BY email_status`,
+      [roundId, req.isTestMode]
+    );
+    const delivery = { sent: 0, delivered: 0, bounced: 0, complained: 0 };
+    for (const row of deliveryStats) {
+      if (row.email_status === 'sent') delivery.sent += row.count;
+      else if (row.email_status === 'delivered') delivery.delivered += row.count;
+      else if (row.email_status === 'bounced') delivery.bounced += row.count;
+      else if (row.email_status === 'complained') delivery.complained += row.count;
+    }
+    delivery.total = delivery.sent + delivery.delivered + delivery.bounced + delivery.complained;
+
     // Insights (concluded rounds only)
     const insights = round.insights_json || null;
 
@@ -663,6 +680,7 @@ router.get("/:id/dashboard", async (req, res) => {
       word_frequencies: wordFrequencies,
       insights,
       interview_summary: interviewResult?.interview_summary || null,
+      delivery,
     });
   } catch (err) {
     logger.error({ err }, "Error fetching round dashboard");

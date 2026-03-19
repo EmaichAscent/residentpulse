@@ -189,7 +189,7 @@ export default function RoundDashboard() {
     return <p className="text-red-500 text-center py-10">Failed to load round data.</p>;
   }
 
-  const { round, nps, response_rate, sessions, non_responders, community_cohorts, is_paid_tier, community_analytics, filter_options, alerts, word_frequencies, insights, interview_summary } = data;
+  const { round, nps, response_rate, sessions, non_responders, community_cohorts, is_paid_tier, community_analytics, filter_options, alerts, word_frequencies, insights, interview_summary, delivery } = data;
 
   const formatCurrency = (val) => val != null ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(val) : "$0";
   const formatPropertyType = (t) => ({ condo: "Condo", townhome: "Townhome", single_family: "Single Family", mixed: "Mixed", other: "Other" }[t] || t);
@@ -495,6 +495,42 @@ export default function RoundDashboard() {
               style={{ width: `${response_rate.percentage}%`, backgroundColor: "var(--cam-blue)" }}
             />
           </div>
+
+          {delivery && delivery.total > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-400 uppercase font-semibold tracking-wide">Email Delivery</span>
+                <button
+                  onClick={() => navigate("/admin/members")}
+                  className="text-xs font-medium hover:underline"
+                  style={{ color: "var(--cam-blue)" }}
+                  title="View detailed delivery status per member on the Members tab"
+                >
+                  View details →
+                </button>
+              </div>
+              <div className="flex items-center gap-3 mt-1.5">
+                {(delivery.delivered + delivery.sent) > 0 && (
+                  <span className="inline-flex items-center gap-1 text-xs text-green-700">
+                    <span className="w-2 h-2 rounded-full bg-green-500" />
+                    {delivery.delivered + delivery.sent} delivered
+                  </span>
+                )}
+                {delivery.bounced > 0 && (
+                  <span className="inline-flex items-center gap-1 text-xs text-red-700">
+                    <span className="w-2 h-2 rounded-full bg-red-500" />
+                    {delivery.bounced} bounced
+                  </span>
+                )}
+                {delivery.complained > 0 && (
+                  <span className="inline-flex items-center gap-1 text-xs text-red-700">
+                    <span className="w-2 h-2 rounded-full bg-red-500" />
+                    {delivery.complained} complained
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* NPS Score */}
