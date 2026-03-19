@@ -57,6 +57,7 @@ router.delete("/responses/:id", async (req, res) => {
     return res.status(404).json({ error: "Session not found" });
   }
 
+  await db.run("DELETE FROM critical_alerts WHERE source_message_id IN (SELECT id FROM messages WHERE session_id = ?)", [id]);
   await db.run("DELETE FROM messages WHERE session_id = ?", [id]);
   await db.run("DELETE FROM sessions WHERE id = ? AND is_test = ?", [id, req.isTestMode]);
   res.json({ ok: true });

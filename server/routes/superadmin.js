@@ -948,14 +948,14 @@ router.post("/clients/:id/reset", async (req, res) => {
     );
     await db.run("DELETE FROM admin_interviews WHERE client_id = ?", [clientId]);
 
-    // 2. Delete messages (child of sessions)
+    // 2. Delete critical alerts FIRST (references messages via source_message_id FK)
+    await db.run("DELETE FROM critical_alerts WHERE client_id = ?", [clientId]);
+
+    // 3. Delete messages (child of sessions)
     await db.run(
       "DELETE FROM messages WHERE session_id IN (SELECT id FROM sessions WHERE client_id = ?)",
       [clientId]
     );
-
-    // 3. Delete critical alerts (references sessions, messages, survey_rounds)
-    await db.run("DELETE FROM critical_alerts WHERE client_id = ?", [clientId]);
 
     // 4. Delete invitation logs (references survey_rounds)
     await db.run("DELETE FROM invitation_logs WHERE client_id = ?", [clientId]);

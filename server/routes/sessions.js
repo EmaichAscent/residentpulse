@@ -130,7 +130,8 @@ router.get("/validate-token/:token", async (req, res) => {
 // Delete a session
 router.delete("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  // Delete messages first
+  // Delete critical alerts referencing messages, then messages
+  await db.run("DELETE FROM critical_alerts WHERE source_message_id IN (SELECT id FROM messages WHERE session_id = ?)", [id]);
   await db.run("DELETE FROM messages WHERE session_id = ?", [id]);
   // Then delete session
   await db.run("DELETE FROM sessions WHERE id = ?", [id]);
