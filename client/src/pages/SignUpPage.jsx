@@ -237,13 +237,13 @@ export default function SignUpPage() {
               <div className="grid grid-cols-2 gap-3 mb-2.5">
                 <div>
                   <label htmlFor="companyName" className="block text-xs font-medium text-gray-700 mb-0.5">
-                    Management Company Name
+                    Management Company Name <span className="text-red-500">*</span>
                   </label>
                   <input id="companyName" type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="input-field text-sm py-1.5" required />
                 </div>
                 <div>
                   <label htmlFor="phoneNumber" className="block text-xs font-medium text-gray-700 mb-0.5">
-                    Phone Number
+                    Phone Number <span className="text-red-500">*</span>
                   </label>
                   <input id="phoneNumber" type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="input-field text-sm py-1.5" required />
                 </div>
@@ -252,7 +252,7 @@ export default function SignUpPage() {
               <div className="grid grid-cols-2 gap-3 mb-2.5">
                 <div>
                   <label htmlFor="addressLine1" className="block text-xs font-medium text-gray-700 mb-0.5">
-                    Address Line 1
+                    Address Line 1 <span className="text-red-500">*</span>
                   </label>
                   <input id="addressLine1" type="text" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} className="input-field text-sm py-1.5" required />
                 </div>
@@ -266,15 +266,15 @@ export default function SignUpPage() {
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label htmlFor="city" className="block text-xs font-medium text-gray-700 mb-0.5">City</label>
+                  <label htmlFor="city" className="block text-xs font-medium text-gray-700 mb-0.5">City <span className="text-red-500">*</span></label>
                   <input id="city" type="text" value={city} onChange={(e) => setCity(e.target.value)} className="input-field text-sm py-1.5" required />
                 </div>
                 <div>
-                  <label htmlFor="state" className="block text-xs font-medium text-gray-700 mb-0.5">State</label>
+                  <label htmlFor="state" className="block text-xs font-medium text-gray-700 mb-0.5">State <span className="text-red-500">*</span></label>
                   <input id="state" type="text" value={state} onChange={(e) => setState(e.target.value)} className="input-field text-sm py-1.5" maxLength={2} required />
                 </div>
                 <div>
-                  <label htmlFor="zip" className="block text-xs font-medium text-gray-700 mb-0.5">ZIP Code</label>
+                  <label htmlFor="zip" className="block text-xs font-medium text-gray-700 mb-0.5">ZIP Code <span className="text-red-500">*</span></label>
                   <input id="zip" type="text" value={zip} onChange={(e) => setZip(e.target.value)} className="input-field text-sm py-1.5" maxLength={10} required />
                 </div>
               </div>
@@ -286,31 +286,33 @@ export default function SignUpPage() {
 
               <div className="grid grid-cols-2 gap-3 mb-2.5">
                 <div>
-                  <label htmlFor="adminFirstName" className="block text-xs font-medium text-gray-700 mb-0.5">First Name</label>
+                  <label htmlFor="adminFirstName" className="block text-xs font-medium text-gray-700 mb-0.5">First Name <span className="text-red-500">*</span></label>
                   <input id="adminFirstName" type="text" value={adminFirstName} onChange={(e) => setAdminFirstName(e.target.value)} className="input-field text-sm py-1.5" required />
                 </div>
                 <div>
-                  <label htmlFor="adminLastName" className="block text-xs font-medium text-gray-700 mb-0.5">Last Name</label>
+                  <label htmlFor="adminLastName" className="block text-xs font-medium text-gray-700 mb-0.5">Last Name <span className="text-red-500">*</span></label>
                   <input id="adminLastName" type="text" value={adminLastName} onChange={(e) => setAdminLastName(e.target.value)} className="input-field text-sm py-1.5" required />
                 </div>
               </div>
 
               <div className="mb-2.5">
-                <label htmlFor="adminEmail" className="block text-xs font-medium text-gray-700 mb-0.5">Email</label>
+                <label htmlFor="adminEmail" className="block text-xs font-medium text-gray-700 mb-0.5">Email <span className="text-red-500">*</span></label>
                 <input id="adminEmail" type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} className="input-field text-sm py-1.5" placeholder="admin@yourcompany.com" required />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-0.5">Password</label>
+                  <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-0.5">Password <span className="text-red-500">*</span></label>
                   <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input-field text-sm py-1.5" placeholder="Min 8 characters" required minLength={8} />
                 </div>
                 <div>
-                  <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-0.5">Confirm Password</label>
+                  <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-0.5">Confirm Password <span className="text-red-500">*</span></label>
                   <input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="input-field text-sm py-1.5" placeholder="••••••••" required minLength={8} />
                 </div>
               </div>
             </div>
+
+            <p className="text-xs text-gray-400 mb-3"><span className="text-red-500">*</span> Required fields</p>
 
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
