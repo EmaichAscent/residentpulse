@@ -1483,7 +1483,27 @@ async function requirePaidTier(req, res) {
     [req.clientId]
   );
   if (!sub || sub.plan_name === "free") {
-    res.status(403).json({ error: "Community data import requires a paid plan. Please upgrade to access this feature." });
+    res.status(403).json({ error: "This feature requires a paid plan. Please upgrade to access it." });
+    return false;
+  }
+  return true;
+}
+
+// Helper: check community limit for free tier (5 max)
+async function checkCommunityLimit(req, res) {
+  const sub = await db.get(
+    `SELECT sp.name as plan_name FROM client_subscriptions cs
+     JOIN subscription_plans sp ON sp.id = cs.plan_id
+     WHERE cs.client_id = ? AND cs.status = 'active'`,
+    [req.clientId]
+  );
+  if (sub && sub.plan_name !== "free") return true; // no limit for paid
+  const count = await db.get(
+    "SELECT COUNT(*) as count FROM communities WHERE client_id = ? AND status = 'active'",
+    [req.clientId]
+  );
+  if ((count?.count || 0) >= 5) {
+    res.status(403).json({ error: "Free plan is limited to 5 communities. Upgrade your plan to add more." });
     return false;
   }
   return true;
@@ -1682,7 +1702,7 @@ router.get("/communities/export", async (req, res) => {
 // Create a single community
 router.post("/communities", async (req, res) => {
   try {
-    if (!(await requirePaidTier(req, res))) return;
+    if (!(await checkCommunityLimit(req, res))) return;
 
     const { community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month } = req.body;
     if (!community_name?.trim()) return res.status(400).json({ error: "Community name is required" });
@@ -1732,7 +1752,6 @@ router.post("/communities", async (req, res) => {
 // Preview community CSV import (no save)
 router.post("/communities/import/preview", async (req, res) => {
   try {
-    if (!(await requirePaidTier(req, res))) return;
 
     if (!req.files || !req.files.file) {
       return res.status(400).json({ error: "No file uploaded" });
@@ -1797,7 +1816,6 @@ router.post("/communities/import/preview", async (req, res) => {
 // Import communities from CSV
 router.post("/communities/import", async (req, res) => {
   try {
-    if (!(await requirePaidTier(req, res))) return;
 
     if (!req.files || !req.files.file) {
       return res.status(400).json({ error: "No file uploaded" });
@@ -1812,6 +1830,23 @@ router.post("/communities/import", async (req, res) => {
 
     let created = 0;
     let updated = 0;
+
+    // Check free tier community limit
+    const importSub = await db.get(
+      `SELECT sp.name as plan_name FROM client_subscriptions cs
+       JOIN subscription_plans sp ON sp.id = cs.plan_id
+       WHERE cs.client_id = ? AND cs.status = 'active'`,
+      [req.clientId]
+    );
+    const isFreeTier = !importSub || importSub.plan_name === "free";
+    let currentCommunityCount = 0;
+    if (isFreeTier) {
+      const countResult = await db.get(
+        "SELECT COUNT(*) as count FROM communities WHERE client_id = ? AND status = 'active'",
+        [req.clientId]
+      );
+      currentCommunityCount = countResult?.count || 0;
+    }
 
     const validTypes = ["condo", "townhome", "single_family", "mixed", "other"];
 
@@ -1850,6 +1885,10 @@ router.post("/communities/import", async (req, res) => {
           );
           updated++;
         } else {
+          if (isFreeTier && (currentCommunityCount + created) >= 5) {
+            errors.push(`${finalName}: Free plan limited to 5 communities, skipped`);
+            continue;
+          }
           await db.run(
             `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, is_test)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,

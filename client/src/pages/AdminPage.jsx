@@ -82,7 +82,7 @@ export default function AdminPage() {
   const TABS = [
     { path: "rounds", label: "Home" },
     { path: "trends", label: "Trends" },
-    ...(isPaidTier ? [{ path: "communities", label: "Communities" }] : []),
+    { path: "communities", label: "Communities" },
     { path: "members", label: "Members" },
     { path: "account", label: "Account" },
   ];

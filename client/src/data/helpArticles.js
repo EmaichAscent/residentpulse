@@ -61,7 +61,7 @@ export const helpArticles = [
     category: "Key Concepts",
     pages: ["communities", "rounds/:roundId"],
     tags: ["community", "hoa", "condo", "association", "property", "contract", "manager"],
-    body: "**Communities** are the HOAs, condo associations, or properties your company manages. ResidentPulse automatically creates a community record for each unique community name in your board member list.\n\nOn the Communities page (available on paid plans), you can:\n\n- View all your communities in one place\n- Add details like contract value, renewal date, property type, and number of units\n- Assign a community manager name\n- Deactivate communities you no longer manage\n\nThis information helps you see feedback in context — for example, which communities with upcoming contract renewals might need extra attention.",
+    body: "**Communities** are the HOAs, condo associations, or properties your company manages. ResidentPulse automatically creates a community record for each unique community name in your board member list.\n\nOn the Communities page, you can:\n\n- View all your communities in one place\n- Add details like contract value, renewal date, property type, and number of units\n- Assign a community manager name\n- Deactivate communities you no longer manage\n\nThis information helps you see feedback in context — for example, which communities with upcoming contract renewals might need extra attention.\n\n**Free plan:** Up to 5 communities. Upgrade to a paid plan for unlimited communities.",
   },
   {
     id: "critical-alerts",
