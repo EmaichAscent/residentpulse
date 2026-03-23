@@ -109,7 +109,7 @@ export default function UserManager() {
   const [result, setResult] = useState(null);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ email: "", first_name: "", last_name: "", community_name: "", management_company: "" });
+  const [form, setForm] = useState({ email: "", first_name: "", last_name: "", community_name: "" });
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -247,7 +247,6 @@ export default function UserManager() {
       last_name: u.last_name || "",
       email: u.email || "",
       community_name: u.community_name || "",
-      management_company: u.management_company || "",
     });
     setEditError("");
   };
@@ -327,9 +326,9 @@ export default function UserManager() {
   };
 
   const downloadSampleCSV = () => {
-    const csv = `email,first_name,last_name,community_name,location
-resident1@example.com,John,Doe,Sunset Gardens,Tampa Office
-resident2@example.com,Jane,Smith,Oak Hills,Orlando Office`;
+    const csv = `email,first_name,last_name,community_name
+resident1@example.com,John,Doe,Sunset Gardens
+resident2@example.com,Jane,Smith,Oak Hills`;
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -356,8 +355,7 @@ resident2@example.com,Jane,Smith,Oak Hills,Orlando Office`;
             u.email?.toLowerCase().includes(q) ||
             u.first_name?.toLowerCase().includes(q) ||
             u.last_name?.toLowerCase().includes(q) ||
-            u.community_name?.toLowerCase().includes(q) ||
-            u.management_company?.toLowerCase().includes(q)
+            u.community_name?.toLowerCase().includes(q)
           );
         })
       : [...users];
@@ -388,11 +386,6 @@ resident2@example.com,Jane,Smith,Oak Hills,Orlando Office`;
     communityNames.forEach((n) => names.add(n));
     return [...names].sort();
   }, [users, communityNames]);
-  const companyOptions = useMemo(() => {
-    const names = new Set(users.map((u) => u.management_company).filter(Boolean));
-    if (companyName) names.add(companyName);
-    return [...names].sort();
-  }, [users, companyName]);
 
   return (
     <div className="space-y-6">
@@ -541,13 +534,6 @@ resident2@example.com,Jane,Smith,Oak Hills,Orlando Office`;
                 placeholder="Community name"
                 className="input-field-sm"
               />
-              <AutocompleteInput
-                value={form.management_company}
-                onChange={(v) => setForm({ ...form, management_company: v })}
-                options={companyOptions}
-                placeholder="Location"
-                className="input-field-sm"
-              />
             </div>
             {formError && <p className="text-red-600 text-sm">{formError}</p>}
             <div className="flex gap-2">
@@ -589,7 +575,6 @@ resident2@example.com,Jane,Smith,Oak Hills,Orlando Office`;
                   { key: "name", label: "Name" },
                   { key: "email", label: "Email" },
                   { key: "community_name", label: "Community" },
-                  { key: "management_company", label: "Location" },
                 ].map((col) => (
                   <th key={col.key} className="px-5 py-3">
                     <button
@@ -647,13 +632,6 @@ resident2@example.com,Jane,Smith,Oak Hills,Orlando Office`;
                             placeholder="Community name"
                             className="input-field-sm"
                           />
-                          <AutocompleteInput
-                            value={editForm.management_company}
-                            onChange={(v) => setEditForm({ ...editForm, management_company: v })}
-                            options={companyOptions}
-                            placeholder="Location"
-                            className="input-field-sm"
-                          />
                         </div>
                         {editError && <p className="text-red-600 text-sm">{editError}</p>}
                         <div className="flex gap-2">
@@ -688,7 +666,6 @@ resident2@example.com,Jane,Smith,Oak Hills,Orlando Office`;
                     </td>
                     <td className="px-5 py-3 text-gray-700">{u.email}</td>
                     <td className="px-5 py-3 text-gray-500">{u.community_name || "—"}</td>
-                    <td className="px-5 py-3 text-gray-500">{u.management_company || "—"}</td>
                     {hasDeliveryData && (
                       <td className="px-5 py-3">
                         {u.delivery_status === "delivered" ? (

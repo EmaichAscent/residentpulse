@@ -41,13 +41,15 @@ router.get("/validate-token/:token", async (req, res) => {
   }
 
   try {
-    // Look up user by invitation token (join communities for canonical name)
+    // Look up user by invitation token (join communities → locations for canonical name + review URL)
     const user = await db.get(
       `SELECT u.id, u.email, u.first_name, u.last_name,
               COALESCE(c.community_name, u.community_name) as community_name,
-              u.management_company, u.client_id, u.invitation_token_expires, u.is_test
+              u.management_company, u.client_id, u.invitation_token_expires, u.is_test,
+              loc.google_review_url as location_review_url
        FROM users u
        LEFT JOIN communities c ON c.id = u.community_id
+       LEFT JOIN locations loc ON loc.id = c.location_id
        WHERE u.invitation_token = ?`,
       [token]
     );
@@ -105,7 +107,9 @@ router.get("/validate-token/:token", async (req, res) => {
       "SELECT value FROM settings WHERE key = 'google_review_url' AND client_id = ?",
       [user.client_id]
     );
-    const googleReviewUrl = (reviewEnabled?.value === "true" && reviewUrl?.value) ? reviewUrl.value : null;
+    // Resolution chain: location-specific URL → main URL → null
+    const mainUrl = reviewUrl?.value || null;
+    const googleReviewUrl = (reviewEnabled?.value === "true") ? (user.location_review_url || mainUrl) : null;
 
     // Return user data (without sensitive info)
     res.json({

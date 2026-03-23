@@ -157,9 +157,11 @@ router.get("/trends", async (req, res) => {
     for (const round of rounds) {
       // Get session stats for this round
       const sessions = await db.all(
-        `SELECT s.nps_score, s.community_id, COALESCE(sc.community_name, s.community_name) as community_name, s.management_company, s.completed
+        `SELECT s.nps_score, s.community_id, COALESCE(sc.community_name, s.community_name) as community_name,
+              COALESCE(loc.name, s.management_company) as location_name, s.completed
          FROM sessions s
          LEFT JOIN communities sc ON sc.id = s.community_id
+         LEFT JOIN locations loc ON loc.id = sc.location_id
          WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND s.is_test = ?`,
         [round.id, req.clientId, req.isTestMode]
       );
@@ -199,7 +201,7 @@ router.get("/trends", async (req, res) => {
       // Location Performance (available to all tiers — uses session data directly)
       const locationScores = {};
       for (const s of completed) {
-        const loc = s.management_company;
+        const loc = s.location_name;
         if (!loc || s.nps_score == null) continue;
         if (!locationScores[loc]) locationScores[loc] = [];
         locationScores[loc].push(s.nps_score);
@@ -366,11 +368,12 @@ router.get("/:id/dashboard", async (req, res) => {
     const sessions = await db.all(
       `SELECT s.id, s.email, s.nps_score, s.completed, s.summary,
               COALESCE(sc.community_name, s.community_name) as community_name,
-              s.management_company,
+              COALESCE(loc.name, s.management_company) as location_name,
               s.created_at, u.first_name, u.last_name
        FROM sessions s
        LEFT JOIN users u ON u.id = s.user_id
        LEFT JOIN communities sc ON sc.id = s.community_id
+       LEFT JOIN locations loc ON loc.id = sc.location_id
        WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND s.is_test = ?${sessionFilterSQL}
        ORDER BY s.created_at DESC`,
       sessionParams
@@ -555,7 +558,7 @@ router.get("/:id/dashboard", async (req, res) => {
       // Location Performance: group scores by management_company (displayed as "Location")
       const locationScores = {};
       for (const s of completedSessions) {
-        const loc = s.management_company;
+        const loc = s.location_name;
         if (!loc) continue;
         if (!locationScores[loc]) locationScores[loc] = [];
         locationScores[loc].push(s.nps_score);

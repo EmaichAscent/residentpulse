@@ -45,6 +45,9 @@ export default function AccountSettings() {
   const [googleReviewUrl, setGoogleReviewUrl] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewMessage, setReviewMessage] = useState(null);
+  const [locations, setLocations] = useState([]);
+  const [locationUrls, setLocationUrls] = useState({});
+  const [showLocationUrls, setShowLocationUrls] = useState(false);
   const [detractorThreshold, setDetractorThreshold] = useState(0);
   const [savingThreshold, setSavingThreshold] = useState(false);
   const { user: sessionUser } = useOutletContext();
@@ -72,6 +75,15 @@ export default function AccountSettings() {
         setPhoneNumber(clientData.phone_number || "");
         setGoogleReviewEnabled(clientData.google_review_enabled || false);
         setGoogleReviewUrl(clientData.google_review_url || "");
+        if (clientData.locations) {
+          setLocations(clientData.locations);
+          const urlMap = {};
+          for (const loc of clientData.locations) {
+            if (loc.google_review_url) urlMap[loc.id] = loc.google_review_url;
+          }
+          setLocationUrls(urlMap);
+          setShowLocationUrls(Object.keys(urlMap).length > 0);
+        }
         setDetractorThreshold(clientData.detractor_alert_threshold || 0);
       }
 
@@ -782,7 +794,7 @@ export default function AccountSettings() {
                     const res = await fetch("/api/admin/account/google-review", {
                       method: "PUT",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ enabled: newVal, url: googleReviewUrl }),
+                      body: JSON.stringify({ enabled: newVal, url: googleReviewUrl, location_urls: locations.map((l) => ({ location_id: l.id, google_review_url: locationUrls[l.id] || "" })) }),
                       credentials: "include",
                     });
                     const data = await res.json();
@@ -806,34 +818,73 @@ export default function AccountSettings() {
           </div>
 
           {googleReviewEnabled && (
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Google Review URL
-              </label>
-              <input
-                type="url"
-                value={googleReviewUrl}
-                onChange={(e) => setGoogleReviewUrl(e.target.value)}
-                className="input-field-sm w-full"
-                placeholder="g.page/r/your-business/review"
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                Paste your Google Business review link here.
-              </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Main Google Review URL
+                </label>
+                <input
+                  type="url"
+                  value={googleReviewUrl}
+                  onChange={(e) => setGoogleReviewUrl(e.target.value)}
+                  className="input-field-sm w-full"
+                  placeholder="g.page/r/your-business/review"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Required. This link is used for all promoters unless a location-specific URL is set below.
+                </p>
+              </div>
+
+              {/* Per-location URLs */}
+              {locations.length > 0 && googleReviewUrl.trim() && (
+                <div className="border-t border-gray-100 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowLocationUrls(!showLocationUrls)}
+                    className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    {showLocationUrls ? "▾ Hide" : "▸ Customize by"} Location ({locations.length})
+                  </button>
+                  {showLocationUrls && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs text-gray-400">
+                        Optionally set a unique Google Review URL for each location. Locations without a URL will use the main URL above.
+                      </p>
+                      {locations.map((loc) => (
+                        <div key={loc.id} className="flex items-center gap-3">
+                          <span className="text-sm text-gray-700 font-medium w-40 truncate" title={loc.name}>{loc.name}</span>
+                          <input
+                            type="url"
+                            value={locationUrls[loc.id] || ""}
+                            onChange={(e) => setLocationUrls({ ...locationUrls, [loc.id]: e.target.value })}
+                            className="input-field-sm flex-1"
+                            placeholder="Uses main URL"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={async () => {
                   setReviewSaving(true);
                   setReviewMessage(null);
                   try {
+                    const location_urls = locations.map((loc) => ({
+                      location_id: loc.id,
+                      google_review_url: locationUrls[loc.id] || "",
+                    }));
                     const res = await fetch("/api/admin/account/google-review", {
                       method: "PUT",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ enabled: googleReviewEnabled, url: googleReviewUrl }),
+                      body: JSON.stringify({ enabled: googleReviewEnabled, url: googleReviewUrl, location_urls }),
                       credentials: "include",
                     });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.error || "Failed to save");
-                    setReviewMessage({ type: "success", text: "Review URL saved." });
+                    setReviewMessage({ type: "success", text: "Google Review settings saved." });
                   } catch (err) {
                     setReviewMessage({ type: "error", text: err.message });
                   } finally {
@@ -841,9 +892,10 @@ export default function AccountSettings() {
                   }
                 }}
                 disabled={reviewSaving}
-                className="mt-2 px-4 py-1.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition text-gray-600"
+                className="px-4 py-1.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
+                style={{ backgroundColor: "var(--cam-green)" }}
               >
-                {reviewSaving ? "Saving..." : "Save URL"}
+                {reviewSaving ? "Saving..." : "Save Google Review Settings"}
               </button>
             </div>
           )}

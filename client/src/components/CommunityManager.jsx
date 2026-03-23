@@ -11,6 +11,7 @@ const PROPERTY_TYPES = [
 
 export default function CommunityManager() {
   const [communities, setCommunities] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
@@ -20,9 +21,13 @@ export default function CommunityManager() {
   const [preview, setPreview] = useState(null);
   const [previewFile, setPreviewFile] = useState(null);
 
+  // New location input
+  const [newLocationName, setNewLocationName] = useState("");
+  const [creatingLocation, setCreatingLocation] = useState(false);
+
   // Add form state
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "", contract_renewal_date: "", contract_month_to_month: false });
+  const [form, setForm] = useState({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "", contract_renewal_date: "", contract_month_to_month: false, location_id: "" });
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -37,6 +42,7 @@ export default function CommunityManager() {
 
   useEffect(() => {
     fetchCommunities();
+    fetchLocations();
   }, []);
 
   const fetchCommunities = () => {
@@ -46,6 +52,31 @@ export default function CommunityManager() {
       .then((data) => setCommunities(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoading(false));
+  };
+
+  const fetchLocations = () => {
+    fetch("/api/admin/locations")
+      .then((r) => r.json())
+      .then((data) => setLocations(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  };
+
+  const handleCreateLocation = async () => {
+    if (!newLocationName.trim()) return;
+    setCreatingLocation(true);
+    try {
+      const res = await fetch("/api/admin/locations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newLocationName.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setLocations((prev) => [...prev, { id: data.id, name: data.name, community_count: 0 }].sort((a, b) => a.name.localeCompare(b.name)));
+        setNewLocationName("");
+      }
+    } catch {}
+    setCreatingLocation(false);
   };
 
   // --- Filter: deactivation + search ---
@@ -64,9 +95,9 @@ export default function CommunityManager() {
 
   // --- Sample CSV ---
   const downloadSampleCSV = () => {
-    const csv = `community_name,contract_value,community_manager_name,property_type,number_of_units
-Sunset Gardens,48000,Sarah Johnson,condo,150
-Oak Ridge HOA,36000,Mike Chen,single_family,85`;
+    const csv = `community_name,location,contract_value,community_manager_name,property_type,number_of_units
+Sunset Gardens,Tampa Office,48000,Sarah Johnson,condo,150
+Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -94,7 +125,7 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setCommunities((prev) => [...prev, { ...data, member_count: 0 }]);
-      setForm({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "", contract_renewal_date: "", contract_month_to_month: false });
+      setForm({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "", contract_renewal_date: "", contract_month_to_month: false, location_id: "" });
       setShowForm(false);
     } catch (err) {
       setFormError(err.message);
@@ -161,6 +192,7 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
       number_of_units: c.number_of_units || "",
       contract_renewal_date: c.contract_renewal_date ? c.contract_renewal_date.split("T")[0] : "",
       contract_month_to_month: c.contract_month_to_month || false,
+      location_id: c.location_id || "",
     });
   };
 
@@ -419,6 +451,34 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
               />
             </div>
             <div className="grid grid-cols-2 gap-3 items-center">
+              <select
+                value={form.location_id}
+                onChange={(e) => setForm({ ...form, location_id: e.target.value })}
+                className="input-field-sm"
+              >
+                <option value="">Location...</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+              <div className="flex gap-1">
+                <input
+                  type="text"
+                  value={newLocationName}
+                  onChange={(e) => setNewLocationName(e.target.value)}
+                  placeholder="Or add new location"
+                  className="input-field-sm flex-1"
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleCreateLocation())}
+                />
+                {newLocationName.trim() && (
+                  <button type="button" onClick={handleCreateLocation} disabled={creatingLocation}
+                    className="px-3 py-1 text-xs font-semibold text-white rounded-lg" style={{ backgroundColor: "var(--cam-green)" }}>
+                    +
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 items-center">
               <input
                 type="date"
                 value={form.contract_renewal_date}
@@ -474,6 +534,7 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
             <thead>
               <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
                 <th className="px-5 py-3">Community</th>
+                <th className="px-5 py-3">Location</th>
                 <th className="px-5 py-3">Contract Value</th>
                 <th className="px-5 py-3">Manager</th>
                 <th className="px-5 py-3">Type</th>
@@ -487,8 +548,8 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
               {filtered.map((c) =>
                 editingId === c.id ? (
                   <tr key={c.id} className="bg-blue-50">
-                    <td className="px-5 py-2" colSpan={7}>
-                      <div className="grid grid-cols-5 gap-2 py-1">
+                    <td className="px-5 py-2" colSpan={8}>
+                      <div className="grid grid-cols-6 gap-2 py-1">
                         <input
                           type="text"
                           value={editForm.community_name}
@@ -496,6 +557,16 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
                           placeholder="Community name"
                           className="input-field-sm"
                         />
+                        <select
+                          value={editForm.location_id}
+                          onChange={(e) => setEditForm({ ...editForm, location_id: e.target.value })}
+                          className="input-field-sm"
+                        >
+                          <option value="">Location...</option>
+                          {locations.map((l) => (
+                            <option key={l.id} value={l.id}>{l.name}</option>
+                          ))}
+                        </select>
                         <input
                           type="number"
                           value={editForm.contract_value}
@@ -574,6 +645,7 @@ Oak Ridge HOA,36000,Mike Chen,single_family,85`;
                         <span className="ml-2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 uppercase">Inactive</span>
                       )}
                     </td>
+                    <td className="px-5 py-3 text-gray-500">{c.location_name || "\u2014"}</td>
                     <td className="px-5 py-3 text-gray-700">{formatCurrency(c.contract_value)}</td>
                     <td className="px-5 py-3 text-gray-500">{c.community_manager_name || "\u2014"}</td>
                     <td className="px-5 py-3 text-gray-500">{formatPropertyType(c.property_type)}</td>

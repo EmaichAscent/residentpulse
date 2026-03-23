@@ -221,6 +221,18 @@ router.get("/account", async (req, res) => {
     [req.clientId]
   );
 
+  // Locations for this client
+  const locations = await db.all(
+    `SELECT l.id, l.name, l.google_review_url,
+            COUNT(c.id) as community_count
+     FROM locations l
+     LEFT JOIN communities c ON c.location_id = l.id AND c.status = 'active'
+     WHERE l.client_id = ? AND l.is_test = ?
+     GROUP BY l.id
+     ORDER BY l.name`,
+    [req.clientId, req.isTestMode]
+  );
+
   // Don't send logo blob with account data — use separate endpoint
   const { logo_base64, ...clientWithoutLogo } = client;
 
@@ -235,6 +247,7 @@ router.get("/account", async (req, res) => {
     google_review_enabled: reviewEnabled?.value === "true",
     google_review_url: reviewUrl?.value || "",
     detractor_alert_threshold: detractorSetting ? Number(detractorSetting.value) : 0,
+    locations,
   });
 });
 
@@ -256,15 +269,19 @@ router.put("/account", async (req, res) => {
 
 // Update Google review settings (toggle + URL)
 router.put("/account/google-review", async (req, res) => {
-  const { enabled, url } = req.body;
+  const { enabled, url, location_urls } = req.body;
 
-  // Auto-prepend https:// if missing; block javascript: to prevent XSS
-  let trimmedUrl = url?.trim() || "";
-  if (trimmedUrl && /^javascript:/i.test(trimmedUrl)) {
+  // Helper to sanitize URLs
+  const sanitizeUrl = (rawUrl) => {
+    let trimmed = rawUrl?.trim() || "";
+    if (trimmed && /^javascript:/i.test(trimmed)) return null; // block XSS
+    if (trimmed && !/^https?:\/\//i.test(trimmed)) trimmed = "https://" + trimmed;
+    return trimmed;
+  };
+
+  const trimmedUrl = sanitizeUrl(url);
+  if (url?.trim() && trimmedUrl === null) {
     return res.status(400).json({ error: "Invalid URL" });
-  }
-  if (trimmedUrl && !/^https?:\/\//i.test(trimmedUrl)) {
-    trimmedUrl = "https://" + trimmedUrl;
   }
 
   try {
@@ -275,12 +292,24 @@ router.put("/account/google-review", async (req, res) => {
       [String(!!enabled), req.clientId]
     );
 
-    // Upsert URL setting
+    // Upsert main URL setting
     await db.run(
       `INSERT INTO settings (key, value, client_id) VALUES ('google_review_url', $1, $2)
        ON CONFLICT (key, client_id) DO UPDATE SET value = EXCLUDED.value`,
       [trimmedUrl, req.clientId]
     );
+
+    // Update per-location Google review URLs
+    if (location_urls && Array.isArray(location_urls)) {
+      for (const loc of location_urls) {
+        const locUrl = sanitizeUrl(loc.google_review_url);
+        if (loc.google_review_url?.trim() && locUrl === null) continue; // skip invalid
+        await db.run(
+          "UPDATE locations SET google_review_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND client_id = ?",
+          [locUrl || null, loc.location_id, req.clientId]
+        );
+      }
+    }
 
     res.json({ ok: true });
   } catch (err) {
@@ -812,9 +841,9 @@ router.get("/board-members/export", async (req, res) => {
     [req.clientId, req.isTestMode]
   );
 
-  const header = "first_name,last_name,email,community_name,location";
+  const header = "first_name,last_name,email,community_name";
   const rows = users.map(u =>
-    [u.first_name || "", u.last_name || "", u.email, u.community_name || "", u.management_company || ""]
+    [u.first_name || "", u.last_name || "", u.email, u.community_name || ""]
       .map(v => `"${(v || "").replace(/"/g, '""')}"`)
       .join(",")
   );
@@ -1594,6 +1623,7 @@ function parseCommunityCSV(csv) {
   const managerIdx = headers.indexOf("community_manager_name");
   const typeIdx = headers.indexOf("property_type");
   const unitsIdx = headers.indexOf("number_of_units");
+  const locationIdx = headers.indexOf("location");
 
   const rows = [];
   const errors = [];
@@ -1610,19 +1640,97 @@ function parseCommunityCSV(csv) {
       community_manager_name: managerIdx >= 0 ? values[managerIdx] || null : null,
       property_type: typeIdx >= 0 ? values[typeIdx]?.toLowerCase().replace(/\s+/g, "_") || null : null,
       number_of_units: unitsIdx >= 0 ? parseInt(values[unitsIdx]) || null : null,
+      location: locationIdx >= 0 ? values[locationIdx] || null : null,
     });
   }
   return { rows, errors };
 }
 
+// --- Locations CRUD ---
+
+router.get("/locations", async (req, res) => {
+  const locations = await db.all(
+    `SELECT l.id, l.name, l.google_review_url,
+            COUNT(c.id) as community_count
+     FROM locations l
+     LEFT JOIN communities c ON c.location_id = l.id AND c.status = 'active'
+     WHERE l.client_id = ? AND l.is_test = ?
+     GROUP BY l.id
+     ORDER BY l.name`,
+    [req.clientId, req.isTestMode]
+  );
+  res.json(locations);
+});
+
+router.post("/locations", async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: "Location name is required" });
+
+    const existing = await db.get(
+      "SELECT id FROM locations WHERE LOWER(TRIM(name)) = ? AND client_id = ? AND is_test = ?",
+      [name.trim().toLowerCase(), req.clientId, req.isTestMode]
+    );
+    if (existing) return res.status(409).json({ error: "Location already exists", id: existing.id });
+
+    const result = await db.run(
+      "INSERT INTO locations (client_id, name, is_test) VALUES (?, ?, ?) RETURNING id",
+      [req.clientId, name.trim(), req.isTestMode]
+    );
+    res.json({ id: result.id || result.lastID, name: name.trim() });
+  } catch (err) {
+    logger.error({ err }, "Failed to create location");
+    res.status(500).json({ error: "Failed to create location" });
+  }
+});
+
+router.put("/locations/:id", async (req, res) => {
+  try {
+    const { name, google_review_url } = req.body;
+    const id = Number(req.params.id);
+
+    const location = await db.get("SELECT id FROM locations WHERE id = ? AND client_id = ?", [id, req.clientId]);
+    if (!location) return res.status(404).json({ error: "Location not found" });
+
+    if (name !== undefined) {
+      await db.run("UPDATE locations SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [name.trim(), id]);
+    }
+    if (google_review_url !== undefined) {
+      let url = google_review_url?.trim() || null;
+      if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
+      await db.run("UPDATE locations SET google_review_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [url, id]);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "Failed to update location");
+    res.status(500).json({ error: "Failed to update location" });
+  }
+});
+
+router.delete("/locations/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    await db.run("UPDATE communities SET location_id = NULL WHERE location_id = ? AND client_id = ?", [id, req.clientId]);
+    await db.run("DELETE FROM locations WHERE id = ? AND client_id = ?", [id, req.clientId]);
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "Failed to delete location");
+    res.status(500).json({ error: "Failed to delete location" });
+  }
+});
+
+// --- Communities ---
+
 // Get all communities for this client
 router.get("/communities", async (req, res) => {
   let communities = await db.all(
-    `SELECT c.*, COUNT(u.id) as member_count
+    `SELECT c.*, l.name as location_name, COUNT(u.id) as member_count
      FROM communities c
      LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
+     LEFT JOIN locations l ON l.id = c.location_id
      WHERE c.client_id = ? AND c.is_test = ?
-     GROUP BY c.id
+     GROUP BY c.id, l.name
      ORDER BY c.status ASC, c.community_name`,
     [req.clientId, req.isTestMode]
   );
@@ -1648,11 +1756,12 @@ router.get("/communities", async (req, res) => {
 
         // Re-fetch with member counts
         communities = await db.all(
-          `SELECT c.*, COUNT(u.id) as member_count
+          `SELECT c.*, l.name as location_name, COUNT(u.id) as member_count
            FROM communities c
            LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
+           LEFT JOIN locations l ON l.id = c.location_id
            WHERE c.client_id = ? AND c.is_test = ?
-           GROUP BY c.id
+           GROUP BY c.id, l.name
            ORDER BY c.status ASC, c.community_name`,
           [req.clientId, req.isTestMode]
         );
@@ -1670,11 +1779,12 @@ router.get("/communities/export", async (req, res) => {
   const communities = await db.all(
     `SELECT c.community_name, c.contract_value, c.community_manager_name,
             c.property_type, c.number_of_units, c.contract_renewal_date,
-            c.contract_month_to_month, c.status, COUNT(u.id) as member_count
+            c.contract_month_to_month, c.status, l.name as location_name, COUNT(u.id) as member_count
      FROM communities c
      LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
+     LEFT JOIN locations l ON l.id = c.location_id
      WHERE c.client_id = ? AND c.is_test = ?
-     GROUP BY c.id
+     GROUP BY c.id, l.name
      ORDER BY c.status ASC, c.community_name`,
     [req.clientId, req.isTestMode]
   );
@@ -1685,9 +1795,9 @@ router.get("/communities/export", async (req, res) => {
     return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
   };
 
-  const header = "community_name,contract_value,community_manager_name,property_type,number_of_units,contract_renewal_date,month_to_month,status,member_count";
+  const header = "community_name,location,contract_value,community_manager_name,property_type,number_of_units,contract_renewal_date,month_to_month,status,member_count";
   const rows = communities.map(c =>
-    [c.community_name, c.contract_value || "", c.community_manager_name || "",
+    [c.community_name, c.location_name || "", c.contract_value || "", c.community_manager_name || "",
      c.property_type || "", c.number_of_units || "", c.contract_renewal_date ? c.contract_renewal_date.split("T")[0] : "",
      c.contract_month_to_month ? "yes" : "no", c.status || "active", c.member_count || 0
     ].map(escCSV).join(",")
@@ -1704,7 +1814,7 @@ router.post("/communities", async (req, res) => {
   try {
     if (!(await checkCommunityLimit(req, res))) return;
 
-    const { community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month } = req.body;
+    const { community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month, location_id } = req.body;
     if (!community_name?.trim()) return res.status(400).json({ error: "Community name is required" });
 
     const validTypes = ["condo", "townhome", "single_family", "mixed", "other"];
@@ -1730,9 +1840,9 @@ router.post("/communities", async (req, res) => {
     }
 
     await db.run(
-      `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month, is_test)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.clientId, community_name.trim(), contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false, req.isTestMode]
+      `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month, location_id, is_test)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.clientId, community_name.trim(), contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false, location_id || null, req.isTestMode]
     );
 
     const created = await db.get(
@@ -1854,6 +1964,24 @@ router.post("/communities/import", async (req, res) => {
       let finalName = nameMap[row.community_name] || row.community_name;
       const propType = validTypes.includes(row.property_type) ? row.property_type : null;
 
+      // Resolve location_id from CSV location column
+      let locationId = null;
+      if (row.location) {
+        const existingLoc = await db.get(
+          "SELECT id FROM locations WHERE LOWER(TRIM(name)) = ? AND client_id = ? AND is_test = ?",
+          [row.location.toLowerCase().trim(), req.clientId, req.isTestMode]
+        );
+        if (existingLoc) {
+          locationId = existingLoc.id;
+        } else {
+          const newLoc = await db.run(
+            "INSERT INTO locations (client_id, name, is_test) VALUES (?, ?, ?) RETURNING id",
+            [req.clientId, row.location.trim(), req.isTestMode]
+          );
+          locationId = newLoc.id || newLoc.lastID;
+        }
+      }
+
       try {
         // Exact match first
         let existing = await db.get(
@@ -1880,7 +2008,7 @@ router.post("/communities/import", async (req, res) => {
 
         if (existing) {
           await db.run(
-            `UPDATE communities SET contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?`,
+            `UPDATE communities SET contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?${locationId ? ", location_id = " + locationId : ""}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?`,
             [row.contract_value, row.community_manager_name, propType, row.number_of_units, existing.id, req.isTestMode]
           );
           updated++;
@@ -1890,9 +2018,9 @@ router.post("/communities/import", async (req, res) => {
             continue;
           }
           await db.run(
-            `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, is_test)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [req.clientId, finalName, row.contract_value, row.community_manager_name, propType, row.number_of_units, req.isTestMode]
+            `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, location_id, is_test)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [req.clientId, finalName, row.contract_value, row.community_manager_name, propType, row.number_of_units, locationId, req.isTestMode]
           );
           created++;
         }
@@ -1916,13 +2044,13 @@ router.put("/communities/:id", async (req, res) => {
   const community = await db.get("SELECT id FROM communities WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
   if (!community) return res.status(404).json({ error: "Community not found" });
 
-  const { community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month } = req.body;
+  const { community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month, location_id } = req.body;
   const validTypes = ["condo", "townhome", "single_family", "mixed", "other"];
   const propType = validTypes.includes(property_type) ? property_type : null;
 
   await db.run(
-    `UPDATE communities SET community_name = ?, contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, contract_renewal_date = ?, contract_month_to_month = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?`,
-    [community_name, contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false, id, req.isTestMode]
+    `UPDATE communities SET community_name = ?, contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, contract_renewal_date = ?, contract_month_to_month = ?, location_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?`,
+    [community_name, contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false, location_id || null, id, req.isTestMode]
   );
 
   const updated = await db.get("SELECT * FROM communities WHERE id = ?", [id]);

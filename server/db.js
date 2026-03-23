@@ -351,6 +351,16 @@ async function initializeSchema() {
       logger.info("Test mode migration skipped (already applied or file not found)");
     }
 
+    // Run locations migration (locations table + community location_id)
+    try {
+      const locationsPath = join(__dirname, "migrations", "add-locations.sql");
+      const locationsSQL = readFileSync(locationsPath, "utf-8");
+      await client.query(locationsSQL);
+      logger.info("Locations migration applied successfully");
+    } catch (migrationErr) {
+      logger.info("Locations migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     logger.info("Database schema initialized successfully");
   } catch (err) {
