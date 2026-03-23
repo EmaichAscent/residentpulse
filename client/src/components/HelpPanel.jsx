@@ -203,6 +203,7 @@ export default function HelpPanel() {
         body: JSON.stringify({
           question,
           history: chatMessages,
+          articles: helpArticles.map(a => ({ title: a.title, body: a.body })),
         }),
       });
       const data = await res.json();

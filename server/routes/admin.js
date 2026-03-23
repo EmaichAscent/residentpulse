@@ -1917,7 +1917,7 @@ import { createMessage } from "../utils/anthropicClient.js";
 
 router.post("/help-chat", async (req, res) => {
   try {
-    const { question, history } = req.body;
+    const { question, history, articles } = req.body;
     if (!question || !question.trim()) {
       return res.status(400).json({ error: "Question is required" });
     }
@@ -1931,37 +1931,21 @@ router.post("/help-chat", async (req, res) => {
     }
     messages.push({ role: "user", content: question.trim() });
 
+    // Build knowledge base from help articles sent by the client
+    let knowledgeBase = "";
+    if (articles && Array.isArray(articles)) {
+      knowledgeBase = articles.map(a => `## ${a.title}\n${a.body}`).join("\n\n");
+    }
+
     const response = await createMessage({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 600,
       system: `You are a helpful support assistant for ResidentPulse, a platform that helps property management companies collect NPS feedback from HOA and condo board members through AI-guided conversations.
 
-Answer questions using ONLY the knowledge base below. Be concise and friendly. If you don't know the answer from the knowledge base, say so honestly and suggest they contact support.
+Answer questions using ONLY the knowledge base below. Be concise and friendly. If you don't know the answer from the knowledge base, say so honestly and suggest they contact support at success@camascent.com.
 
 KNOWLEDGE BASE:
-- ResidentPulse sends personal email invitations to board members with unique links — no login needed.
-- Each board member rates the management company 0-10 (NPS score), then has a short AI-guided conversation.
-- NPS = % Promoters (9-10) minus % Detractors (0-6). Passives are 7-8. Range: -100 to +100.
-- Survey rounds last 30 days. Stages: Planned → In Progress → Concluded.
-- Automatic reminders go out on Day 10 and Day 20 to non-responders.
-- Cadence options: 2x/year (every 6 months) or 4x/year (every 3 months, paid plans).
-- Communities are auto-created from board member data. Paid plans get community details (contract value, manager, units).
-- Critical Alerts flag urgent issues (safety, legal, service failures) during conversations. Can be dismissed or resolved.
-- Google Review requests: enabled in Account settings. Promoters (9-10) are asked to leave a Google review. Requires a Google Business review URL.
-- Detractor Alert emails: configurable threshold in Account settings. Emails go to all client admins when a score falls below threshold.
-- Members tab: add/edit/remove board members, export CSV, import CSV, reactivate inactive members.
-- Member CSV import: click Import on Members tab. Required columns: email, first_name, last_name, community_name. Optional: management_company. Download the sample CSV template for the correct format. Duplicates are auto-skipped.
-- Community CSV import: click Import on Communities tab. Columns: community_name (must match existing), contract_value, community_manager_name, property_type (condo/single_family/townhouse/mixed/other), number_of_units. Shows a preview before confirming. Download the sample CSV template for the correct format. Importing community data unlocks Revenue at Risk, Manager Performance heatmap, and contract renewal tracking.
-- Bounced emails show a red badge on the Members page. Correcting the email auto-resends the invitation.
-- Company logo can be uploaded in Account settings (PNG/JPG/SVG, max 500KB, landscape/square, max 3:1 ratio).
-- Account setup: 1) Company interview, 2) Add board members, 3) Schedule first round.
-- Confirm & Launch button appears when a round is within 30 days of its launch date.
-- Invitations send in the background with a progress bar. Members get unique links.
-- Board member feedback is private — admins see NPS scores, AI summaries, and alerts, not transcripts.
-- AI Insights (executive summary, key findings, recommendations) appear after a round concludes.
-- Trends tab shows NPS over time, response rates, community cohorts, and trending topics across rounds.
-- Test Mode: isolated sandbox with sample data. No real emails sent. Toggle in header bar.
-- Subscription limits: plan determines member count and rounds per year. Change password in Account tab.`,
+${knowledgeBase}`,
       messages,
     });
 
