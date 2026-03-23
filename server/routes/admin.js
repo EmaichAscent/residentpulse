@@ -1868,7 +1868,7 @@ router.post("/communities", async (req, res) => {
     );
 
     const created = await db.get(
-      "SELECT * FROM communities WHERE client_id = ? AND LOWER(TRIM(community_name)) = ? AND is_test = ?",
+      "SELECT c.*, l.name as location_name FROM communities c LEFT JOIN locations l ON c.location_id = l.id WHERE c.client_id = ? AND LOWER(TRIM(c.community_name)) = ? AND c.is_test = ?",
       [req.clientId, community_name.toLowerCase().trim(), req.isTestMode]
     );
 
@@ -2075,7 +2075,10 @@ router.put("/communities/:id", async (req, res) => {
     [community_name, contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false, location_id || null, id, req.isTestMode]
   );
 
-  const updated = await db.get("SELECT * FROM communities WHERE id = ?", [id]);
+  const updated = await db.get(
+    "SELECT c.*, l.name as location_name FROM communities c LEFT JOIN locations l ON c.location_id = l.id WHERE c.id = ?",
+    [id]
+  );
   res.json(updated);
 });
 
