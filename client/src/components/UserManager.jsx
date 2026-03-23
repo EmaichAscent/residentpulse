@@ -109,7 +109,7 @@ export default function UserManager() {
   const [result, setResult] = useState(null);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ email: "", first_name: "", last_name: "", community_name: "" });
+  const [form, setForm] = useState({ email: "", first_name: "", last_name: "", community_name: "", management_company: "" });
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -120,6 +120,7 @@ export default function UserManager() {
   const [enrolling, setEnrolling] = useState(false);
   const [resending, setResending] = useState(null);
   const [communityNames, setCommunityNames] = useState([]);
+  const [locationNames, setLocationNames] = useState([]);
   const [sortKey, setSortKey] = useState("email");
   const [sortDir, setSortDir] = useState("asc");
   const [deactivateTarget, setDeactivateTarget] = useState(null);
@@ -159,6 +160,13 @@ export default function UserManager() {
       .catch(() => {});
   };
 
+  const fetchLocationNames = () => {
+    fetch("/api/admin/locations", { credentials: "include" })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setLocationNames(data.map((l) => l.name).filter(Boolean)))
+      .catch(() => {});
+  };
+
   const fetchSessions = () => {
     fetch("/api/admin/sessions", { credentials: "include" })
       .then((r) => r.ok ? r.json() : [])
@@ -169,6 +177,7 @@ export default function UserManager() {
   useEffect(() => {
     fetchUsers();
     fetchCommunityNames();
+    fetchLocationNames();
     fetchSessions();
   }, []);
 
@@ -247,6 +256,7 @@ export default function UserManager() {
       last_name: u.last_name || "",
       email: u.email || "",
       community_name: u.community_name || "",
+      management_company: u.management_company || "",
     });
     setEditError("");
   };
@@ -387,6 +397,12 @@ resident2@example.com,Jane,Smith,Oak Hills`;
     return [...names].sort();
   }, [users, communityNames]);
 
+  const locationOptions = useMemo(() => {
+    const names = new Set(users.map((u) => u.management_company).filter(Boolean));
+    locationNames.forEach((n) => names.add(n));
+    return [...names].sort();
+  }, [users, locationNames]);
+
   return (
     <div className="space-y-6">
       {/* Search Bar with Import and Add Buttons */}
@@ -503,37 +519,59 @@ resident2@example.com,Jane,Smith,Oak Hills`;
           <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Add New Member</p>
           <form onSubmit={handleAddUser} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">First Name</label>
+                <input
+                  type="text"
+                  value={form.first_name}
+                  onChange={(e) => setForm({ ...form, first_name: e.target.value })}
+                  placeholder="First name"
+                  className="input-field-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Last Name</label>
+                <input
+                  type="text"
+                  value={form.last_name}
+                  onChange={(e) => setForm({ ...form, last_name: e.target.value })}
+                  placeholder="Last name"
+                  className="input-field-sm"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Email <span className="text-red-400">*</span></label>
               <input
-                type="text"
-                value={form.first_name}
-                onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                placeholder="First name"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="Email (required)"
                 className="input-field-sm"
-              />
-              <input
-                type="text"
-                value={form.last_name}
-                onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                placeholder="Last name"
-                className="input-field-sm"
+                required
               />
             </div>
-            <input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="Email (required)"
-              className="input-field-sm"
-              required
-            />
             <div className="grid grid-cols-2 gap-3">
-              <AutocompleteInput
-                value={form.community_name}
-                onChange={(v) => setForm({ ...form, community_name: v })}
-                options={communityOptions}
-                placeholder="Community name"
-                className="input-field-sm"
-              />
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Community</label>
+                <AutocompleteInput
+                  value={form.community_name}
+                  onChange={(v) => setForm({ ...form, community_name: v })}
+                  options={communityOptions}
+                  placeholder="Community name"
+                  className="input-field-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Location</label>
+                <AutocompleteInput
+                  value={form.management_company}
+                  onChange={(v) => setForm({ ...form, management_company: v })}
+                  options={locationOptions}
+                  placeholder="Location"
+                  className="input-field-sm"
+                />
+              </div>
             </div>
             {formError && <p className="text-red-600 text-sm">{formError}</p>}
             <div className="flex gap-2">
@@ -602,36 +640,58 @@ resident2@example.com,Jane,Smith,Oak Hills`;
                     <td className="px-5 py-2" colSpan={hasDeliveryData ? 5 : 4}>
                       <div className="space-y-2">
                         <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">First Name</label>
+                            <input
+                              type="text"
+                              value={editForm.first_name}
+                              onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
+                              placeholder="First name"
+                              className="input-field-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Last Name</label>
+                            <input
+                              type="text"
+                              value={editForm.last_name}
+                              onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+                              placeholder="Last name"
+                              className="input-field-sm"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Email <span className="text-red-400">*</span></label>
                           <input
-                            type="text"
-                            value={editForm.first_name}
-                            onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
-                            placeholder="First name"
-                            className="input-field-sm"
-                          />
-                          <input
-                            type="text"
-                            value={editForm.last_name}
-                            onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-                            placeholder="Last name"
+                            type="email"
+                            value={editForm.email}
+                            onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                            placeholder="Email (required)"
                             className="input-field-sm"
                           />
                         </div>
-                        <input
-                          type="email"
-                          value={editForm.email}
-                          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                          placeholder="Email (required)"
-                          className="input-field-sm"
-                        />
                         <div className="grid grid-cols-2 gap-2">
-                          <AutocompleteInput
-                            value={editForm.community_name}
-                            onChange={(v) => setEditForm({ ...editForm, community_name: v })}
-                            options={communityOptions}
-                            placeholder="Community name"
-                            className="input-field-sm"
-                          />
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Community</label>
+                            <AutocompleteInput
+                              value={editForm.community_name}
+                              onChange={(v) => setEditForm({ ...editForm, community_name: v })}
+                              options={communityOptions}
+                              placeholder="Community name"
+                              className="input-field-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Location</label>
+                            <AutocompleteInput
+                              value={editForm.management_company}
+                              onChange={(v) => setEditForm({ ...editForm, management_company: v })}
+                              options={locationOptions}
+                              placeholder="Location"
+                              className="input-field-sm"
+                            />
+                          </div>
                         </div>
                         {editError && <p className="text-red-600 text-sm">{editError}</p>}
                         <div className="flex gap-2">

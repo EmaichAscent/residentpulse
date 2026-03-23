@@ -889,9 +889,10 @@ router.post("/board-members", async (req, res) => {
   if (existing && !existing.active) {
     // Reactivate previously removed board member
     const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name, req.isTestMode);
+    const canonicalLocation = await autoCreateLocationIfNeeded(req.clientId, management_company, req.isTestMode);
     await db.run(
       "UPDATE users SET active = TRUE, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
-      [first_name || null, last_name || null, canonicalCommunity || community_name || null, management_company || null, existing.id, req.isTestMode]
+      [first_name || null, last_name || null, canonicalCommunity || community_name || null, canonicalLocation || management_company || null, existing.id, req.isTestMode]
     );
     await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
     const reactivated = await db.get("SELECT * FROM users WHERE id = ?", [existing.id]);
@@ -899,9 +900,10 @@ router.post("/board-members", async (req, res) => {
   }
 
   const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name, req.isTestMode);
+  const canonicalLocation = await autoCreateLocationIfNeeded(req.clientId, management_company, req.isTestMode);
   const result = await db.run(
     "INSERT INTO users (client_id, email, first_name, last_name, community_name, management_company, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [req.clientId, cleanEmail, first_name || null, last_name || null, canonicalCommunity || community_name || null, management_company || null, req.isTestMode]
+    [req.clientId, cleanEmail, first_name || null, last_name || null, canonicalCommunity || community_name || null, canonicalLocation || management_company || null, req.isTestMode]
   );
 
   await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
@@ -933,9 +935,10 @@ router.put("/board-members/:id", async (req, res) => {
   }
 
   const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name, req.isTestMode);
+  const canonicalLocation = await autoCreateLocationIfNeeded(req.clientId, management_company, req.isTestMode);
   await db.run(
     "UPDATE users SET email = ?, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP, community_id = NULL WHERE id = ? AND is_test = ?",
-    [cleanEmail, first_name || null, last_name || null, canonicalCommunity || community_name || null, management_company || null, id, req.isTestMode]
+    [cleanEmail, first_name || null, last_name || null, canonicalCommunity || community_name || null, canonicalLocation || management_company || null, id, req.isTestMode]
   );
 
   await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
@@ -1007,19 +1010,21 @@ router.post("/board-members/import", async (req, res) => {
         // Fuzzy-match community name to prevent duplicates
         const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name, req.isTestMode);
         const finalCommunity = canonicalCommunity || community_name;
+        const canonicalLocation = await autoCreateLocationIfNeeded(req.clientId, management_company, req.isTestMode);
+        const finalLocation = canonicalLocation || management_company;
 
         const existing = await db.get("SELECT id, active FROM users WHERE email = ? AND client_id = ? AND is_test = ?", [email, req.clientId, req.isTestMode]);
 
         if (existing) {
           await db.run(
             "UPDATE users SET first_name = ?, last_name = ?, community_name = ?, management_company = ?, active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
-            [first_name, last_name, finalCommunity, management_company, existing.id, req.isTestMode]
+            [first_name, last_name, finalCommunity, finalLocation, existing.id, req.isTestMode]
           );
           updated++;
         } else {
           await db.run(
             "INSERT INTO users (client_id, email, first_name, last_name, community_name, management_company, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [req.clientId, email, first_name, last_name, finalCommunity, management_company, req.isTestMode]
+            [req.clientId, email, first_name, last_name, finalCommunity, finalLocation, req.isTestMode]
           );
           created++;
         }
@@ -1589,6 +1594,23 @@ async function autoCreateCommunityIfNeeded(clientId, communityName, isTestMode =
   // No match found — create new community
   await db.run(
     "INSERT INTO communities (client_id, community_name, is_test) VALUES (?, ?, ?)",
+    [clientId, trimmed, isTestMode]
+  );
+  return trimmed;
+}
+
+async function autoCreateLocationIfNeeded(clientId, locationName, isTestMode = false) {
+  if (!locationName || !locationName.trim()) return null;
+  const trimmed = locationName.trim();
+
+  const existing = await db.get(
+    "SELECT id, name FROM locations WHERE client_id = ? AND LOWER(TRIM(name)) = LOWER(?) AND is_test = ?",
+    [clientId, trimmed, isTestMode]
+  );
+  if (existing) return existing.name;
+
+  await db.run(
+    "INSERT INTO locations (client_id, name, is_test) VALUES (?, ?, ?)",
     [clientId, trimmed, isTestMode]
   );
   return trimmed;
