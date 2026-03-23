@@ -1949,7 +1949,9 @@ KNOWLEDGE BASE:
 - Critical Alerts flag urgent issues (safety, legal, service failures) during conversations. Can be dismissed or resolved.
 - Google Review requests: enabled in Account settings. Promoters (9-10) are asked to leave a Google review. Requires a Google Business review URL.
 - Detractor Alert emails: configurable threshold in Account settings. Emails go to all client admins when a score falls below threshold.
-- Members tab: add/edit/remove board members, export CSV, reactivate inactive members.
+- Members tab: add/edit/remove board members, export CSV, import CSV, reactivate inactive members.
+- Member CSV import: click Import on Members tab. Required columns: email, first_name, last_name, community_name. Optional: management_company. Download the sample CSV template for the correct format. Duplicates are auto-skipped.
+- Community CSV import: click Import on Communities tab. Columns: community_name (must match existing), contract_value, community_manager_name, property_type (condo/single_family/townhouse/mixed/other), number_of_units. Shows a preview before confirming. Download the sample CSV template for the correct format. Importing community data unlocks Revenue at Risk, Manager Performance heatmap, and contract renewal tracking.
 - Bounced emails show a red badge on the Members page. Correcting the email auto-resends the invitation.
 - Company logo can be uploaded in Account settings (PNG/JPG/SVG, max 500KB, landscape/square, max 3:1 ratio).
 - Account setup: 1) Company interview, 2) Add board members, 3) Schedule first round.
