@@ -43,7 +43,7 @@ router.post("/import", requireClientAdmin, upload.single("file"), async (req, re
   const header = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
   const emailIdx = header.indexOf("email");
   const communityIdx = header.indexOf("community_name");
-  const companyIdx = header.indexOf("management_company");
+  const companyIdx = header.indexOf("location") >= 0 ? header.indexOf("location") : header.indexOf("management_company");
   const firstNameIdx = header.indexOf("first_name");
   const lastNameIdx = header.indexOf("last_name");
 

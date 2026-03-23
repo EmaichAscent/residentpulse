@@ -149,6 +149,27 @@ export default function TrendsView() {
     return { managers, roundLabels };
   })();
 
+  // Location Performance heatmap data
+  const locationHeatmap = (() => {
+    const roundLabels = concludedRounds
+      .filter((r) => r.location_performance)
+      .map((r) => `R${r.round_number}`);
+    const locationMap = {};
+    for (const r of concludedRounds) {
+      if (!r.location_performance) continue;
+      const label = `R${r.round_number}`;
+      for (const l of r.location_performance) {
+        if (!locationMap[l.location]) locationMap[l.location] = {};
+        locationMap[l.location][label] = { nps: l.nps, respondents: l.respondents };
+      }
+    }
+    const lastRound = roundLabels[roundLabels.length - 1];
+    const locations = Object.entries(locationMap)
+      .map(([name, rounds]) => ({ name, rounds }))
+      .sort((a, b) => (b.rounds[lastRound]?.nps ?? -101) - (a.rounds[lastRound]?.nps ?? -101));
+    return { locations, roundLabels };
+  })();
+
   // Compute trending topics between consecutive rounds
   const topicTrends = [];
   for (let i = 1; i < concludedRounds.length; i++) {
@@ -326,6 +347,52 @@ export default function TrendsView() {
                     <td className="py-2.5 pr-4 text-gray-700 font-medium whitespace-nowrap">{mgr.name}</td>
                     {managerHeatmap.roundLabels.map((label) => {
                       const cell = mgr.rounds[label];
+                      if (!cell) return <td key={label} className="text-center py-2.5 px-3 text-gray-300">—</td>;
+                      const color = npsColor(cell.nps);
+                      const bgClass = cell.nps >= 50 ? "bg-green-50" : cell.nps >= 0 ? "bg-blue-50" : "bg-red-50";
+                      const formatted = cell.nps > 0 ? `+${cell.nps}` : `${cell.nps}`;
+                      return (
+                        <td key={label} className={`text-center py-2.5 px-3 ${bgClass} rounded`}>
+                          <span className="font-semibold text-sm" style={{ color }}>{formatted}</span>
+                          <span className="block text-[10px] text-gray-400">{cell.respondents} resp.</span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* NPS by Location Heatmap */}
+      {locationHeatmap.locations.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">
+            NPS by Location Over Time
+          </p>
+          <p className="text-xs text-gray-400 mb-4">
+            NPS by location across survey rounds
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-500">Location</th>
+                  {locationHeatmap.roundLabels.map((label) => (
+                    <th key={label} className="text-center py-2 px-3 text-xs font-semibold text-gray-500 min-w-[64px]">
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {locationHeatmap.locations.map((loc) => (
+                  <tr key={loc.name} className="border-b border-gray-100 last:border-0">
+                    <td className="py-2.5 pr-4 text-gray-700 font-medium whitespace-nowrap">{loc.name}</td>
+                    {locationHeatmap.roundLabels.map((label) => {
+                      const cell = loc.rounds[label];
                       if (!cell) return <td key={label} className="text-center py-2.5 px-3 text-gray-300">—</td>;
                       const color = npsColor(cell.nps);
                       const bgClass = cell.nps >= 50 ? "bg-green-50" : cell.nps >= 0 ? "bg-blue-50" : "bg-red-50";

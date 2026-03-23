@@ -330,7 +330,7 @@ export default function Dashboard({ sessions, user, onNavigate }) {
                     You can add them one at a time or import a CSV list —{" "}
                     <button
                       onClick={() => {
-                        const csv = `email,first_name,last_name,community_name,management_company\nresident1@example.com,John,Doe,Sunset Gardens,ABC Property Management\nresident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
+                        const csv = `email,first_name,last_name,community_name,location\nresident1@example.com,John,Doe,Sunset Gardens,Tampa Office\nresident2@example.com,Jane,Smith,Oak Hills,Orlando Office`;
                         const blob = new Blob([csv], { type: "text/csv" });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement("a");

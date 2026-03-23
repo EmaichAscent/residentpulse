@@ -157,7 +157,7 @@ router.get("/trends", async (req, res) => {
     for (const round of rounds) {
       // Get session stats for this round
       const sessions = await db.all(
-        `SELECT s.nps_score, s.community_id, COALESCE(sc.community_name, s.community_name) as community_name, s.completed
+        `SELECT s.nps_score, s.community_id, COALESCE(sc.community_name, s.community_name) as community_name, s.management_company, s.completed
          FROM sessions s
          LEFT JOIN communities sc ON sc.id = s.community_id
          WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND s.is_test = ?`,
@@ -194,6 +194,27 @@ router.get("/trends", async (req, res) => {
       // Paid tier: Revenue at Risk + Manager Performance
       let revenueAtRisk = null;
       let managerPerformance = null;
+      let locationPerformance = null;
+
+      // Location Performance (available to all tiers — uses session data directly)
+      const locationScores = {};
+      for (const s of completed) {
+        const loc = s.management_company;
+        if (!loc || s.nps_score == null) continue;
+        if (!locationScores[loc]) locationScores[loc] = [];
+        locationScores[loc].push(s.nps_score);
+      }
+      if (Object.keys(locationScores).length > 0) {
+        locationPerformance = Object.entries(locationScores)
+          .filter(([_, scores]) => scores.length > 0)
+          .map(([location, scores]) => {
+            const p = scores.filter(n => n >= 9).length;
+            const d = scores.filter(n => n <= 6).length;
+            const nps = Math.round(((p - d) / scores.length) * 100);
+            return { location, nps, respondents: scores.length };
+          })
+          .sort((a, b) => b.nps - a.nps);
+      }
 
       if (isPaidTier && round.status === "concluded") {
         // Get community metadata from snapshots (concluded) or live table
@@ -281,6 +302,7 @@ router.get("/trends", async (req, res) => {
         word_frequencies: round.word_frequencies || null,
         revenue_at_risk: revenueAtRisk,
         manager_performance: managerPerformance,
+        location_performance: locationPerformance,
       });
     }
 
@@ -344,6 +366,7 @@ router.get("/:id/dashboard", async (req, res) => {
     const sessions = await db.all(
       `SELECT s.id, s.email, s.nps_score, s.completed, s.summary,
               COALESCE(sc.community_name, s.community_name) as community_name,
+              s.management_company,
               s.created_at, u.first_name, u.last_name
        FROM sessions s
        LEFT JOIN users u ON u.id = s.user_id
@@ -529,6 +552,25 @@ router.get("/:id/dashboard", async (req, res) => {
         .map(c => ({ name: c.name, units: c.number_of_units, median: c.median, cohort: c.cohort, respondents: c.respondents }))
         .sort((a, b) => a.units - b.units);
 
+      // Location Performance: group scores by management_company (displayed as "Location")
+      const locationScores = {};
+      for (const s of completedSessions) {
+        const loc = s.management_company;
+        if (!loc) continue;
+        if (!locationScores[loc]) locationScores[loc] = [];
+        locationScores[loc].push(s.nps_score);
+      }
+
+      const locationPerformance = Object.entries(locationScores)
+        .filter(([_, scores]) => scores.length > 0)
+        .map(([location, scores]) => {
+          const p = scores.filter(n => n >= 9).length;
+          const d = scores.filter(n => n <= 6).length;
+          const nps = Math.round(((p - d) / scores.length) * 100);
+          return { location, nps, respondents: scores.length };
+        })
+        .sort((a, b) => b.nps - a.nps);
+
       communityAnalytics = {
         revenue_at_risk: {
           total_portfolio_value: totalPortfolioValue,
@@ -539,6 +581,7 @@ router.get("/:id/dashboard", async (req, res) => {
           })),
         },
         manager_performance: managerPerformance,
+        location_performance: locationPerformance,
         property_type_analysis: propertyTypeAnalysis,
         size_trends: sizeTrends,
       };

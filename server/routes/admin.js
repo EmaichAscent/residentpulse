@@ -812,7 +812,7 @@ router.get("/board-members/export", async (req, res) => {
     [req.clientId, req.isTestMode]
   );
 
-  const header = "first_name,last_name,email,community_name,management_company";
+  const header = "first_name,last_name,email,community_name,location";
   const rows = users.map(u =>
     [u.first_name || "", u.last_name || "", u.email, u.community_name || "", u.management_company || ""]
       .map(v => `"${(v || "").replace(/"/g, '""')}"`)
@@ -954,7 +954,7 @@ router.post("/board-members/import", async (req, res) => {
     const firstNameIndex = headers.indexOf("first_name");
     const lastNameIndex = headers.indexOf("last_name");
     const communityIndex = headers.indexOf("community_name");
-    const companyIndex = headers.indexOf("management_company");
+    const companyIndex = headers.indexOf("location") >= 0 ? headers.indexOf("location") : headers.indexOf("management_company");
 
     let created = 0;
     let updated = 0;

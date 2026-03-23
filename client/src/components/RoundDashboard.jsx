@@ -799,6 +799,39 @@ export default function RoundDashboard() {
             </div>
           )}
 
+          {/* NPS by Location */}
+          {community_analytics.location_performance && community_analytics.location_performance.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">NPS by Location</p>
+              <div className="space-y-3">
+                {community_analytics.location_performance.map((l, i) => (
+                  <div key={i} className="flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{l.location}</p>
+                      <p className="text-xs text-gray-500">
+                        {l.respondents} respondent{l.respondents !== 1 ? "s" : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.max(5, Math.min(100, (l.nps + 100) / 2))}%`,
+                            backgroundColor: l.nps >= 50 ? COLORS.promoter : l.nps >= 0 ? COLORS.passive : COLORS.detractor,
+                          }}
+                        />
+                      </div>
+                      <span className="text-sm font-bold w-12 text-right" style={{ color: npsColor(l.nps) }}>
+                        {l.nps > 0 ? "+" : ""}{l.nps}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Manager Performance */}
           {community_analytics.manager_performance.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-6">

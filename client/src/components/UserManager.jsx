@@ -327,9 +327,9 @@ export default function UserManager() {
   };
 
   const downloadSampleCSV = () => {
-    const csv = `email,first_name,last_name,community_name,management_company
-resident1@example.com,John,Doe,Sunset Gardens,ABC Property Management
-resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
+    const csv = `email,first_name,last_name,community_name,location
+resident1@example.com,John,Doe,Sunset Gardens,Tampa Office
+resident2@example.com,Jane,Smith,Oak Hills,Orlando Office`;
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -545,7 +545,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                 value={form.management_company}
                 onChange={(v) => setForm({ ...form, management_company: v })}
                 options={companyOptions}
-                placeholder="Management company"
+                placeholder="Location"
                 className="input-field-sm"
               />
             </div>
@@ -589,7 +589,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                   { key: "name", label: "Name" },
                   { key: "email", label: "Email" },
                   { key: "community_name", label: "Community" },
-                  { key: "management_company", label: "Company" },
+                  { key: "management_company", label: "Location" },
                 ].map((col) => (
                   <th key={col.key} className="px-5 py-3">
                     <button
@@ -651,7 +651,7 @@ resident2@example.com,Jane,Smith,Oak Hills,ABC Property Management`;
                             value={editForm.management_company}
                             onChange={(v) => setEditForm({ ...editForm, management_company: v })}
                             options={companyOptions}
-                            placeholder="Management company"
+                            placeholder="Location"
                             className="input-field-sm"
                           />
                         </div>
