@@ -144,6 +144,7 @@ export default function CommunityManager() {
       const res = await fetch("/api/admin/locations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ name: locName }),
       });
       const data = await res.json();
@@ -151,6 +152,7 @@ export default function CommunityManager() {
         const newLoc = { id: data.id, name: data.name, community_count: 0 };
         setLocations((prev) => [...prev, newLoc].sort((a, b) => a.name.localeCompare(b.name)));
         setNewLocationName("");
+        setCreatingLocation(false);
         return newLoc;
       }
     } catch {}

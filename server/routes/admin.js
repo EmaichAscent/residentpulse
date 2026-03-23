@@ -1696,10 +1696,10 @@ router.post("/locations", async (req, res) => {
     if (existing) return res.status(409).json({ error: "Location already exists", id: existing.id });
 
     const result = await db.run(
-      "INSERT INTO locations (client_id, name, is_test) VALUES (?, ?, ?) RETURNING id",
+      "INSERT INTO locations (client_id, name, is_test) VALUES (?, ?, ?)",
       [req.clientId, name.trim(), req.isTestMode]
     );
-    res.json({ id: result.id || result.lastID, name: name.trim() });
+    res.json({ id: result.lastInsertRowid, name: name.trim() });
   } catch (err) {
     logger.error({ err }, "Failed to create location");
     res.status(500).json({ error: "Failed to create location" });
