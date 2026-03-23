@@ -1,5 +1,80 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import ConfirmModal from "./ConfirmModal";
+
+function LocationAutocomplete({ value, onChange, locations, onCreateLocation, className }) {
+  const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef(null);
+
+  // Sync display text with selected location
+  useEffect(() => {
+    const loc = locations.find((l) => String(l.id) === String(value));
+    setText(loc ? loc.name : "");
+  }, [value, locations]);
+
+  const filtered = useMemo(() => {
+    if (!text) return locations;
+    const q = text.toLowerCase();
+    return locations.filter((l) => l.name.toLowerCase().includes(q));
+  }, [text, locations]);
+
+  const exactMatch = locations.find((l) => l.name.toLowerCase() === text.toLowerCase().trim());
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleCreate = async () => {
+    if (!text.trim() || exactMatch) return;
+    const newLoc = await onCreateLocation(text.trim());
+    if (newLoc) onChange(String(newLoc.id));
+    setOpen(false);
+  };
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        type="text"
+        value={text}
+        onChange={(e) => { setText(e.target.value); onChange(""); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder="Location"
+        className={className}
+        onKeyDown={(e) => { if (e.key === "Enter" && text.trim() && !exactMatch) { e.preventDefault(); handleCreate(); } }}
+      />
+      {open && (filtered.length > 0 || (text.trim() && !exactMatch)) && (
+        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+          {filtered.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange(String(l.id)); setText(l.name); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition"
+            >
+              {l.name}
+            </button>
+          ))}
+          {text.trim() && !exactMatch && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleCreate}
+              className="w-full text-left px-3 py-2 text-sm font-medium hover:bg-green-50 transition"
+              style={{ color: "var(--cam-green)" }}
+            >
+              + Create "{text.trim()}"
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const PROPERTY_TYPES = [
   { value: "condo", label: "Condo" },
@@ -61,22 +136,26 @@ export default function CommunityManager() {
       .catch(() => {});
   };
 
-  const handleCreateLocation = async () => {
-    if (!newLocationName.trim()) return;
+  const handleCreateLocation = async (name) => {
+    const locName = name || newLocationName.trim();
+    if (!locName) return null;
     setCreatingLocation(true);
     try {
       const res = await fetch("/api/admin/locations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newLocationName.trim() }),
+        body: JSON.stringify({ name: locName }),
       });
       const data = await res.json();
       if (res.ok) {
-        setLocations((prev) => [...prev, { id: data.id, name: data.name, community_count: 0 }].sort((a, b) => a.name.localeCompare(b.name)));
+        const newLoc = { id: data.id, name: data.name, community_count: 0 };
+        setLocations((prev) => [...prev, newLoc].sort((a, b) => a.name.localeCompare(b.name)));
         setNewLocationName("");
+        return newLoc;
       }
     } catch {}
     setCreatingLocation(false);
+    return null;
   };
 
   // --- Filter: deactivation + search ---
@@ -451,32 +530,14 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
               />
             </div>
             <div className="grid grid-cols-2 gap-3 items-center">
-              <select
+              <LocationAutocomplete
                 value={form.location_id}
-                onChange={(e) => setForm({ ...form, location_id: e.target.value })}
+                onChange={(v) => setForm({ ...form, location_id: v })}
+                locations={locations}
+                onCreateLocation={handleCreateLocation}
                 className="input-field-sm"
-              >
-                <option value="">Location...</option>
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
-                ))}
-              </select>
-              <div className="flex gap-1">
-                <input
-                  type="text"
-                  value={newLocationName}
-                  onChange={(e) => setNewLocationName(e.target.value)}
-                  placeholder="Or add new location"
-                  className="input-field-sm flex-1"
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleCreateLocation())}
-                />
-                {newLocationName.trim() && (
-                  <button type="button" onClick={handleCreateLocation} disabled={creatingLocation}
-                    className="px-3 py-1 text-xs font-semibold text-white rounded-lg" style={{ backgroundColor: "var(--cam-green)" }}>
-                    +
-                  </button>
-                )}
-              </div>
+              />
+              <div></div>
             </div>
             <div className="grid grid-cols-2 gap-3 items-center">
               <input
@@ -530,18 +591,18 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[700px]">
+          <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                <th className="px-5 py-3">Community</th>
-                <th className="px-5 py-3">Location</th>
-                <th className="px-5 py-3">Contract Value</th>
-                <th className="px-5 py-3">Manager</th>
-                <th className="px-5 py-3">Type</th>
-                <th className="px-5 py-3">Units</th>
-                <th className="px-5 py-3">Renewal</th>
-                <th className="px-5 py-3">Board Members</th>
-                <th className="px-5 py-3 w-20"></th>
+                <th className="px-3 py-3">Community</th>
+                <th className="px-3 py-3">Location</th>
+                <th className="px-3 py-3">Value</th>
+                <th className="px-3 py-3">Manager</th>
+                <th className="px-3 py-3">Type</th>
+                <th className="px-3 py-3 text-center">Units</th>
+                <th className="px-3 py-3">Renewal</th>
+                <th className="px-3 py-3 text-center">Members</th>
+                <th className="px-3 py-3 w-16"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -557,16 +618,13 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
                           placeholder="Community name"
                           className="input-field-sm"
                         />
-                        <select
+                        <LocationAutocomplete
                           value={editForm.location_id}
-                          onChange={(e) => setEditForm({ ...editForm, location_id: e.target.value })}
+                          onChange={(v) => setEditForm({ ...editForm, location_id: v })}
+                          locations={locations}
+                          onCreateLocation={handleCreateLocation}
                           className="input-field-sm"
-                        >
-                          <option value="">Location...</option>
-                          {locations.map((l) => (
-                            <option key={l.id} value={l.id}>{l.name}</option>
-                          ))}
-                        </select>
+                        />
                         <input
                           type="number"
                           value={editForm.contract_value}
@@ -639,20 +697,20 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
                   </tr>
                 ) : (
                   <tr key={c.id} className={`hover:bg-gray-50 transition ${c.status === "deactivated" ? "opacity-50" : ""}`}>
-                    <td className="px-5 py-3 font-medium text-gray-900">
+                    <td className="px-3 py-3 font-medium text-gray-900">
                       {c.community_name}
                       {c.status === "deactivated" && (
                         <span className="ml-2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 uppercase">Inactive</span>
                       )}
                     </td>
-                    <td className="px-5 py-3 text-gray-500">{c.location_name || "\u2014"}</td>
-                    <td className="px-5 py-3 text-gray-700">{formatCurrency(c.contract_value)}</td>
-                    <td className="px-5 py-3 text-gray-500">{c.community_manager_name || "\u2014"}</td>
-                    <td className="px-5 py-3 text-gray-500">{formatPropertyType(c.property_type)}</td>
-                    <td className="px-5 py-3 text-gray-500">{c.number_of_units || "\u2014"}</td>
-                    <td className="px-5 py-3 text-gray-500">{formatRenewal(c)}</td>
-                    <td className="px-5 py-3 text-gray-500">{c.member_count || 0}</td>
-                    <td className="px-5 py-3">
+                    <td className="px-3 py-3 text-gray-500">{c.location_name || "\u2014"}</td>
+                    <td className="px-3 py-3 text-gray-700">{formatCurrency(c.contract_value)}</td>
+                    <td className="px-3 py-3 text-gray-500">{c.community_manager_name || "\u2014"}</td>
+                    <td className="px-3 py-3 text-gray-500">{formatPropertyType(c.property_type)}</td>
+                    <td className="px-3 py-3 text-gray-500 text-center">{c.number_of_units || "\u2014"}</td>
+                    <td className="px-3 py-3 text-gray-500">{formatRenewal(c)}</td>
+                    <td className="px-3 py-3 text-gray-500 text-center">{c.member_count || 0}</td>
+                    <td className="px-3 py-3">
                       <div className="flex gap-1">
                         <button onClick={() => startEdit(c)} className="p-1 text-gray-300 hover:text-blue-500 transition" title="Edit community">
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">

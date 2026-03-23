@@ -551,27 +551,15 @@ resident2@example.com,Jane,Smith,Oak Hills`;
                 required
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Community</label>
-                <AutocompleteInput
-                  value={form.community_name}
-                  onChange={(v) => setForm({ ...form, community_name: v })}
-                  options={communityOptions}
-                  placeholder="Community name"
-                  className="input-field-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Location</label>
-                <AutocompleteInput
-                  value={form.management_company}
-                  onChange={(v) => setForm({ ...form, management_company: v })}
-                  options={locationOptions}
-                  placeholder="Location"
-                  className="input-field-sm"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Community</label>
+              <AutocompleteInput
+                value={form.community_name}
+                onChange={(v) => setForm({ ...form, community_name: v })}
+                options={communityOptions}
+                placeholder="Community name"
+                className="input-field-sm"
+              />
             </div>
             {formError && <p className="text-red-600 text-sm">{formError}</p>}
             <div className="flex gap-2">
@@ -671,27 +659,15 @@ resident2@example.com,Jane,Smith,Oak Hills`;
                             className="input-field-sm"
                           />
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Community</label>
-                            <AutocompleteInput
-                              value={editForm.community_name}
-                              onChange={(v) => setEditForm({ ...editForm, community_name: v })}
-                              options={communityOptions}
-                              placeholder="Community name"
-                              className="input-field-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Location</label>
-                            <AutocompleteInput
-                              value={editForm.management_company}
-                              onChange={(v) => setEditForm({ ...editForm, management_company: v })}
-                              options={locationOptions}
-                              placeholder="Location"
-                              className="input-field-sm"
-                            />
-                          </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Community</label>
+                          <AutocompleteInput
+                            value={editForm.community_name}
+                            onChange={(v) => setEditForm({ ...editForm, community_name: v })}
+                            options={communityOptions}
+                            placeholder="Community name"
+                            className="input-field-sm"
+                          />
                         </div>
                         {editError && <p className="text-red-600 text-sm">{editError}</p>}
                         <div className="flex gap-2">
