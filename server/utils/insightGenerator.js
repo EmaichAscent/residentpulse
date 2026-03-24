@@ -378,7 +378,7 @@ ${context}`,
 
   const response = await createMessage({
     model: MODEL,
-    max_tokens: 1500,
+    max_tokens: 4000,
     messages: [{ role: "user", content: prompts[passType] }],
   });
 
@@ -410,7 +410,7 @@ Deduplicate overlapping items. Prioritize clarity and actionability. Only output
 
   const response = await createMessage({
     model: MODEL,
-    max_tokens: 2500,
+    max_tokens: 6000,
     messages: [{ role: "user", content: prompt }],
   });
 
