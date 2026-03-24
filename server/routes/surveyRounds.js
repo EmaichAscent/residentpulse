@@ -15,35 +15,53 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // Get all survey rounds for this client
 router.get("/", async (req, res) => {
   try {
-    // Auto-fill missing planned rounds if cadence demands more
+    // Auto-fill: always ensure `cadence` planned rounds exist in the future
     const subscription = await db.get(
       `SELECT cs.survey_cadence FROM client_subscriptions cs WHERE cs.client_id = ? AND cs.status = 'active'`,
       [req.clientId]
     );
     const cadence = subscription?.survey_cadence || 2;
+    const intervalMonths = cadence === 4 ? 3 : 6;
 
-    const existingRounds = await db.all(
-      "SELECT id, round_number, status, launched_at FROM survey_rounds WHERE client_id = ? AND is_test = ? ORDER BY round_number",
+    const plannedCount = await db.get(
+      "SELECT COUNT(*) as count FROM survey_rounds WHERE client_id = ? AND status = 'planned' AND is_test = ?",
       [req.clientId, req.isTestMode]
     );
 
-    if (existingRounds.length > 0 && existingRounds.length < cadence) {
-      const maxRoundNum = Math.max(...existingRounds.map(r => r.round_number));
-      const lastLaunched = existingRounds.filter(r => r.launched_at).sort((a, b) => new Date(b.launched_at) - new Date(a.launched_at))[0];
-      const baseDate = lastLaunched ? new Date(lastLaunched.launched_at) : new Date();
-      const intervalMonths = cadence === 4 ? 3 : 6;
+    if ((plannedCount?.count || 0) < cadence) {
+      const lastRound = await db.get(
+        `SELECT round_number, launched_at, closes_at FROM survey_rounds
+         WHERE client_id = ? AND status IN ('in_progress', 'concluded') AND is_test = ?
+         ORDER BY round_number DESC LIMIT 1`,
+        [req.clientId, req.isTestMode]
+      );
+      const lastPlanned = await db.get(
+        `SELECT round_number, scheduled_date FROM survey_rounds
+         WHERE client_id = ? AND status = 'planned' AND is_test = ?
+         ORDER BY round_number DESC LIMIT 1`,
+        [req.clientId, req.isTestMode]
+      );
+
+      // Anchor: last planned round date, or last launched round, or now
+      const anchorDate = lastPlanned
+        ? new Date(lastPlanned.scheduled_date)
+        : lastRound
+        ? new Date(lastRound.closes_at || lastRound.launched_at)
+        : new Date();
+      const maxRoundNum = Math.max(lastRound?.round_number || 0, lastPlanned?.round_number || 0);
+      const currentPlanned = plannedCount?.count || 0;
       const now = new Date();
 
-      for (let i = existingRounds.length; i < cadence; i++) {
-        const nextDate = new Date(baseDate);
-        nextDate.setMonth(nextDate.getMonth() + intervalMonths * i);
+      for (let i = 0; i < cadence - currentPlanned; i++) {
+        const nextDate = new Date(anchorDate);
+        nextDate.setMonth(nextDate.getMonth() + intervalMonths * (i + 1));
         const finalDate = nextDate <= now
-          ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i - existingRounds.length + 1))
+          ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i + 1))
           : nextDate;
 
         await db.run(
           "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test) VALUES (?, ?, ?, 'planned', ?)",
-          [req.clientId, maxRoundNum + (i - existingRounds.length + 1), finalDate.toISOString(), req.isTestMode]
+          [req.clientId, maxRoundNum + i + 1, finalDate.toISOString(), req.isTestMode]
         );
       }
     }
@@ -1048,6 +1066,35 @@ router.post("/:id/launch", async (req, res) => {
       [closesAt.toISOString(), members.length, roundId, req.isTestMode]
     );
 
+    // Auto-replenish: ensure cadence number of planned rounds always exist
+    const cadenceSub = await db.get(
+      "SELECT cs.survey_cadence FROM client_subscriptions cs WHERE cs.client_id = ? AND cs.status = 'active'",
+      [req.clientId]
+    );
+    const cadence = cadenceSub?.survey_cadence || 2;
+    const intervalMonths = cadence === 4 ? 3 : 6;
+    const plannedCount = await db.get(
+      "SELECT COUNT(*) as count FROM survey_rounds WHERE client_id = ? AND status = 'planned' AND is_test = ?",
+      [req.clientId, req.isTestMode]
+    );
+    if ((plannedCount?.count || 0) < cadence) {
+      const lastPlanned = await db.get(
+        "SELECT round_number, scheduled_date FROM survey_rounds WHERE client_id = ? AND status = 'planned' AND is_test = ? ORDER BY round_number DESC LIMIT 1",
+        [req.clientId, req.isTestMode]
+      );
+      const anchorDate = lastPlanned ? new Date(lastPlanned.scheduled_date) : closesAt;
+      const maxNum = lastPlanned ? lastPlanned.round_number : round.round_number;
+      const toCreate = cadence - (plannedCount?.count || 0);
+      for (let i = 0; i < toCreate; i++) {
+        const nextDate = new Date(anchorDate);
+        nextDate.setMonth(nextDate.getMonth() + intervalMonths * (i + 1));
+        await db.run(
+          "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test) VALUES (?, ?, ?, 'planned', ?)",
+          [req.clientId, maxNum + i + 1, nextDate.toISOString(), req.isTestMode]
+        );
+      }
+    }
+
     // Create background email job
     const jobResult = await db.run(
       "INSERT INTO email_jobs (client_id, round_id, total_count, is_test) VALUES (?, ?, ?, ?)",
@@ -1104,7 +1151,7 @@ router.get("/email-jobs/:jobId", async (req, res) => {
 // Recalculate planned rounds after cadence change
 router.post("/recalculate", async (req, res) => {
   try {
-    // Delete all planned rounds
+    // Delete all planned rounds and rebuild
     await db.run(
       "DELETE FROM survey_rounds WHERE client_id = ? AND status = 'planned' AND is_test = ?",
       [req.clientId, req.isTestMode]
@@ -1129,28 +1176,24 @@ router.post("/recalculate", async (req, res) => {
     const cadence = subscription?.survey_cadence || subscription?.survey_rounds_per_year || 2;
     const monthsBetween = cadence === 4 ? 3 : 6;
 
-    if (lastRound) {
-      // Calculate remaining rounds from anchor
-      const anchorDate = new Date(lastRound.closes_at || lastRound.scheduled_date);
-      const nextRoundNumber = lastRound.round_number + 1;
+    const baseDate = lastRound
+      ? new Date(lastRound.closes_at || lastRound.launched_at || lastRound.scheduled_date)
+      : new Date();
+    const maxRoundNum = lastRound ? lastRound.round_number : 0;
+    const now = new Date();
 
-      // Get how many total rounds already exist (concluded + in_progress)
-      const existingCount = await db.get(
-        "SELECT COUNT(*) as count FROM survey_rounds WHERE client_id = ? AND is_test = ?",
-        [req.clientId, req.isTestMode]
+    // Always create `cadence` planned rounds into the future
+    for (let i = 0; i < cadence; i++) {
+      const roundDate = new Date(baseDate);
+      roundDate.setMonth(roundDate.getMonth() + ((i + 1) * monthsBetween));
+      const finalDate = roundDate <= now
+        ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i + 1))
+        : roundDate;
+
+      await db.run(
+        "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test) VALUES (?, ?, ?, 'planned', ?)",
+        [req.clientId, maxRoundNum + i + 1, finalDate.toISOString().split("T")[0], req.isTestMode]
       );
-
-      const remainingSlots = cadence - (existingCount?.count || 0);
-
-      for (let i = 0; i < remainingSlots; i++) {
-        const roundDate = new Date(anchorDate);
-        roundDate.setMonth(roundDate.getMonth() + ((i + 1) * monthsBetween));
-
-        await db.run(
-          "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, is_test) VALUES (?, ?, ?, ?)",
-          [req.clientId, nextRoundNumber + i, roundDate.toISOString().split("T")[0], req.isTestMode]
-        );
-      }
     }
 
     // Return updated rounds

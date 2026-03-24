@@ -278,7 +278,7 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
     <div className="bg-white rounded-xl border p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900">Your Survey Rounds</h3>
-        {maxCadence >= 4 && onCadenceChange && (
+        {onCadenceChange && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500 mr-1">Cadence:</span>
             <div className="flex bg-gray-100 rounded-lg p-0.5">
@@ -296,10 +296,13 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
               </button>
               <button
                 onClick={() => onCadenceChange(4)}
-                disabled={cadenceUpdating}
+                disabled={cadenceUpdating || maxCadence < 4}
+                title={maxCadence < 4 ? "Upgrade your plan to unlock 4x/year" : ""}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition ${
                   cadence === 4
                     ? "text-white shadow-sm cursor-default"
+                    : maxCadence < 4
+                    ? "text-gray-300 cursor-not-allowed"
                     : "text-gray-500 hover:text-gray-700 cursor-pointer"
                 } ${cadenceUpdating ? "opacity-50" : ""}`}
                 style={cadence === 4 ? { backgroundColor: "var(--cam-green)" } : {}}

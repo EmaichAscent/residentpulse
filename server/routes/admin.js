@@ -434,111 +434,55 @@ router.patch("/account/cadence", async (req, res) => {
     [survey_cadence, req.clientId]
   );
 
-  // Recalculate planned round dates based on the most recent concluded or in-progress round
+  // Recalculate planned rounds — always ensure `survey_cadence` planned rounds exist
   const intervalMonths = survey_cadence === 4 ? 3 : 6;
+
+  // Delete all existing planned rounds and rebuild
+  await db.run(
+    "DELETE FROM survey_rounds WHERE client_id = ? AND status = 'planned' AND is_test = ?",
+    [req.clientId, req.isTestMode]
+  );
+
+  // Find the last launched/concluded round as anchor
   const lastRound = await db.get(
-    `SELECT launched_at, concluded_at FROM survey_rounds
+    `SELECT round_number, launched_at, closes_at, concluded_at FROM survey_rounds
      WHERE client_id = ? AND status IN ('in_progress', 'concluded') AND is_test = ?
-     ORDER BY launched_at DESC LIMIT 1`,
+     ORDER BY round_number DESC LIMIT 1`,
     [req.clientId, req.isTestMode]
   );
 
-  const plannedRounds = await db.all(
-    `SELECT id, round_number FROM survey_rounds
-     WHERE client_id = ? AND status = 'planned' AND is_test = ?
-     ORDER BY round_number ASC`,
-    [req.clientId, req.isTestMode]
-  );
+  const baseDate = lastRound
+    ? new Date(lastRound.closes_at || lastRound.launched_at)
+    : new Date();
+  const maxRoundNum = lastRound ? lastRound.round_number : 0;
+  const now = new Date();
 
-  // Count total rounds this year (all statuses)
-  const allRounds = await db.all(
-    "SELECT id, round_number, status FROM survey_rounds WHERE client_id = ? AND is_test = ? ORDER BY round_number ASC",
-    [req.clientId, req.isTestMode]
-  );
+  // Always create `survey_cadence` planned rounds into the future
+  for (let i = 0; i < survey_cadence; i++) {
+    const nextDate = new Date(baseDate);
+    nextDate.setMonth(nextDate.getMonth() + intervalMonths * (i + 1));
+    const finalDate = nextDate <= now
+      ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i + 1))
+      : nextDate;
 
-  // If increasing cadence and we need more planned rounds, create them
-  if (survey_cadence > allRounds.length) {
-    const maxRoundNum = allRounds.length > 0 ? Math.max(...allRounds.map(r => r.round_number)) : 0;
-    const baseDate = lastRound ? new Date(lastRound.launched_at) : new Date();
-
-    for (let i = allRounds.length; i < survey_cadence; i++) {
-      const nextDate = new Date(baseDate);
-      nextDate.setMonth(nextDate.getMonth() + intervalMonths * (i));
-      const now = new Date();
-      const finalDate = nextDate <= now
-        ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i - allRounds.length + 1))
-        : nextDate;
-
-      await db.run(
-        "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test) VALUES (?, ?, ?, 'planned', ?)",
-        [req.clientId, maxRoundNum + (i - allRounds.length + 1), finalDate.toISOString(), req.isTestMode]
-      );
-    }
-  }
-
-  // If decreasing cadence, remove excess planned rounds (only planned, never active/concluded)
-  if (survey_cadence < allRounds.length) {
-    const excessPlanned = await db.all(
-      "SELECT id FROM survey_rounds WHERE client_id = ? AND status = 'planned' AND is_test = ? ORDER BY round_number DESC",
-      [req.clientId, req.isTestMode]
+    await db.run(
+      "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test) VALUES (?, ?, ?, 'planned', ?)",
+      [req.clientId, maxRoundNum + i + 1, finalDate.toISOString(), req.isTestMode]
     );
-    const nonPlannedCount = allRounds.filter(r => r.status !== "planned").length;
-    const targetPlanned = Math.max(0, survey_cadence - nonPlannedCount);
-    const toRemove = excessPlanned.slice(0, excessPlanned.length - targetPlanned);
-    for (const r of toRemove) {
-      await db.run("DELETE FROM survey_rounds WHERE id = ? AND is_test = ?", [r.id, req.isTestMode]);
-    }
   }
 
-  // Re-fetch planned rounds after additions/removals
-  const updatedPlanned = await db.all(
-    `SELECT id, round_number FROM survey_rounds
-     WHERE client_id = ? AND status = 'planned' AND is_test = ?
-     ORDER BY round_number ASC`,
+  const nextPlanned = await db.get(
+    "SELECT scheduled_date FROM survey_rounds WHERE client_id = ? AND status = 'planned' AND is_test = ? ORDER BY scheduled_date ASC LIMIT 1",
     [req.clientId, req.isTestMode]
   );
 
-  let message = "";
-  if (updatedPlanned.length > 0 && lastRound) {
-    const baseDate = new Date(lastRound.launched_at);
-    const now = new Date();
-    let adjustedCount = 0;
+  const nextDateStr = nextPlanned
+    ? new Date(nextPlanned.scheduled_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
 
-    // Recalculate dates for all planned rounds relative to last launched round
-    const nonPlannedCount = allRounds.filter(r => r.status !== "planned").length;
-    for (let i = 0; i < updatedPlanned.length; i++) {
-      const nextDate = new Date(baseDate);
-      nextDate.setMonth(nextDate.getMonth() + intervalMonths * (nonPlannedCount + i));
-
-      const finalDate = nextDate <= now
-        ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i + 1))
-        : nextDate;
-
-      if (nextDate <= now) adjustedCount++;
-
-      await db.run(
-        "UPDATE survey_rounds SET scheduled_date = ? WHERE id = ? AND is_test = ?",
-        [finalDate.toISOString(), updatedPlanned[i].id, req.isTestMode]
-      );
-    }
-
-    const nextPlanned = await db.get(
-      "SELECT scheduled_date FROM survey_rounds WHERE client_id = ? AND status = 'planned' AND is_test = ? ORDER BY scheduled_date ASC LIMIT 1",
-      [req.clientId, req.isTestMode]
-    );
-
-    const nextDateStr = nextPlanned
-      ? new Date(nextPlanned.scheduled_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-      : null;
-
-    if (adjustedCount > 0) {
-      message = `Cadence updated to ${survey_cadence}x/year. Your next round has been scheduled for ${nextDateStr} (30 days from today to give you time to prepare).`;
-    } else {
-      message = `Cadence updated to ${survey_cadence}x/year. Your next round is scheduled for ${nextDateStr}.`;
-    }
-  } else {
-    message = `Cadence updated to ${survey_cadence}x/year.`;
-  }
+  const message = nextDateStr
+    ? `Cadence updated to ${survey_cadence}x/year. Your next round is scheduled for ${nextDateStr}.`
+    : `Cadence updated to ${survey_cadence}x/year.`;
 
   res.json({ ok: true, message, survey_cadence });
 });
