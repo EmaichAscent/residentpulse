@@ -30,6 +30,7 @@ export default function RoundDashboard() {
   const [showAllAtRisk, setShowAllAtRisk] = useState(false);
   const [showAllSize, setShowAllSize] = useState(false);
   const [showSummaries, setShowSummaries] = useState(false);
+  const [includeSummariesInPrint, setIncludeSummariesInPrint] = useState(false);
   const [showAllAlerts, setShowAllAlerts] = useState(false);
 
   useEffect(() => {
@@ -225,8 +226,6 @@ export default function RoundDashboard() {
     alertsByCommunity[community].push(a);
   });
   const activeAlertCount = alerts.filter((a) => !a.dismissed && !a.solved).length;
-
-  const [includeSummariesInPrint, setIncludeSummariesInPrint] = useState(false);
 
   const handlePrintReport = () => {
     const w = window.open("", "_blank");
