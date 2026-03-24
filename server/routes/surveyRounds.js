@@ -672,9 +672,11 @@ router.get("/:id/dashboard", async (req, res) => {
           total_portfolio_value: totalPortfolioValue,
           at_risk_value: revenueAtRisk,
           percent_at_risk: totalPortfolioValue > 0 ? Math.round((revenueAtRisk / totalPortfolioValue) * 100) : 0,
-          at_risk_communities: atRiskCommunities.map(c => ({
-            name: c.name, contract_value: c.contract_value, median: c.median, respondents: c.respondents,
-          })),
+          at_risk_communities: atRiskCommunities
+            .sort((a, b) => a.median - b.median || (Number(b.contract_value) || 0) - (Number(a.contract_value) || 0))
+            .map(c => ({
+              name: c.name, contract_value: c.contract_value, median: c.median, respondents: c.respondents,
+            })),
         },
         manager_performance: managerPerformance,
         location_performance: locationPerformance,

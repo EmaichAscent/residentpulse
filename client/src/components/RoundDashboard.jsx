@@ -226,6 +226,8 @@ export default function RoundDashboard() {
   });
   const activeAlertCount = alerts.filter((a) => !a.dismissed && !a.solved).length;
 
+  const [includeSummariesInPrint, setIncludeSummariesInPrint] = useState(false);
+
   const handlePrintReport = () => {
     const w = window.open("", "_blank");
     if (!w) return;
@@ -250,34 +252,123 @@ export default function RoundDashboard() {
        <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${c.respondents || ""}</td></tr>`
     ).join("");
 
-    const summaryRows = completedSessions.map(s =>
-      `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-          <strong>${[s.first_name, s.last_name].filter(Boolean).join(" ") || "Anonymous"}</strong>
-          <span style="font-weight:600;color:${s.nps_score >= 9 ? "#22c55e" : s.nps_score >= 7 ? "#f59e0b" : "#ef4444"};">NPS: ${s.nps_score ?? "—"}</span>
-        </div>
-        ${s.community_name ? `<div style="font-size:12px;color:#666;margin-bottom:4px;">${s.community_name}</div>` : ""}
-        ${s.summary ? `<div style="font-size:13px;color:#333;">${s.summary}</div>` : ""}
-      </div>`
-    ).join("");
+    const ca = community_analytics;
+    const npsColorFn = (v) => v >= 50 ? "#22c55e" : v >= 0 ? "#f59e0b" : "#ef4444";
+
+    // Revenue at Risk
+    let revenueHtml = "";
+    if (ca?.revenue_at_risk?.total_portfolio_value > 0) {
+      const rar = ca.revenue_at_risk;
+      revenueHtml = `<h2 style="margin-top:28px;">Revenue at Risk</h2>
+        <div style="display:flex;gap:24px;margin:12px 0;">
+          <div><strong style="font-size:20px;">${formatCurrency(rar.total_portfolio_value)}</strong><br><span style="font-size:12px;color:#666;">Total Portfolio</span></div>
+          <div><strong style="font-size:20px;color:#ef4444;">${formatCurrency(rar.at_risk_value)}</strong><br><span style="font-size:12px;color:#666;">At Risk</span></div>
+          <div><strong style="font-size:20px;color:${rar.percent_at_risk > 20 ? "#ef4444" : rar.percent_at_risk > 10 ? "#f59e0b" : "#22c55e"};">${rar.percent_at_risk}%</strong><br><span style="font-size:12px;color:#666;">% at Risk</span></div>
+        </div>`;
+      if (rar.at_risk_communities?.length > 0) {
+        revenueHtml += `<table><thead><tr><th>At-Risk Community</th><th style="text-align:right;">Contract Value</th><th style="text-align:center;">NPS</th></tr></thead><tbody>`;
+        rar.at_risk_communities.forEach(c => {
+          revenueHtml += `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${c.name}</td>
+            <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${formatCurrency(c.contract_value)}</td>
+            <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;color:#ef4444;">${c.median}</td></tr>`;
+        });
+        revenueHtml += `</tbody></table>`;
+      }
+    }
+
+    // Manager Performance
+    let managerHtml = "";
+    if (ca?.manager_performance?.length > 0) {
+      managerHtml = `<h2 style="margin-top:28px;">Manager Performance</h2><table><thead><tr><th>Manager</th><th style="text-align:center;">Communities</th><th style="text-align:center;">Respondents</th><th style="text-align:center;">NPS</th></tr></thead><tbody>`;
+      ca.manager_performance.forEach(m => {
+        managerHtml += `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${m.manager}</td>
+          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${m.communities}</td>
+          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${m.respondents}</td>
+          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;color:${npsColorFn(m.nps)};">${m.nps > 0 ? "+" : ""}${m.nps}</td></tr>`;
+      });
+      managerHtml += `</tbody></table>`;
+    }
+
+    // Location Performance
+    let locationHtml = "";
+    if (ca?.location_performance?.length > 0) {
+      locationHtml = `<h2 style="margin-top:28px;">NPS by Location</h2><table><thead><tr><th>Location</th><th style="text-align:center;">Respondents</th><th style="text-align:center;">NPS</th></tr></thead><tbody>`;
+      ca.location_performance.forEach(l => {
+        locationHtml += `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${l.location}</td>
+          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${l.respondents}</td>
+          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;color:${npsColorFn(l.nps)};">${l.nps > 0 ? "+" : ""}${l.nps}</td></tr>`;
+      });
+      locationHtml += `</tbody></table>`;
+    }
+
+    // Property Type Analysis
+    let propertyHtml = "";
+    if (ca?.property_type_analysis?.length > 0) {
+      propertyHtml = `<h2 style="margin-top:28px;">Property Type Analysis</h2><table><thead><tr><th>Property Type</th><th style="text-align:center;">Communities</th><th style="text-align:center;">Respondents</th><th style="text-align:center;">NPS</th></tr></thead><tbody>`;
+      ca.property_type_analysis.forEach(pt => {
+        propertyHtml += `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${formatPropertyType(pt.property_type)}</td>
+          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${pt.communities}</td>
+          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${pt.respondents}</td>
+          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;color:${npsColorFn(pt.nps)};">${pt.nps > 0 ? "+" : ""}${pt.nps}</td></tr>`;
+      });
+      propertyHtml += `</tbody></table>`;
+    }
+
+    // Size-Based Trends
+    let sizeHtml = "";
+    if (ca?.size_trends?.length > 0) {
+      sizeHtml = `<h2 style="margin-top:28px;">Size-Based Trends</h2><table><thead><tr><th>Cohort</th><th style="text-align:center;">Communities</th><th style="text-align:center;">Respondents</th><th style="text-align:center;">NPS</th></tr></thead><tbody>`;
+      ca.size_trends.forEach(s => {
+        const npsVal = s.nps ?? s.median ?? 0;
+        sizeHtml += `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${s.name}</td>
+          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${s.communities || ""}</td>
+          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${s.respondents}</td>
+          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;color:${npsColorFn(npsVal)};">${npsVal > 0 ? "+" : ""}${npsVal}</td></tr>`;
+      });
+      sizeHtml += `</tbody></table>`;
+    }
+
+    // Summaries (optional)
+    let summaryHtml = "";
+    if (includeSummariesInPrint && completedSessions.length > 0) {
+      summaryHtml = `<h2 style="margin-top:28px;">Respondent Summaries (${completedSessions.length})</h2>`;
+      completedSessions.forEach(s => {
+        summaryHtml += `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <strong>${[s.first_name, s.last_name].filter(Boolean).join(" ") || "Anonymous"}</strong>
+            <span style="font-weight:600;color:${s.nps_score >= 9 ? "#22c55e" : s.nps_score >= 7 ? "#f59e0b" : "#ef4444"};">NPS: ${s.nps_score ?? "—"}</span>
+          </div>
+          ${s.community_name ? `<div style="font-size:12px;color:#666;margin-bottom:4px;">${s.community_name}</div>` : ""}
+          ${s.summary ? `<div style="font-size:13px;color:#333;">${s.summary}</div>` : ""}
+        </div>`;
+      });
+    }
 
     let insightsHtml = "";
-    if (insights?.executive_summary) {
+    if (insights?.executive_summary && !insights.error) {
       insightsHtml += `<h2 style="margin-top:28px;">Executive Summary</h2><p>${insights.executive_summary}</p>`;
     }
     if (insights?.key_findings?.length) {
       insightsHtml += `<h2 style="margin-top:20px;">Key Findings</h2><ol>`;
       insights.key_findings.forEach(f => {
-        insightsHtml += `<li style="margin-bottom:6px;"><strong>${f.finding}</strong>${f.evidence ? `<br><span style="color:#666;font-size:13px;">${f.evidence}</span>` : ""}</li>`;
+        const badge = f.severity === "positive" ? "color:#22c55e;" : f.severity === "critical" ? "color:#ef4444;" : f.severity === "concerning" ? "color:#f59e0b;" : "color:#666;";
+        insightsHtml += `<li style="margin-bottom:6px;"><span style="font-size:11px;font-weight:700;${badge}text-transform:uppercase;">${f.severity || ""}</span> <strong>${f.finding}</strong>${f.evidence ? `<br><span style="color:#666;font-size:13px;">${f.evidence}</span>` : ""}</li>`;
       });
       insightsHtml += `</ol>`;
     }
     if (insights?.recommended_actions?.length) {
       insightsHtml += `<h2 style="margin-top:20px;">Recommended Actions</h2><ol>`;
       insights.recommended_actions.forEach(a => {
-        insightsHtml += `<li style="margin-bottom:6px;"><span style="font-size:11px;font-weight:700;color:${a.priority === "high" ? "#ef4444" : a.priority === "medium" ? "#f59e0b" : "#666"};text-transform:uppercase;">${a.priority || ""}</span> ${a.action}${a.impact ? `<br><span style="color:#666;font-size:13px;">${a.impact}</span>` : ""}</li>`;
+        const pColor = a.priority === "high" ? "#ef4444" : a.priority === "keep_doing" ? "#22c55e" : a.priority === "medium" ? "#f59e0b" : "#666";
+        insightsHtml += `<li style="margin-bottom:6px;"><span style="font-size:11px;font-weight:700;color:${pColor};text-transform:uppercase;">${a.priority === "keep_doing" ? "KEEP DOING" : a.priority || ""}</span> ${a.action}${a.impact ? `<br><span style="color:#666;font-size:13px;">${a.impact}</span>` : ""}</li>`;
       });
       insightsHtml += `</ol>`;
+    }
+    if (insights?.cam_ascent_callouts?.length) {
+      insightsHtml += `<h2 style="margin-top:20px;">Where CAM Ascent Can Help</h2>`;
+      insights.cam_ascent_callouts.forEach(c => {
+        insightsHtml += `<div style="margin-bottom:8px;"><strong>${c.area}</strong><br><span style="color:#666;font-size:13px;">${c.opportunity}</span>${c.suggested_service ? `<br><span style="color:#1AB06E;font-size:13px;">${c.suggested_service}</span>` : ""}</div>`;
+      });
     }
 
     let alertsHtml = "";
@@ -291,12 +382,18 @@ export default function RoundDashboard() {
       });
     }
 
+    // Active filter note
+    const hasActiveFilters = filters.community_id || filters.manager || filters.property_type;
+    const filterNote = hasActiveFilters
+      ? `<p style="font-size:12px;color:#3B9FE7;margin:8px 0;font-style:italic;">Filtered by: ${filters.community_id ? "Community" : ""}${filters.manager ? (filters.community_id ? ", " : "") + "Manager: " + filters.manager : ""}${filters.property_type ? ((filters.community_id || filters.manager) ? ", " : "") + "Type: " + formatPropertyType(filters.property_type) : ""}</p>`
+      : "";
+
     w.document.write(`<!DOCTYPE html><html><head><title>Round ${round.round_number} Report</title>
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 24px; color: #333; font-size: 14px; line-height: 1.5; }
         h1 { font-size: 22px; margin-bottom: 4px; }
         h2 { font-size: 16px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
-        table { width: 100%; border-collapse: collapse; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
         th { text-align: left; padding: 8px 12px; background: #f9fafb; border-bottom: 2px solid #e5e7eb; font-size: 12px; text-transform: uppercase; color: #666; }
         .metrics { display: flex; gap: 16px; margin: 16px 0; }
         .metric-card { flex: 1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; text-align: center; }
@@ -316,6 +413,7 @@ export default function RoundDashboard() {
           <p style="color:#666;margin-top:2px;">${formatDate(round.launched_at)} — ${isConcluded ? formatDate(round.concluded_at) : `Closes ${formatDate(round.closes_at)}`} | ${isActive ? "In Progress" : "Concluded"}</p>
         </div>
       </div>
+      ${filterNote}
 
       <div class="metrics">
         <div class="metric-card">
@@ -330,7 +428,7 @@ export default function RoundDashboard() {
       </div>
 
       ${npsBarHtml}
-
+      ${revenueHtml}
       ${alertsHtml}
 
       ${community_cohorts.length > 1 ? `
@@ -341,13 +439,17 @@ export default function RoundDashboard() {
         </table>
       ` : ""}
 
+      ${managerHtml}
+      ${locationHtml}
+      ${propertyHtml}
+      ${sizeHtml}
+
       ${insightsHtml}
 
-      <h2 style="margin-top:28px;">Respondent Summaries (${completedSessions.length})</h2>
-      ${summaryRows || '<p style="color:#999;">No completed responses yet.</p>'}
+      ${summaryHtml}
 
       <div style="margin-top:32px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:11px;color:#999;">
-        Generated ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} — ResidentPulse by CAMAscent
+        Generated ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} — ResidentPulse by CAM Ascent
       </div>
     </body></html>`);
     w.document.close();
@@ -391,6 +493,15 @@ export default function RoundDashboard() {
             </svg>
             Print Report
           </button>
+          <label className="inline-flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeSummariesInPrint}
+              onChange={(e) => setIncludeSummariesInPrint(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Include summaries in print
+          </label>
           <a
             href={`/api/admin/survey-rounds/${roundId}/export`}
             className="py-2 px-4 text-sm font-medium text-gray-500 border border-gray-300 rounded-lg hover:bg-gray-50 inline-flex items-center gap-1.5"
