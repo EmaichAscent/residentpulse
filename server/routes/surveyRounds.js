@@ -253,6 +253,7 @@ router.get("/trends", async (req, res) => {
       let revenueAtRisk = null;
       let managerPerformance = null;
       let locationPerformance = null;
+      let sizePerformance = null;
 
       // Location Performance (available to all tiers — uses session data directly)
       const locationScores = {};
@@ -327,6 +328,29 @@ router.get("/trends", async (req, res) => {
             return { manager, communities: data.communities.length, nps, respondents: data.scores.length };
           })
           .sort((a, b) => b.nps - a.nps);
+
+        // Size cohorts for trends
+        const withUnits = communityData.filter(c => c.number_of_units).sort((a, b) => a.number_of_units - b.number_of_units);
+        if (withUnits.length >= 4) {
+          const cohortCount = withUnits.length >= 10 ? 5 : 4;
+          const perCohort = Math.ceil(withUnits.length / cohortCount);
+          const labels = ["Small", "Medium", "Large", "Very Large", "Extra Large"];
+          sizePerformance = [];
+          for (let si = 0; si < cohortCount; si++) {
+            const slice = withUnits.slice(si * perCohort, (si + 1) * perCohort);
+            if (slice.length === 0) continue;
+            const minU = slice[0].number_of_units;
+            const maxU = slice[slice.length - 1].number_of_units;
+            const allScores = slice.flatMap(c => {
+              const key = c.community_name.trim().toLowerCase();
+              return (communityScores[key] || []);
+            });
+            const p = allScores.filter(n => n >= 9).length;
+            const d = allScores.filter(n => n <= 6).length;
+            const nps = allScores.length > 0 ? Math.round(((p - d) / allScores.length) * 100) : null;
+            sizePerformance.push({ name: labels[si], range: `${minU}-${maxU}`, nps, respondents: allScores.length, communities: slice.length });
+          }
+        }
       }
 
       trendsData.push({
@@ -347,6 +371,7 @@ router.get("/trends", async (req, res) => {
         revenue_at_risk: revenueAtRisk,
         manager_performance: managerPerformance,
         location_performance: locationPerformance,
+        size_performance: sizePerformance,
       });
     }
 

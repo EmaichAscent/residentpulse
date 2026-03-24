@@ -172,6 +172,26 @@ export default function TrendsView() {
     return { locations, roundLabels };
   })();
 
+  // Size Performance heatmap data
+  const sizeHeatmap = (() => {
+    const roundLabels = concludedRounds
+      .filter((r) => r.size_performance)
+      .map((r) => `R${r.round_number}`);
+    const sizeMap = {};
+    for (const r of concludedRounds) {
+      if (!r.size_performance) continue;
+      const label = `R${r.round_number}`;
+      for (const s of r.size_performance) {
+        if (!sizeMap[s.name]) sizeMap[s.name] = { range: s.range, rounds: {} };
+        sizeMap[s.name].rounds[label] = { nps: s.nps, respondents: s.respondents, communities: s.communities };
+      }
+    }
+    const sizes = ["Small", "Medium", "Large", "Very Large", "Extra Large"]
+      .filter(name => sizeMap[name])
+      .map(name => ({ name, range: sizeMap[name].range, rounds: sizeMap[name].rounds }));
+    return { sizes, roundLabels };
+  })();
+
   // Compute trending topics between consecutive rounds
   const topicTrends = [];
   for (let i = 1; i < concludedRounds.length; i++) {
@@ -418,6 +438,55 @@ export default function TrendsView() {
                         <td key={label} className={`text-center py-2.5 px-3 ${bgClass} rounded`}>
                           <span className="font-semibold text-sm" style={{ color }}>{formatted}</span>
                           <span className="block text-[10px] text-gray-400">{cell.respondents} resp.</span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Size Performance Heatmap */}
+      {sizeHeatmap.sizes.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">
+            NPS by Portfolio Size Over Time
+          </p>
+          <p className="text-xs text-gray-400 mb-4">
+            How satisfaction varies by community size across survey rounds
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-500">Size Cohort</th>
+                  {sizeHeatmap.roundLabels.map((label) => (
+                    <th key={label} className="text-center py-2 px-3 text-xs font-semibold text-gray-500 min-w-[64px]">
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sizeHeatmap.sizes.map((sz) => (
+                  <tr key={sz.name} className="border-b border-gray-100 last:border-0">
+                    <td className="py-2.5 pr-4 text-gray-700 font-medium whitespace-nowrap">
+                      {sz.name}
+                      <span className="text-[10px] text-gray-400 ml-1">({sz.range} units)</span>
+                    </td>
+                    {sizeHeatmap.roundLabels.map((label) => {
+                      const cell = sz.rounds[label];
+                      if (!cell) return <td key={label} className="text-center py-2.5 px-3 text-gray-300">—</td>;
+                      const color = npsColor(cell.nps);
+                      const bgClass = cell.nps >= 50 ? "bg-green-50" : cell.nps >= 0 ? "bg-blue-50" : "bg-red-50";
+                      const formatted = cell.nps > 0 ? `+${cell.nps}` : `${cell.nps}`;
+                      return (
+                        <td key={label} className={`text-center py-2.5 px-3 ${bgClass} rounded`}>
+                          <span className="font-semibold text-sm" style={{ color }}>{formatted}</span>
+                          <span className="block text-[10px] text-gray-400">{cell.communities} comm. · {cell.respondents} resp.</span>
                         </td>
                       );
                     })}
