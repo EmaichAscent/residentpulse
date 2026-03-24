@@ -591,11 +591,37 @@ router.get("/:id/dashboard", async (req, res) => {
         })
         .sort((a, b) => b.nps - a.nps);
 
-      // Size-Based Trends
-      const sizeTrends = enrichedCohorts
-        .filter(c => c.number_of_units)
-        .map(c => ({ name: c.name, units: c.number_of_units, median: c.median, cohort: c.cohort, respondents: c.respondents }))
-        .sort((a, b) => a.units - b.units);
+      // Size-Based Trends — group into 4-5 cohorts by unit count
+      const withUnits = enrichedCohorts.filter(c => c.number_of_units).sort((a, b) => a.number_of_units - b.number_of_units);
+      let sizeTrends = [];
+      if (withUnits.length >= 4) {
+        const cohortCount = withUnits.length >= 10 ? 5 : 4;
+        const perCohort = Math.ceil(withUnits.length / cohortCount);
+        for (let i = 0; i < cohortCount; i++) {
+          const slice = withUnits.slice(i * perCohort, (i + 1) * perCohort);
+          if (slice.length === 0) continue;
+          const minUnits = slice[0].number_of_units;
+          const maxUnits = slice[slice.length - 1].number_of_units;
+          const allScores = slice.flatMap(c => {
+            const key = c.name.trim().toLowerCase();
+            return (communityScores[key] || []);
+          });
+          const p = allScores.filter(n => n >= 9).length;
+          const d = allScores.filter(n => n <= 6).length;
+          const nps = allScores.length > 0 ? Math.round(((p - d) / allScores.length) * 100) : null;
+          const labels = ["Small", "Medium", "Large", "Very Large", "Extra Large"];
+          sizeTrends.push({
+            name: `${labels[i]} (${minUnits}-${maxUnits} units)`,
+            units: Math.round(slice.reduce((s, c) => s + c.number_of_units, 0) / slice.length),
+            communities: slice.length,
+            respondents: allScores.length,
+            nps,
+          });
+        }
+      } else {
+        // Too few communities for cohorts — show individually
+        sizeTrends = withUnits.map(c => ({ name: c.name, units: c.number_of_units, median: c.median, cohort: c.cohort, respondents: c.respondents }));
+      }
 
       // Location Performance: group scores by management_company (displayed as "Location")
       const locationScores = {};

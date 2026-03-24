@@ -961,37 +961,41 @@ export default function RoundDashboard() {
           )}
 
           {/* Size-Based Trends */}
-          {community_analytics.size_trends.length > 0 && (() => {
-            const sizes = community_analytics.size_trends;
-            const LIMIT = 10;
-            const displaySizes = sizes.length > LIMIT && !showAllSize
-              ? [...sizes.slice(0, 5), ...sizes.slice(-5)]
-              : sizes;
-            return (
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Size-Based Trends</p>
-                  {sizes.length > LIMIT && (
-                    <button onClick={() => setShowAllSize(!showAllSize)} className="text-xs font-medium hover:underline" style={{ color: "var(--cam-blue)" }}>
-                      {showAllSize ? "Show Top/Bottom 5" : `Show All ${sizes.length}`}
-                    </button>
-                  )}
-                </div>
-                <p className="text-xs text-gray-400 mb-4">Community size vs. satisfaction</p>
-                <div className="space-y-2">
-                  {displaySizes.map((s, i) => (
-                    <div key={i} className="flex items-center gap-4 text-sm py-1.5">
-                      <span className="font-medium text-gray-900 flex-1 truncate">{s.name}</span>
-                      <span className="text-gray-500 w-20 text-right">{s.units} units</span>
-                      <span className="font-semibold w-16 text-right" style={{ color: barColor(s.median) }}>
-                        NPS {s.median}
-                      </span>
+          {community_analytics.size_trends.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">Size-Based Trends</p>
+              <p className="text-xs text-gray-400 mb-4">NPS by community portfolio size</p>
+              <div className="space-y-3">
+                {community_analytics.size_trends.map((s, i) => {
+                  const npsVal = s.nps ?? s.median ?? 0;
+                  return (
+                    <div key={i} className="flex items-center gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900">{s.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {s.communities ? `${s.communities} communit${s.communities === 1 ? "y" : "ies"} · ` : ""}{s.respondents} respondent{s.respondents !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.max(5, Math.min(100, (npsVal + 100) / 2))}%`,
+                              backgroundColor: npsVal >= 50 ? COLORS.promoter : npsVal >= 0 ? COLORS.passive : COLORS.detractor,
+                            }}
+                          />
+                        </div>
+                        <span className="text-sm font-bold w-12 text-right" style={{ color: npsColor(npsVal) }}>
+                          {npsVal > 0 ? "+" : ""}{npsVal}
+                        </span>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-            );
-          })()}
+            </div>
+          )}
         </>
       )}
 
