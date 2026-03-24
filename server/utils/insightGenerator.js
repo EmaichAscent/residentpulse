@@ -341,7 +341,9 @@ async function runAnalysisPass(context, passType) {
   const prompts = {
     key_findings: `Analyze the survey responses below and identify the KEY FINDINGS — the most important themes, patterns, and insights from this round of board member feedback.
 
-Return a JSON array of 3-6 findings, each with:
+IMPORTANT: Include a balanced view. At least 1-2 findings MUST be positive — things the company is doing well that board members praised. Leaders need to know what's working so they can protect and build on it, not just what's broken. Keep findings to 4-5 total — tight and high-impact.
+
+Return a JSON array of 4-5 findings, each with:
 - "finding": A clear, specific statement of the finding
 - "evidence": Brief supporting evidence from the responses
 - "severity": "positive" | "neutral" | "concerning" | "critical"
@@ -352,9 +354,11 @@ ${context}`,
 
     recommended_actions: `Analyze the survey responses below and generate RECOMMENDED ACTIONS — specific, prioritized things the management company should consider implementing based on this feedback.
 
-Return a JSON array of 3-6 actions, each with:
+IMPORTANT: A management company can realistically implement 1-3 changes per quarter. Keep recommendations to 3 maximum — the highest-impact actions only. Make them specific enough to act on immediately. Also include 1 "keep doing" recommendation that reinforces something board members praised.
+
+Return a JSON array of 3 actions, each with:
 - "action": A specific, actionable recommendation
-- "priority": "high" | "medium" | "low"
+- "priority": "high" | "medium" | "low" | "keep_doing"
 - "impact": Brief description of expected impact if implemented
 - "rationale": Why this action matters based on the feedback
 
@@ -366,7 +370,7 @@ ${context}`,
 
 Focus on: process improvement, board communication frameworks, financial management best practices, vendor management, compliance, strategic planning.
 
-Return a JSON array of 1-4 callouts, each with:
+Return a JSON array of 1-2 callouts (keep it focused), each with:
 - "area": The area of opportunity
 - "opportunity": What the consulting engagement would address
 - "suggested_service": A brief description of how CAM Ascent could help
@@ -401,12 +405,12 @@ ORIGINAL CONTEXT:
 ${context}
 
 Produce a final JSON object with these fields:
-1. "executive_summary": A 2-4 sentence narrative overview of what this round revealed
-2. "key_findings": Array of the most important findings (deduplicated, refined). Each: {"finding", "evidence", "severity"}
-3. "recommended_actions": Array of prioritized actions (deduplicated, refined). Each: {"action", "priority", "impact", "rationale"}
-4. "cam_ascent_callouts": Array of consulting opportunities (deduplicated, refined). Each: {"area", "opportunity", "suggested_service"}
+1. "executive_summary": A 2-4 sentence narrative overview. Lead with something positive, then address the key concern, then the path forward. This sets the tone — balanced, not doom-and-gloom.
+2. "key_findings": 4-5 findings max (deduplicated, refined). At least 1-2 MUST be positive. Each: {"finding", "evidence", "severity"}
+3. "recommended_actions": 3 actions max (the company can only implement 1-3 changes per quarter). Include 1 "keep_doing" action. Each: {"action", "priority", "impact", "rationale"}
+4. "cam_ascent_callouts": 1-2 focused callouts (deduplicated, refined). Each: {"area", "opportunity", "suggested_service"}
 
-Deduplicate overlapping items. Prioritize clarity and actionability. Only output valid JSON, no other text.`;
+Deduplicate overlapping items. Be tight and high-impact — less is more. Only output valid JSON, no other text.`;
 
   const response = await createMessage({
     model: MODEL,
