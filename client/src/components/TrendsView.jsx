@@ -32,6 +32,8 @@ export default function TrendsView() {
   const [trends, setTrends] = useState([]);
   const [isPaidTier, setIsPaidTier] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showAllTopics, setShowAllTopics] = useState(false);
+  const [showAllManagers, setShowAllManagers] = useState(false);
 
   useEffect(() => {
     loadTrends();
@@ -321,50 +323,65 @@ export default function TrendsView() {
       )}
 
       {/* Manager Performance Heatmap (paid tier) */}
-      {managerHeatmap.managers.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">
-            Manager Performance Over Time
-          </p>
-          <p className="text-xs text-gray-400 mb-4">
-            NPS by community manager across survey rounds
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-500">Manager</th>
-                  {managerHeatmap.roundLabels.map((label) => (
-                    <th key={label} className="text-center py-2 px-3 text-xs font-semibold text-gray-500 min-w-[64px]">
-                      {label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {managerHeatmap.managers.map((mgr) => (
-                  <tr key={mgr.name} className="border-b border-gray-100 last:border-0">
-                    <td className="py-2.5 pr-4 text-gray-700 font-medium whitespace-nowrap">{mgr.name}</td>
-                    {managerHeatmap.roundLabels.map((label) => {
-                      const cell = mgr.rounds[label];
-                      if (!cell) return <td key={label} className="text-center py-2.5 px-3 text-gray-300">—</td>;
-                      const color = npsColor(cell.nps);
-                      const bgClass = cell.nps >= 50 ? "bg-green-50" : cell.nps >= 0 ? "bg-blue-50" : "bg-red-50";
-                      const formatted = cell.nps > 0 ? `+${cell.nps}` : `${cell.nps}`;
-                      return (
-                        <td key={label} className={`text-center py-2.5 px-3 ${bgClass} rounded`}>
-                          <span className="font-semibold text-sm" style={{ color }}>{formatted}</span>
-                          <span className="block text-[10px] text-gray-400">{cell.respondents} resp.</span>
-                        </td>
-                      );
-                    })}
+      {managerHeatmap.managers.length > 0 && (() => {
+        const allManagers = managerHeatmap.managers;
+        const LIMIT = 10;
+        const needsTrim = allManagers.length > LIMIT && !showAllManagers;
+        const displayManagers = needsTrim
+          ? [...allManagers.slice(0, 5), ...allManagers.slice(-5)]
+          : allManagers;
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
+                Manager Performance Over Time
+              </p>
+              {allManagers.length > LIMIT && (
+                <button onClick={() => setShowAllManagers(!showAllManagers)} className="text-xs font-medium hover:underline" style={{ color: "var(--cam-blue)" }}>
+                  {showAllManagers ? "Show Top/Bottom 5" : `Show All ${allManagers.length}`}
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mb-4">
+              NPS by community manager across survey rounds{needsTrim ? " (top 5 + bottom 5)" : ""}
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 pr-4 text-xs font-semibold text-gray-500">Manager</th>
+                    {managerHeatmap.roundLabels.map((label) => (
+                      <th key={label} className="text-center py-2 px-3 text-xs font-semibold text-gray-500 min-w-[64px]">
+                        {label}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {displayManagers.map((mgr) => (
+                    <tr key={mgr.name} className="border-b border-gray-100 last:border-0">
+                      <td className="py-2.5 pr-4 text-gray-700 font-medium whitespace-nowrap">{mgr.name}</td>
+                      {managerHeatmap.roundLabels.map((label) => {
+                        const cell = mgr.rounds[label];
+                        if (!cell) return <td key={label} className="text-center py-2.5 px-3 text-gray-300">—</td>;
+                        const color = npsColor(cell.nps);
+                        const bgClass = cell.nps >= 50 ? "bg-green-50" : cell.nps >= 0 ? "bg-blue-50" : "bg-red-50";
+                        const formatted = cell.nps > 0 ? `+${cell.nps}` : `${cell.nps}`;
+                        return (
+                          <td key={label} className={`text-center py-2.5 px-3 ${bgClass} rounded`}>
+                            <span className="font-semibold text-sm" style={{ color }}>{formatted}</span>
+                            <span className="block text-[10px] text-gray-400">{cell.respondents} resp.</span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* NPS by Location Heatmap */}
       {locationHeatmap.locations.length > 0 && (
@@ -483,13 +500,23 @@ export default function TrendsView() {
       </div>
 
       {/* Trending Topics */}
-      {topicTrends.length > 0 && (
+      {topicTrends.length > 0 && (() => {
+        const TOPIC_LIMIT = 3;
+        const displayTopics = showAllTopics ? topicTrends : topicTrends.slice(-TOPIC_LIMIT);
+        return (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">
-            Trending Topics
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
+              Trending Topics
+            </p>
+            {topicTrends.length > TOPIC_LIMIT && (
+              <button onClick={() => setShowAllTopics(!showAllTopics)} className="text-xs font-medium hover:underline" style={{ color: "var(--cam-blue)" }}>
+                {showAllTopics ? `Show Last ${TOPIC_LIMIT}` : `Show All ${topicTrends.length}`}
+              </button>
+            )}
+          </div>
           <div className="space-y-6">
-            {topicTrends.map((trend) => (
+            {displayTopics.map((trend) => (
               <div key={`${trend.from}-${trend.to}`}>
                 <p className="text-xs font-semibold text-gray-500 mb-3">
                   Round {trend.from} → Round {trend.to}
@@ -563,7 +590,8 @@ export default function TrendsView() {
             ))}
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

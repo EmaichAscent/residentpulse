@@ -25,6 +25,11 @@ export default function RoundDashboard() {
   const [goalsExpanded, setGoalsExpanded] = useState(false);
   const [expandedCommunities, setExpandedCommunities] = useState({});
   const [filters, setFilters] = useState({ community_id: "", manager: "", property_type: "" });
+  const [showAllCommunities, setShowAllCommunities] = useState(false);
+  const [showAllManagers, setShowAllManagers] = useState(false);
+  const [showAllAtRisk, setShowAllAtRisk] = useState(false);
+  const [showAllSize, setShowAllSize] = useState(false);
+  const [showSummaries, setShowSummaries] = useState(false);
 
   useEffect(() => {
     loadDashboard();
@@ -721,38 +726,55 @@ export default function RoundDashboard() {
       )}
 
       {/* Community Cohorts */}
-      {community_cohorts.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">
-            Community Scores
-          </p>
-          <p className="text-xs text-gray-400 mb-4">Median NPS per community</p>
-          <ResponsiveContainer width="100%" height={Math.max(180, community_cohorts.length * 40)}>
-            <BarChart data={cohortChartData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-              <XAxis type="number" domain={[0, 10]} tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
-              <Tooltip
-                formatter={(value, _name, props) => [value, `Median NPS (${props.payload.fullName})`]}
-                contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb" }}
-              />
-              <Bar dataKey="median" radius={[0, 4, 4, 0]}>
-                {cohortChartData.map((c, i) => (
-                  <Cell
-                    key={i}
-                    fill={c.cohort === "promoter" ? COLORS.promoter : c.cohort === "passive" ? COLORS.passive : COLORS.detractor}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="flex justify-center gap-6 mt-3 text-xs text-gray-500">
-            <span><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.promoter }} />Promoter (9-10)</span>
-            <span><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.passive }} />Passive (7-8)</span>
-            <span><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.detractor }} />Detractor (0-6)</span>
+      {community_cohorts.length > 0 && (() => {
+        const LIMIT = 10;
+        const needsTrim = cohortChartData.length > LIMIT && !showAllCommunities;
+        const sorted = [...cohortChartData].sort((a, b) => a.median - b.median);
+        const displayData = needsTrim
+          ? [...sorted.slice(0, 5), ...sorted.slice(-5)].sort((a, b) => a.median - b.median)
+          : cohortChartData;
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
+                Community Scores
+              </p>
+              {cohortChartData.length > LIMIT && (
+                <button onClick={() => setShowAllCommunities(!showAllCommunities)} className="text-xs font-medium hover:underline" style={{ color: "var(--cam-blue)" }}>
+                  {showAllCommunities ? "Show Top/Bottom 5" : `Show All ${cohortChartData.length}`}
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mb-4">
+              Median NPS per community{needsTrim ? " (top 5 + bottom 5)" : ""}
+            </p>
+            <ResponsiveContainer width="100%" height={Math.max(180, displayData.length * 40)}>
+              <BarChart data={displayData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                <XAxis type="number" domain={[0, 10]} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+                <Tooltip
+                  formatter={(value, _name, props) => [value, `Median NPS (${props.payload.fullName})`]}
+                  contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb" }}
+                />
+                <Bar dataKey="median" radius={[0, 4, 4, 0]}>
+                  {displayData.map((c, i) => (
+                    <Cell
+                      key={i}
+                      fill={c.cohort === "promoter" ? COLORS.promoter : c.cohort === "passive" ? COLORS.passive : COLORS.detractor}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="flex justify-center gap-6 mt-3 text-xs text-gray-500">
+              <span><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.promoter }} />Promoter (9-10)</span>
+              <span><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.passive }} />Passive (7-8)</span>
+              <span><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.detractor }} />Detractor (0-6)</span>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Paid Tier Community Analytics */}
       {is_paid_tier && community_analytics && (
@@ -780,22 +802,31 @@ export default function RoundDashboard() {
                   <p className="text-xs text-gray-500 mt-1">% at Risk</p>
                 </div>
               </div>
-              {community_analytics.revenue_at_risk.at_risk_communities.length > 0 && (
-                <div className="border-t border-gray-100 pt-3">
-                  <p className="text-xs font-medium text-gray-500 mb-2">At-Risk Communities (Detractor NPS)</p>
-                  <div className="space-y-2">
-                    {community_analytics.revenue_at_risk.at_risk_communities.map((c, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm py-1.5 px-3 bg-red-50 rounded-lg">
-                        <span className="font-medium text-gray-900">{c.name}</span>
-                        <div className="flex items-center gap-4">
-                          <span className="text-gray-600">{formatCurrency(c.contract_value)}</span>
-                          <span className="font-semibold text-red-600">NPS {c.median}</span>
+              {community_analytics.revenue_at_risk.at_risk_communities.length > 0 && (() => {
+                const atRisk = community_analytics.revenue_at_risk.at_risk_communities;
+                const displayAtRisk = showAllAtRisk ? atRisk : atRisk.slice(0, 10);
+                return (
+                  <div className="border-t border-gray-100 pt-3">
+                    <p className="text-xs font-medium text-gray-500 mb-2">At-Risk Communities (Detractor NPS)</p>
+                    <div className="space-y-2">
+                      {displayAtRisk.map((c, i) => (
+                        <div key={i} className="flex items-center justify-between text-sm py-1.5 px-3 bg-red-50 rounded-lg">
+                          <span className="font-medium text-gray-900">{c.name}</span>
+                          <div className="flex items-center gap-4">
+                            <span className="text-gray-600">{formatCurrency(c.contract_value)}</span>
+                            <span className="font-semibold text-red-600">NPS {c.median}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                    {atRisk.length > 10 && (
+                      <button onClick={() => setShowAllAtRisk(!showAllAtRisk)} className="text-xs font-medium mt-2 hover:underline" style={{ color: "var(--cam-blue)" }}>
+                        {showAllAtRisk ? "Show Less" : `Show All ${atRisk.length} At-Risk Communities`}
+                      </button>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
@@ -833,37 +864,55 @@ export default function RoundDashboard() {
           )}
 
           {/* Manager Performance */}
-          {community_analytics.manager_performance.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Manager Performance</p>
-              <div className="space-y-3">
-                {community_analytics.manager_performance.map((m, i) => (
-                  <div key={i} className="flex items-center gap-4">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{m.manager}</p>
-                      <p className="text-xs text-gray-500">
-                        {m.communities} communit{m.communities === 1 ? "y" : "ies"} · {m.respondents} respondent{m.respondents !== 1 ? "s" : ""}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${Math.max(5, Math.min(100, (m.nps + 100) / 2))}%`,
-                            backgroundColor: m.nps >= 50 ? COLORS.promoter : m.nps >= 0 ? COLORS.passive : COLORS.detractor,
-                          }}
-                        />
+          {community_analytics.manager_performance.length > 0 && (() => {
+            const managers = community_analytics.manager_performance;
+            const LIMIT = 10;
+            const needsTrim = managers.length > LIMIT && !showAllManagers;
+            const sorted = [...managers].sort((a, b) => a.nps - b.nps);
+            const displayManagers = needsTrim
+              ? [...sorted.slice(0, 5), ...sorted.slice(-5)]
+              : managers;
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
+                    Manager Performance{needsTrim ? " (top 5 + bottom 5)" : ""}
+                  </p>
+                  {managers.length > LIMIT && (
+                    <button onClick={() => setShowAllManagers(!showAllManagers)} className="text-xs font-medium hover:underline" style={{ color: "var(--cam-blue)" }}>
+                      {showAllManagers ? "Show Top/Bottom 5" : `Show All ${managers.length}`}
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  {displayManagers.map((m, i) => (
+                    <div key={i} className="flex items-center gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{m.manager}</p>
+                        <p className="text-xs text-gray-500">
+                          {m.communities} communit{m.communities === 1 ? "y" : "ies"} · {m.respondents} respondent{m.respondents !== 1 ? "s" : ""}
+                        </p>
                       </div>
-                      <span className="text-sm font-bold w-12 text-right" style={{ color: npsColor(m.nps) }}>
-                        {m.nps > 0 ? "+" : ""}{m.nps}
-                      </span>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.max(5, Math.min(100, (m.nps + 100) / 2))}%`,
+                              backgroundColor: m.nps >= 50 ? COLORS.promoter : m.nps >= 0 ? COLORS.passive : COLORS.detractor,
+                            }}
+                          />
+                        </div>
+                        <span className="text-sm font-bold w-12 text-right" style={{ color: npsColor(m.nps) }}>
+                          {m.nps > 0 ? "+" : ""}{m.nps}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Property Type Analysis */}
           {community_analytics.property_type_analysis.length > 0 && (
@@ -899,23 +948,37 @@ export default function RoundDashboard() {
           )}
 
           {/* Size-Based Trends */}
-          {community_analytics.size_trends.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">Size-Based Trends</p>
-              <p className="text-xs text-gray-400 mb-4">Community size vs. satisfaction</p>
-              <div className="space-y-2">
-                {community_analytics.size_trends.map((s, i) => (
-                  <div key={i} className="flex items-center gap-4 text-sm py-1.5">
-                    <span className="font-medium text-gray-900 flex-1 truncate">{s.name}</span>
-                    <span className="text-gray-500 w-20 text-right">{s.units} units</span>
-                    <span className="font-semibold w-16 text-right" style={{ color: barColor(s.median) }}>
-                      NPS {s.median}
-                    </span>
-                  </div>
-                ))}
+          {community_analytics.size_trends.length > 0 && (() => {
+            const sizes = community_analytics.size_trends;
+            const LIMIT = 10;
+            const displaySizes = sizes.length > LIMIT && !showAllSize
+              ? [...sizes.slice(0, 5), ...sizes.slice(-5)]
+              : sizes;
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Size-Based Trends</p>
+                  {sizes.length > LIMIT && (
+                    <button onClick={() => setShowAllSize(!showAllSize)} className="text-xs font-medium hover:underline" style={{ color: "var(--cam-blue)" }}>
+                      {showAllSize ? "Show Top/Bottom 5" : `Show All ${sizes.length}`}
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mb-4">Community size vs. satisfaction</p>
+                <div className="space-y-2">
+                  {displaySizes.map((s, i) => (
+                    <div key={i} className="flex items-center gap-4 text-sm py-1.5">
+                      <span className="font-medium text-gray-900 flex-1 truncate">{s.name}</span>
+                      <span className="text-gray-500 w-20 text-right">{s.units} units</span>
+                      <span className="font-semibold w-16 text-right" style={{ color: barColor(s.median) }}>
+                        NPS {s.median}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </>
       )}
 
@@ -980,42 +1043,6 @@ export default function RoundDashboard() {
           )}
         </div>
       </div>
-
-      {/* Respondent Summaries */}
-      {completedSessions.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">
-            Respondent Summaries
-          </p>
-          <div className="space-y-4">
-            {completedSessions.map((s) => (
-              <div key={s.id} className="border border-gray-100 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <span className="font-medium text-gray-900">
-                      {s.first_name || s.last_name ? `${s.first_name || ""} ${s.last_name || ""}`.trim() : s.email}
-                    </span>
-                    {s.community_name && (
-                      <span className="text-sm text-gray-500 ml-2">({s.community_name})</span>
-                    )}
-                  </div>
-                  <span
-                    className="text-lg font-bold"
-                    style={{ color: barColor(s.nps_score) }}
-                  >
-                    {s.nps_score}
-                  </span>
-                </div>
-                {s.summary ? (
-                  <p className="text-sm text-gray-600 leading-relaxed">{s.summary}</p>
-                ) : (
-                  <p className="text-sm text-gray-400 italic">Summary not yet available</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Incomplete Sessions (abandoned / in progress) */}
       {incompleteSessions.length > 0 && (
@@ -1183,6 +1210,52 @@ export default function RoundDashboard() {
                 ? "Generating AI insights — this may take a moment..."
                 : "AI insights will be generated automatically. Click 'Generate Insights' to create them now."}
             </p>
+          )}
+        </div>
+      )}
+
+      {/* Respondent Summaries — collapsed at bottom */}
+      {completedSessions.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <button
+            onClick={() => setShowSummaries(!showSummaries)}
+            className="w-full flex items-center justify-between"
+          >
+            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
+              Respondent Summaries ({completedSessions.length})
+            </p>
+            <svg className={`w-4 h-4 text-gray-400 transition-transform ${showSummaries ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {showSummaries && (
+            <div className="mt-4 space-y-4">
+              {completedSessions.map((s) => (
+                <div key={s.id} className="border border-gray-100 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <span className="font-medium text-gray-900">
+                        {s.first_name || s.last_name ? `${s.first_name || ""} ${s.last_name || ""}`.trim() : s.email}
+                      </span>
+                      {s.community_name && (
+                        <span className="text-sm text-gray-500 ml-2">({s.community_name})</span>
+                      )}
+                    </div>
+                    <span
+                      className="text-lg font-bold"
+                      style={{ color: barColor(s.nps_score) }}
+                    >
+                      {s.nps_score}
+                    </span>
+                  </div>
+                  {s.summary ? (
+                    <p className="text-sm text-gray-600 leading-relaxed">{s.summary}</p>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">Summary not yet available</p>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

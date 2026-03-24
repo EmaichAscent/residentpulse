@@ -108,6 +108,8 @@ export default function UserManager() {
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState(null);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ email: "", first_name: "", last_name: "", community_name: "", management_company: "" });
   const [formError, setFormError] = useState("");
@@ -411,7 +413,7 @@ resident2@example.com,Jane,Smith,Oak Hills`;
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search members..."
             className="input-field-sm flex-1"
           />
@@ -619,7 +621,7 @@ resident2@example.com,Jane,Smith,Oak Hills`;
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((u) => (
+              {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((u) => (
                 editingId === u.id ? (
                   <tr key={u.id} className="bg-blue-50">
                     <td className="px-5 py-3 text-center">
@@ -785,9 +787,32 @@ resident2@example.com,Jane,Smith,Oak Hills`;
             </tbody>
           </table>
           </div>
-          <div className="px-5 py-3 bg-gray-50 text-xs text-gray-400">
-            {filtered.length} member{filtered.length !== 1 ? "s" : ""}
-            {search.trim() && ` (${users.length} total)`}
+          <div className="px-5 py-3 bg-gray-50 flex items-center justify-between text-xs text-gray-400">
+            <span>
+              {filtered.length} member{filtered.length !== 1 ? "s" : ""}
+              {search.trim() && ` (${users.length} total)`}
+            </span>
+            {filtered.length > PAGE_SIZE && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                  className="px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Prev
+                </button>
+                <span className="text-gray-600 font-medium">
+                  Page {page} of {Math.ceil(filtered.length / PAGE_SIZE)}
+                </span>
+                <button
+                  onClick={() => setPage(Math.min(Math.ceil(filtered.length / PAGE_SIZE), page + 1))}
+                  disabled={page >= Math.ceil(filtered.length / PAGE_SIZE)}
+                  className="px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

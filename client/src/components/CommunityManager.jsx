@@ -89,6 +89,8 @@ export default function CommunityManager() {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   // Import state
   const [uploading, setUploading] = useState(false);
@@ -342,7 +344,7 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search communities..."
             className="input-field-sm flex-1"
           />
@@ -429,32 +431,36 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
           {preview.matched.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-2">Matched ({preview.matched.length})</p>
-              {preview.matched.map((m, i) => (
-                <div key={i} className="flex items-center gap-2 py-1.5 text-sm">
-                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  <span className="font-medium">{m.community_name}</span>
-                  <span className="text-gray-400">{"\u2014"} {m.member_count} board member{m.member_count !== 1 ? "s" : ""}</span>
-                </div>
-              ))}
+              <div className="max-h-60 overflow-y-auto">
+                {preview.matched.map((m, i) => (
+                  <div key={i} className="flex items-center gap-2 py-1.5 text-sm">
+                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                    <span className="font-medium">{m.community_name}</span>
+                    <span className="text-gray-400">{"\u2014"} {m.member_count} board member{m.member_count !== 1 ? "s" : ""}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {preview.unmatched.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">No exact match ({preview.unmatched.length})</p>
-              {preview.unmatched.map((u, i) => (
-                <div key={i} className="py-1.5 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
-                    <span className="font-medium">{u.community_name}</span>
-                    {u.suggestions.length > 0 ? (
-                      <span className="text-gray-400">{"\u2014"} similar: {u.suggestions.map((s) => s.name).join(", ")}</span>
-                    ) : (
-                      <span className="text-gray-400">{"\u2014"} new community (no board members yet)</span>
-                    )}
+              <div className="max-h-60 overflow-y-auto">
+                {preview.unmatched.map((u, i) => (
+                  <div key={i} className="py-1.5 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+                      <span className="font-medium">{u.community_name}</span>
+                      {u.suggestions.length > 0 ? (
+                        <span className="text-gray-400">{"\u2014"} similar: {u.suggestions.map((s) => s.name).join(", ")}</span>
+                      ) : (
+                        <span className="text-gray-400">{"\u2014"} new community (no board members yet)</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
 
@@ -608,7 +614,7 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((c) =>
+              {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((c) =>
                 editingId === c.id ? (
                   <tr key={c.id} className="bg-blue-50">
                     <td className="px-5 py-2" colSpan={8}>
@@ -740,10 +746,33 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
             </tbody>
           </table>
           </div>
-          <div className="px-5 py-3 bg-gray-50 text-xs text-gray-400">
-            {filtered.length} communit{filtered.length !== 1 ? "ies" : "y"}
-            {search.trim() && ` (${visibleCommunities.length} shown)`}
-            {deactivatedCount > 0 && !showDeactivated && ` \u00b7 ${deactivatedCount} deactivated hidden`}
+          <div className="px-5 py-3 bg-gray-50 flex items-center justify-between text-xs text-gray-400">
+            <span>
+              {filtered.length} communit{filtered.length !== 1 ? "ies" : "y"}
+              {search.trim() && ` (${visibleCommunities.length} shown)`}
+              {deactivatedCount > 0 && !showDeactivated && ` \u00b7 ${deactivatedCount} deactivated hidden`}
+            </span>
+            {filtered.length > PAGE_SIZE && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                  className="px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Prev
+                </button>
+                <span className="text-gray-600 font-medium">
+                  Page {page} of {Math.ceil(filtered.length / PAGE_SIZE)}
+                </span>
+                <button
+                  onClick={() => setPage(Math.min(Math.ceil(filtered.length / PAGE_SIZE), page + 1))}
+                  disabled={page >= Math.ceil(filtered.length / PAGE_SIZE)}
+                  className="px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
