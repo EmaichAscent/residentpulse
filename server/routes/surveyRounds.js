@@ -196,7 +196,7 @@ router.get("/trends", async (req, res) => {
       const concludedIds = rounds.filter(r => r.status === "concluded").map(r => r.id);
       if (concludedIds.length > 0) {
         const snapshots = await db.all(
-          `SELECT round_id, community_id as id, community_name, contract_value, community_manager_name
+          `SELECT round_id, community_id as id, community_name, contract_value, community_manager_name, number_of_units
            FROM round_community_snapshots WHERE round_id = ANY($1) AND status = 'active'`,
           [concludedIds]
         );
@@ -206,7 +206,7 @@ router.get("/trends", async (req, res) => {
         }
         // For rounds without snapshots, fall back to live data
         const liveCommunities = await db.all(
-          `SELECT id, community_name, contract_value, community_manager_name
+          `SELECT id, community_name, contract_value, community_manager_name, number_of_units
            FROM communities WHERE client_id = $1 AND status = 'active'`,
           [req.clientId]
         );
