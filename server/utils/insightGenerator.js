@@ -132,7 +132,7 @@ Average NPS Rating: ${avgNps}
 ${prevRound?.insights_json ? `\nPrevious Round Context: Insights were generated previously. Build on trends, don't repeat.\n` : ""}`;
 
   // --- MAP-REDUCE APPROACH: analyze ALL sessions, not just a sample ---
-  const CHUNK_SIZE = 200;
+  const CHUNK_SIZE = 100;
   const chunks = [];
 
   // Create balanced chunks with proportional NPS distribution
@@ -172,7 +172,7 @@ ${sessionContext}${alertContext}`;
     var synthesis = await runSynthesis(baseContext, findings, actions, callouts);
   } else {
     // Large round — MAP phase: analyze each chunk in parallel
-    const chunkPromises = chunks.map(async (chunk, idx) => {
+    const chunkFns = chunks.map((chunk, idx) => async () => {
       const chunkPromoters = chunk.filter(s => s.nps_score >= 9).length;
       const chunkPassives = chunk.filter(s => s.nps_score >= 7 && s.nps_score <= 8).length;
       const chunkDetractors = chunk.filter(s => s.nps_score <= 6).length;
@@ -180,8 +180,9 @@ ${sessionContext}${alertContext}`;
       const chunkContext = chunk
         .map((s, i) => {
           const name = [s.first_name, s.last_name].filter(Boolean).join(" ") || s.email;
+          const trimmedSummary = (s.summary || "").slice(0, 500);
           return `Respondent ${i + 1} (${name}, ${s.community_name || "Unknown Community"}, NPS: ${s.nps_score}):
-${s.summary}`;
+${trimmedSummary}`;
         })
         .join("\n\n");
 
@@ -226,7 +227,18 @@ Only output valid JSON, no other text.`;
       }
     });
 
-    chunkSummaries = await Promise.all(chunkPromises);
+    // Process chunks sequentially to avoid rate limiting
+    chunkSummaries = [];
+    for (const fn of chunkFns) {
+      try {
+        const result = await fn();
+        chunkSummaries.push(result);
+        logger.info(`Insights: chunk ${chunkSummaries.length}/${chunks.length} complete`);
+      } catch (chunkErr) {
+        logger.error({ err: chunkErr }, `Insights: chunk ${chunkSummaries.length + 1} failed, using empty result`);
+        chunkSummaries.push({ positive_themes: [], negative_themes: [], notable_feedback: [], community_patterns: [] });
+      }
+    }
     logger.info(`Insights: ${chunkSummaries.length} chunk analyses complete, running synthesis`);
 
     // REDUCE phase: synthesize all chunk analyses into final insights

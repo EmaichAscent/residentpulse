@@ -963,7 +963,7 @@ router.post("/:id/regenerate-insights", async (req, res) => {
 
     res.json({ ok: true, insights });
   } catch (err) {
-    logger.error({ err }, "Error regenerating insights");
+    logger.error({ err: { message: err.message, stack: err.stack, status: err.status } }, "Error regenerating insights");
     res.status(500).json({ error: err.message });
   }
 });
