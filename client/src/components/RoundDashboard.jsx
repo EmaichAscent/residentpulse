@@ -852,10 +852,10 @@ export default function RoundDashboard() {
       {community_cohorts.length > 0 && (() => {
         const LIMIT = 10;
         const needsTrim = cohortChartData.length > LIMIT && !showAllCommunities;
-        const sorted = [...cohortChartData].sort((a, b) => a.median - b.median);
+        const sorted = [...cohortChartData].sort((a, b) => b.median - a.median);
         const displayData = needsTrim
-          ? [...sorted.slice(0, 5), ...sorted.slice(-5)].sort((a, b) => a.median - b.median)
-          : cohortChartData;
+          ? [...sorted.slice(-5), ...sorted.slice(0, 5)]
+          : sorted;
         return (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-1">
