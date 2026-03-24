@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import logger from "./logger.js";
 
-const anthropic = new Anthropic();
+const anthropic = new Anthropic({
+  timeout: 120000, // 2 minute timeout per request
+});
 
 /**
  * Wrapper around anthropic.messages.create that retries once on 529 overloaded errors.

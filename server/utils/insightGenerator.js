@@ -133,7 +133,7 @@ Average NPS Rating: ${avgNps}
 ${prevRound?.insights_json ? `\nPrevious Round Context: Insights were generated previously. Build on trends, don't repeat.\n` : ""}`;
 
   // --- MAP-REDUCE APPROACH: analyze ALL sessions, not just a sample ---
-  const CHUNK_SIZE = 50;
+  const CHUNK_SIZE = 150;
   const chunks = [];
 
   // Create balanced chunks with proportional NPS distribution
@@ -181,7 +181,7 @@ ${sessionContext}${alertContext}`;
       const chunkContext = chunk
         .map((s, i) => {
           const name = [s.first_name, s.last_name].filter(Boolean).join(" ") || s.email;
-          const trimmedSummary = (s.summary || "").slice(0, 300);
+          const trimmedSummary = (s.summary || "").slice(0, 200);
           return `Respondent ${i + 1} (${name}, ${s.community_name || "Unknown Community"}, NPS: ${s.nps_score}):
 ${trimmedSummary}`;
         })
@@ -213,7 +213,7 @@ Return a JSON object with:
 Only output valid JSON, no other text.`;
 
       const response = await createMessage({
-        model: CHUNK_MODEL,
+        model: MODEL,
         max_tokens: 2000,
         messages: [{ role: "user", content: prompt }],
       });
@@ -228,12 +228,13 @@ Only output valid JSON, no other text.`;
       }
     });
 
-    // Process chunks sequentially to avoid rate limiting
+    // Process chunks sequentially with delay to avoid rate limiting
     chunkSummaries = [];
     let failedChunks = 0;
-    for (const fn of chunkFns) {
+    for (let ci = 0; ci < chunkFns.length; ci++) {
+      if (ci > 0) await new Promise(r => setTimeout(r, 2000)); // 2s delay between chunks
       try {
-        const result = await fn();
+        const result = await chunkFns[ci]();
         chunkSummaries.push(result);
         logger.info(`Insights: chunk ${chunkSummaries.length}/${chunks.length} complete`);
       } catch (chunkErr) {
