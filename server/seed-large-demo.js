@@ -33,7 +33,7 @@ const COMMUNITY_SUFFIXES = [
   "Manor", "Park", "Village", "Square", "Green", "Cove",
 ];
 
-const PROPERTY_TYPES = ["Condo", "Townhome", "Single Family", "HOA", "Co-op"];
+const PROPERTY_TYPES = ["condo", "townhome", "single_family", "mixed", "other"];
 
 const MANAGER_FIRST = [
   "Jennifer", "Michael", "Sarah", "David", "Amanda", "Robert", "Lisa", "James",
@@ -121,7 +121,7 @@ async function seed() {
   try {
     // Find the client
     const clientResult = await client.query(
-      `SELECT c.id FROM clients c JOIN admin_users a ON a.client_id = c.id WHERE a.email = 'mikehardy73@gmail.com'`
+      `SELECT c.id FROM clients c JOIN client_admins a ON a.client_id = c.id WHERE a.email = 'mikehardy73@gmail.com'`
     );
     if (clientResult.rows.length === 0) {
       console.error("Client not found for mikehardy73@gmail.com");
@@ -181,7 +181,7 @@ async function seed() {
       const renewalDate = new Date(2026, randInt(3, 11), randInt(1, 28)).toISOString().split("T")[0];
 
       const res = await client.query(
-        `INSERT INTO communities (client_id, community_name, location_id, contract_value, community_manager_name, units, property_type, renewal_date, status)
+        `INSERT INTO communities (client_id, community_name, location_id, contract_value, community_manager_name, number_of_units, property_type, contract_renewal_date, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active') RETURNING id`,
         [clientId, name, locationId, contractValue, manager, units, propertyType, renewalDate]
       );
@@ -241,7 +241,7 @@ async function seed() {
     for (const round of rounds) {
       for (const comm of communityIds) {
         await client.query(
-          `INSERT INTO round_community_snapshots (round_id, community_id, community_name, contract_value, community_manager_name, units, property_type, status)
+          `INSERT INTO round_community_snapshots (round_id, community_id, community_name, contract_value, community_manager_name, number_of_units, property_type, status)
            VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')`,
           [round.id, comm.id, comm.name, comm.contractValue, comm.manager, comm.units, comm.propertyType]
         );
@@ -281,8 +281,8 @@ async function seed() {
         sessionDate.setDate(sessionDate.getDate() + randInt(1, 25));
 
         const sessionRes = await client.query(
-          `INSERT INTO sessions (client_id, email, user_id, round_id, community_id, community_name, nps_score, completed, summary, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8, $9, $9) RETURNING id`,
+          `INSERT INTO sessions (client_id, email, user_id, round_id, community_id, community_name, nps_score, completed, summary, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8, $9) RETURNING id`,
           [clientId, member.email, member.id, round.id, member.communityId, member.communityName, npsScore, summary, sessionDate.toISOString()]
         );
         const sessionId = sessionRes.rows[0].id;
@@ -305,8 +305,8 @@ async function seed() {
 
         // Create invitation log
         await client.query(
-          `INSERT INTO invitation_logs (round_id, user_id, client_id, sent_at, invitation_method, email_status, delivery_status)
-           VALUES ($1, $2, $3, $4, 1, 'sent', 'delivered')`,
+          `INSERT INTO invitation_logs (round_id, user_id, client_id, sent_at, email_status, delivery_status)
+           VALUES ($1, $2, $3, $4, 'sent', 'delivered')`,
           [round.id, member.id, clientId, round.launchedAt.toISOString()]
         );
 
@@ -314,7 +314,7 @@ async function seed() {
         if (npsScore <= 3) {
           await client.query(
             `INSERT INTO critical_alerts (client_id, round_id, session_id, user_id, alert_type, severity, description, dismissed)
-             VALUES ($1, $2, $3, $4, 'low_nps', 'critical', $5, FALSE)`,
+             VALUES ($1, $2, $3, $4, 'other_critical', 'critical', $5, FALSE)`,
             [clientId, round.id, sessionId, member.id, `Board member scored ${npsScore}/10. ${summary.split(".")[0]}.`]
           );
         }

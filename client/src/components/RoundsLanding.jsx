@@ -242,8 +242,9 @@ export default function RoundsLanding() {
     ? `${user.first_name}${user.company_name ? ` — ${user.company_name}` : ""}`
     : user?.company_name || null;
 
-  // No rounds at all — show launch checklist + philosophy
-  if (rounds.length === 0) {
+  // Show welcome page if no rounds have been launched yet (planned-only doesn't count)
+  const hasLaunchedRounds = rounds.some(r => r.status === "in_progress" || r.status === "concluded");
+  if (!hasLaunchedRounds) {
     return (
       <div className="space-y-6">
         {/* Welcome Header */}
