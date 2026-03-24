@@ -117,7 +117,7 @@ export default function TrendsView() {
   });
 
   // Revenue at Risk trend data (paid tier)
-  const revenueData = isPaidTier
+  const revenueData = true
     ? concludedRounds
         .filter((r) => r.revenue_at_risk)
         .map((r) => ({
@@ -130,7 +130,7 @@ export default function TrendsView() {
 
   // Manager Performance heatmap data (paid tier)
   const managerHeatmap = (() => {
-    if (!isPaidTier) return { managers: [], roundLabels: [] };
+    // Manager heatmap available to all tiers
     const roundLabels = concludedRounds
       .filter((r) => r.manager_performance)
       .map((r) => `R${r.round_number}`);

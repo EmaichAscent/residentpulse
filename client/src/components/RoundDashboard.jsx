@@ -432,7 +432,7 @@ export default function RoundDashboard() {
       </div>
 
       {/* Dashboard Filters (paid tier only) */}
-      {is_paid_tier && filter_options && (filter_options.communities.length > 0 || filter_options.managers.length > 0 || filter_options.property_types.length > 0) && (
+      {filter_options && (filter_options.communities.length > 0 || filter_options.managers.length > 0 || filter_options.property_types.length > 0) && (
         <div className="flex gap-3 flex-wrap items-center">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Filter:</span>
           {filter_options.communities.length > 0 && (
@@ -790,7 +790,7 @@ export default function RoundDashboard() {
       })()}
 
       {/* Paid Tier Community Analytics */}
-      {is_paid_tier && community_analytics && (
+      {community_analytics && (
         <>
           {/* Revenue at Risk */}
           {community_analytics.revenue_at_risk.total_portfolio_value > 0 && (

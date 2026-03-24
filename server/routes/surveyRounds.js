@@ -190,9 +190,9 @@ router.get("/trends", async (req, res) => {
       sessionsByRound[s.round_id].push(s);
     }
 
-    // Batch-load community snapshots/data for paid tier concluded rounds
+    // Batch-load community snapshots/data for concluded rounds
     let communityDataByRound = {};
-    if (isPaidTier) {
+    {
       const concludedIds = rounds.filter(r => r.status === "concluded").map(r => r.id);
       if (concludedIds.length > 0) {
         const snapshots = await db.all(
@@ -274,7 +274,7 @@ router.get("/trends", async (req, res) => {
           .sort((a, b) => b.nps - a.nps);
       }
 
-      if (isPaidTier && round.status === "concluded") {
+      if (round.status === "concluded") {
         const communityData = communityDataByRound[round.id] || [];
 
         // Build community name lookup for matching with session data
@@ -500,7 +500,7 @@ router.get("/:id/dashboard", async (req, res) => {
     );
     const isPaidTier = planResult && planResult.plan_name !== "free";
 
-    if (isPaidTier && communityCohorts.length > 0) {
+    if (communityCohorts.length > 0) {
       const communityData = useSnapshots
         ? await db.all(
             `SELECT community_id as id, community_name, contract_value, community_manager_name, property_type, number_of_units
@@ -634,7 +634,7 @@ router.get("/:id/dashboard", async (req, res) => {
 
     // Filter options for paid tier (return available values for dropdowns)
     let filterOptions = null;
-    if (isPaidTier) {
+    {
       const allCommunities = useSnapshots
         ? await db.all(
             "SELECT community_id as id, community_name, community_manager_name, property_type FROM round_community_snapshots WHERE round_id = ? AND status = 'active' ORDER BY community_name",
