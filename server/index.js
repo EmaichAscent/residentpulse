@@ -79,6 +79,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({
+  limit: "2mb",
   verify: (req, _res, buf) => {
     // Save raw body for webhook signature verification
     if (req.url.startsWith("/resend") || req.originalUrl?.startsWith("/api/webhooks")) {
