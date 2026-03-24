@@ -30,6 +30,7 @@ export default function RoundDashboard() {
   const [showAllAtRisk, setShowAllAtRisk] = useState(false);
   const [showAllSize, setShowAllSize] = useState(false);
   const [showSummaries, setShowSummaries] = useState(false);
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
 
   useEffect(() => {
     loadDashboard();
@@ -579,18 +580,29 @@ export default function RoundDashboard() {
       </div>
 
       {/* Warnings Section — grouped by community */}
-      {alerts.length > 0 && (
+      {alerts.length > 0 && (() => {
+        const allCommunityAlerts = Object.entries(alertsByCommunity);
+        const ALERT_LIMIT = 10;
+        const displayAlerts = showAllAlerts ? allCommunityAlerts : allCommunityAlerts.slice(0, ALERT_LIMIT);
+        return (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Warnings</p>
-            {activeAlertCount > 0 && (
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
-                {activeAlertCount} active
-              </span>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide">Warnings</p>
+              {activeAlertCount > 0 && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                  {activeAlertCount} active across {allCommunityAlerts.length} communities
+                </span>
+              )}
+            </div>
+            {allCommunityAlerts.length > ALERT_LIMIT && (
+              <button onClick={() => setShowAllAlerts(!showAllAlerts)} className="text-xs font-medium hover:underline" style={{ color: "var(--cam-blue)" }}>
+                {showAllAlerts ? "Show Less" : `Show All ${allCommunityAlerts.length} Communities`}
+              </button>
             )}
           </div>
           <div className="space-y-2">
-            {Object.entries(alertsByCommunity).map(([community, communityAlerts]) => {
+            {displayAlerts.map(([community, communityAlerts]) => {
               const communityActive = communityAlerts.filter((a) => !a.dismissed && !a.solved).length;
               const isExpanded = expandedCommunities[community];
               return (
@@ -703,7 +715,8 @@ export default function RoundDashboard() {
             })}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Your Stated Goals (from onboarding interview) */}
       {interview_summary && (
