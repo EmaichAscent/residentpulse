@@ -91,29 +91,7 @@ export async function generateRoundInsights(roundId, clientId) {
     [clientId, roundId]
   );
 
-  // Build the shared context — cap at 200 most recent sessions to stay within token limits
-  // For large rounds, prioritize detractors and a sample of promoters/passives
-  let contextSessions = sessions;
-  if (sessions.length > 200) {
-    const detractors_s = sessions.filter(s => s.nps_score != null && s.nps_score <= 6);
-    const passives_s = sessions.filter(s => s.nps_score != null && s.nps_score >= 7 && s.nps_score <= 8);
-    const promoters_s = sessions.filter(s => s.nps_score != null && s.nps_score >= 9);
-    // Always include all detractors, then fill with passives and promoters
-    const remaining = 200 - detractors_s.length;
-    const passiveSample = passives_s.slice(0, Math.floor(remaining * 0.4));
-    const promoterSample = promoters_s.slice(0, remaining - passiveSample.length);
-    contextSessions = [...detractors_s, ...passiveSample, ...promoterSample];
-    logger.info(`Insights: sampled ${contextSessions.length} of ${sessions.length} sessions (all ${detractors_s.length} detractors included)`);
-  }
-
-  const sessionContext = contextSessions
-    .map((s, i) => {
-      const name = [s.first_name, s.last_name].filter(Boolean).join(" ") || s.email;
-      return `Respondent ${i + 1} (${name}, ${s.community_name || "Unknown Community"}, NPS: ${s.nps_score}):
-${s.summary}`;
-    })
-    .join("\n\n");
-
+  // Compute overall NPS stats (from ALL sessions, not just a sample)
   const npsScores = sessions.filter((s) => s.nps_score != null).map((s) => s.nps_score);
   const avgNps = npsScores.length > 0
     ? (npsScores.reduce((a, b) => a + b, 0) / npsScores.length).toFixed(1)
@@ -147,24 +125,131 @@ ${s.summary}`;
       }).join("\n");
   }
 
-  const baseContext = `Company: ${client?.company_name || "Unknown"}
+  const companyHeader = `Company: ${client?.company_name || "Unknown"}
 ${supplement?.value ? `Company Context: ${supplement.value}\n` : ""}Total Respondents: ${sessions.length}
 NPS Score: ${npsScore} (Promoters: ${promoters}, Passives: ${passives}, Detractors: ${detractors})
 Average NPS Rating: ${avgNps}
-${prevRound?.insights_json ? `\nPrevious Round Context: Insights were generated previously. Build on trends, don't repeat.\n` : ""}
+${prevRound?.insights_json ? `\nPrevious Round Context: Insights were generated previously. Build on trends, don't repeat.\n` : ""}`;
+
+  // --- MAP-REDUCE APPROACH: analyze ALL sessions, not just a sample ---
+  const CHUNK_SIZE = 200;
+  const chunks = [];
+
+  // Create balanced chunks with proportional NPS distribution
+  const shuffled = [...sessions].sort(() => Math.random() - 0.5);
+  for (let i = 0; i < shuffled.length; i += CHUNK_SIZE) {
+    chunks.push(shuffled.slice(i, i + CHUNK_SIZE));
+  }
+
+  logger.info(`Insights: analyzing ${sessions.length} sessions in ${chunks.length} chunk(s)`);
+
+  let chunkSummaries;
+
+  if (chunks.length <= 1) {
+    // Small round — single chunk, direct analysis (no map-reduce needed)
+    const sessionContext = sessions
+      .map((s, i) => {
+        const name = [s.first_name, s.last_name].filter(Boolean).join(" ") || s.email;
+        return `Respondent ${i + 1} (${name}, ${s.community_name || "Unknown Community"}, NPS: ${s.nps_score}):
+${s.summary}`;
+      })
+      .join("\n\n");
+
+    const baseContext = `${companyHeader}
 --- RESPONDENT SUMMARIES ---
 
 ${sessionContext}${alertContext}`;
 
-  // Run 3 independent analysis passes in parallel
-  const [findings, actions, callouts] = await Promise.all([
-    runAnalysisPass(baseContext, "key_findings"),
-    runAnalysisPass(baseContext, "recommended_actions"),
-    runAnalysisPass(baseContext, "cam_ascent_callouts"),
-  ]);
+    // Run 3 independent analysis passes in parallel
+    const [findings, actions, callouts] = await Promise.all([
+      runAnalysisPass(baseContext, "key_findings"),
+      runAnalysisPass(baseContext, "recommended_actions"),
+      runAnalysisPass(baseContext, "cam_ascent_callouts"),
+    ]);
 
-  // Synthesis pass: combine the 3 outputs into a coherent final result
-  const synthesis = await runSynthesis(baseContext, findings, actions, callouts);
+    // Synthesis pass: combine the 3 outputs into a coherent final result
+    chunkSummaries = null; // flag to skip map-reduce synthesis
+    var synthesis = await runSynthesis(baseContext, findings, actions, callouts);
+  } else {
+    // Large round — MAP phase: analyze each chunk in parallel
+    const chunkPromises = chunks.map(async (chunk, idx) => {
+      const chunkPromoters = chunk.filter(s => s.nps_score >= 9).length;
+      const chunkPassives = chunk.filter(s => s.nps_score >= 7 && s.nps_score <= 8).length;
+      const chunkDetractors = chunk.filter(s => s.nps_score <= 6).length;
+
+      const chunkContext = chunk
+        .map((s, i) => {
+          const name = [s.first_name, s.last_name].filter(Boolean).join(" ") || s.email;
+          return `Respondent ${i + 1} (${name}, ${s.community_name || "Unknown Community"}, NPS: ${s.nps_score}):
+${s.summary}`;
+        })
+        .join("\n\n");
+
+      const prompt = `You are analyzing a batch of ${chunk.length} board member survey responses (batch ${idx + 1} of ${chunks.length}) for a community management company.
+
+${companyHeader}
+This batch: ${chunk.length} respondents (Promoters: ${chunkPromoters}, Passives: ${chunkPassives}, Detractors: ${chunkDetractors})
+
+--- RESPONDENT SUMMARIES ---
+
+${chunkContext}
+
+Analyze ALL responses in this batch — both positive and negative. Identify:
+1. What board members are HAPPY about (specific praise, things working well)
+2. What board members are UNHAPPY about (complaints, concerns, frustrations)
+3. Recurring themes or patterns across multiple respondents
+4. Notable individual feedback that stands out
+5. Manager-specific feedback (positive or negative)
+6. Community-specific patterns
+
+Return a JSON object with:
+- "positive_themes": Array of {"theme", "evidence", "frequency"} — things going well
+- "negative_themes": Array of {"theme", "evidence", "frequency"} — things needing attention
+- "notable_feedback": Array of brief standout quotes or observations
+- "community_patterns": Array of {"community", "sentiment", "key_issue"}
+
+Only output valid JSON, no other text.`;
+
+      const response = await createMessage({
+        model: MODEL,
+        max_tokens: 2000,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const text = response.content[0].text.trim();
+      try {
+        return JSON.parse(text);
+      } catch {
+        const match = text.match(/\{[\s\S]*\}/);
+        if (match) return JSON.parse(match[0]);
+        return { positive_themes: [], negative_themes: [], notable_feedback: [], community_patterns: [] };
+      }
+    });
+
+    chunkSummaries = await Promise.all(chunkPromises);
+    logger.info(`Insights: ${chunkSummaries.length} chunk analyses complete, running synthesis`);
+
+    // REDUCE phase: synthesize all chunk analyses into final insights
+    const synthesisContext = `${companyHeader}${alertContext}
+
+--- CHUNK ANALYSIS RESULTS (${chunkSummaries.length} batches covering all ${sessions.length} respondents) ---
+
+${chunkSummaries.map((cs, i) => `BATCH ${i + 1}:
+Positive Themes: ${JSON.stringify(cs.positive_themes || [])}
+Negative Themes: ${JSON.stringify(cs.negative_themes || [])}
+Notable Feedback: ${JSON.stringify(cs.notable_feedback || [])}
+Community Patterns: ${JSON.stringify(cs.community_patterns || [])}`).join("\n\n")}`;
+
+    // Run the 3 analysis passes on the combined chunk summaries
+    const [findings, actions, callouts] = await Promise.all([
+      runAnalysisPass(synthesisContext, "key_findings"),
+      runAnalysisPass(synthesisContext, "recommended_actions"),
+      runAnalysisPass(synthesisContext, "cam_ascent_callouts"),
+    ]);
+
+    // Final synthesis
+    var synthesis = await runSynthesis(synthesisContext, findings, actions, callouts);
+  }
 
   // Store insights
   const insightsJson = {
@@ -174,8 +259,8 @@ ${sessionContext}${alertContext}`;
     executive_summary: synthesis.executive_summary,
     nps_score: npsScore,
     response_count: sessions.length,
+    chunks_analyzed: chunks.length,
     generated_at: new Date().toISOString(),
-    passes: { findings, actions, callouts },
   };
 
   await db.run(
