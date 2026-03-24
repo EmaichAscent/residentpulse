@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
 import ConfirmModal from "./ConfirmModal";
 
@@ -99,6 +99,75 @@ function TrendArrow({ sessions, email }) {
   );
 }
 
+function NpsBadge({ nps }) {
+  if (nps == null) return <span className="text-xs text-gray-300">—</span>;
+  if (nps >= 9) return <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">Promoter</span>;
+  if (nps >= 7) return <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-700">Passive</span>;
+  return <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700">Detractor</span>;
+}
+
+function NpsSparkline({ history }) {
+  if (!history || history.length === 0) return <p className="text-xs text-gray-400 italic">No survey history</p>;
+
+  const maxRound = Math.max(...history.map(h => h.round));
+  const minRound = Math.min(...history.map(h => h.round));
+  const width = 280;
+  const height = 60;
+  const pad = 20;
+
+  const points = history.map((h, i) => {
+    const x = history.length === 1 ? width / 2 : pad + ((h.round - minRound) / (maxRound - minRound || 1)) * (width - pad * 2);
+    const y = pad + ((10 - h.nps) / 10) * (height - pad * 2);
+    return { x, y, nps: h.nps, round: h.round };
+  });
+
+  const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+
+  return (
+    <div className="flex items-center gap-4">
+      <svg width={width} height={height} className="flex-shrink-0">
+        {/* Grid lines */}
+        <line x1={pad} y1={pad} x2={width - pad} y2={pad} stroke="#f0f0f0" />
+        <line x1={pad} y1={height / 2} x2={width - pad} y2={height / 2} stroke="#f0f0f0" />
+        <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="#f0f0f0" />
+        {/* Line */}
+        <path d={pathD} fill="none" stroke="#4B9CD3" strokeWidth={2} strokeLinejoin="round" />
+        {/* Dots */}
+        {points.map((p, i) => (
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r={4}
+              fill={p.nps >= 9 ? "#1AB06E" : p.nps >= 7 ? "#F59E0B" : "#EF4444"}
+              stroke="#fff" strokeWidth={1.5}
+            />
+            <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize={10} fontWeight={600}
+              fill={p.nps >= 9 ? "#1AB06E" : p.nps >= 7 ? "#F59E0B" : "#EF4444"}
+            >
+              {p.nps}
+            </text>
+          </g>
+        ))}
+        {/* Round labels */}
+        {points.map((p, i) => (
+          <text key={`r${i}`} x={p.x} y={height - 4} textAnchor="middle" fontSize={9} fill="#9CA3AF">
+            R{p.round}
+          </text>
+        ))}
+      </svg>
+      <div className="text-xs text-gray-500">
+        {history.length} round{history.length !== 1 ? "s" : ""}
+        {history.length >= 2 && (
+          <span className={`ml-2 font-semibold ${
+            history[history.length - 1].nps > history[0].nps ? "text-green-600" :
+            history[history.length - 1].nps < history[0].nps ? "text-red-600" : "text-gray-500"
+          }`}>
+            {history[0].nps} → {history[history.length - 1].nps}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function UserManager() {
   const { user } = useOutletContext();
   const companyName = user?.company_name;
@@ -110,6 +179,7 @@ export default function UserManager() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 50;
+  const [expandedUser, setExpandedUser] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ email: "", first_name: "", last_name: "", community_name: "", management_company: "" });
   const [formError, setFormError] = useState("");
@@ -599,6 +669,7 @@ resident2@example.com,Jane,Smith,Oak Hills`;
             <thead>
               <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
                 <th className="px-5 py-3 w-8">Trend</th>
+                <th className="px-5 py-3 w-24">NPS</th>
                 {[
                   { key: "name", label: "Name" },
                   { key: "email", label: "Email" },
@@ -623,11 +694,12 @@ resident2@example.com,Jane,Smith,Oak Hills`;
             <tbody className="divide-y divide-gray-100">
               {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((u) => (
                 editingId === u.id ? (
-                  <tr key={u.id} className="bg-blue-50">
+                  <React.Fragment key={u.id}>
+                  <tr className="bg-blue-50">
                     <td className="px-5 py-3 text-center">
                       <TrendArrow sessions={sessions} email={u.email} />
                     </td>
-                    <td className="px-5 py-2" colSpan={hasDeliveryData ? 5 : 4}>
+                    <td className="px-5 py-2" colSpan={hasDeliveryData ? 6 : 5}>
                       <div className="space-y-2">
                         <div className="grid grid-cols-2 gap-2">
                           <div>
@@ -692,15 +764,31 @@ resident2@example.com,Jane,Smith,Oak Hills`;
                     </td>
                     <td className="px-5 py-3"></td>
                   </tr>
+                  </React.Fragment>
                 ) : (
-                  <tr key={u.id} className="hover:bg-gray-50 transition">
+                  <React.Fragment key={u.id}>
+                  <tr className={`hover:bg-gray-50 transition ${expandedUser === u.id ? "bg-blue-50/30" : ""}`}>
                     <td className="px-5 py-3 text-center">
                       <TrendArrow sessions={sessions} email={u.email} />
                     </td>
-                    <td className="px-5 py-3 text-gray-900">
-                      {u.first_name || u.last_name
-                        ? `${u.first_name || ""} ${u.last_name || ""}`.trim()
-                        : "—"}
+                    <td className="px-5 py-3">
+                      <NpsBadge nps={u.latest_nps} />
+                    </td>
+                    <td className="px-5 py-3">
+                      <button
+                        onClick={() => setExpandedUser(expandedUser === u.id ? null : u.id)}
+                        className="text-gray-900 hover:underline text-left"
+                        title={u.nps_history?.length > 0 ? "Click to see NPS history" : ""}
+                      >
+                        {u.first_name || u.last_name
+                          ? `${u.first_name || ""} ${u.last_name || ""}`.trim()
+                          : "—"}
+                        {u.nps_history?.length > 0 && (
+                          <svg className={`inline-block w-3 h-3 ml-1 text-gray-400 transition-transform ${expandedUser === u.id ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        )}
+                      </button>
                     </td>
                     <td className="px-5 py-3 text-gray-700">{u.email}</td>
                     <td className="px-5 py-3 text-gray-500">{u.community_name || "—"}</td>
@@ -782,6 +870,14 @@ resident2@example.com,Jane,Smith,Oak Hills`;
                       </div>
                     </td>
                   </tr>
+                  {expandedUser === u.id && u.nps_history?.length > 0 && (
+                    <tr key={`${u.id}-sparkline`} className="bg-blue-50/30">
+                      <td colSpan={hasDeliveryData ? 7 : 6} className="px-8 py-3">
+                        <NpsSparkline history={u.nps_history} />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
                 )
               ))}
             </tbody>

@@ -729,12 +729,13 @@ router.delete("/account", async (req, res) => {
 
 // Get board members (users table) for current client
 router.get("/board-members", async (req, res) => {
-  // Include most recent delivery status from any round using window function
+  // Include most recent delivery status and latest NPS score
   const users = await db.all(
     `SELECT u.id, u.first_name, u.last_name, u.email,
             COALESCE(c.community_name, u.community_name) as community_name,
             u.management_company, u.active, u.updated_at,
-            il_latest.delivery_status, il_latest.email_status as invite_status
+            il_latest.delivery_status, il_latest.email_status as invite_status,
+            nps_latest.nps_score as latest_nps
      FROM users u
      LEFT JOIN communities c ON c.id = u.community_id
      LEFT JOIN (
@@ -743,13 +744,44 @@ router.get("/board-members", async (req, res) => {
        WHERE client_id = $1 AND is_test = $2
        ORDER BY user_id, sent_at DESC
      ) il_latest ON il_latest.user_id = u.id
+     LEFT JOIN (
+       SELECT DISTINCT ON (user_id) user_id, nps_score
+       FROM sessions
+       WHERE client_id = $1 AND completed = TRUE AND is_test = $2 AND is_mock IS NOT TRUE AND nps_score IS NOT NULL
+       ORDER BY user_id, created_at DESC
+     ) nps_latest ON nps_latest.user_id = u.id
      WHERE u.client_id = $1 AND u.active = TRUE AND u.is_test = $2
      ORDER BY
        CASE WHEN il_latest.delivery_status IN ('bounced', 'complained') THEN 0 ELSE 1 END,
        u.email`,
     [req.clientId, req.isTestMode]
   );
-  res.json(users);
+
+  // Batch-load NPS history for all users (for sparkline)
+  const npsHistory = await db.all(
+    `SELECT s.user_id, s.nps_score, sr.round_number
+     FROM sessions s
+     JOIN survey_rounds sr ON sr.id = s.round_id
+     WHERE s.client_id = $1 AND s.completed = TRUE AND s.is_test = $2
+       AND s.is_mock IS NOT TRUE AND s.nps_score IS NOT NULL
+     ORDER BY sr.round_number`,
+    [req.clientId, req.isTestMode]
+  );
+
+  // Group history by user_id
+  const historyByUser = {};
+  for (const h of npsHistory) {
+    if (!historyByUser[h.user_id]) historyByUser[h.user_id] = [];
+    historyByUser[h.user_id].push({ round: h.round_number, nps: h.nps_score });
+  }
+
+  // Attach history to each user
+  const enriched = users.map(u => ({
+    ...u,
+    nps_history: historyByUser[u.id] || [],
+  }));
+
+  res.json(enriched);
 });
 
 // Get inactive (deactivated) board members
