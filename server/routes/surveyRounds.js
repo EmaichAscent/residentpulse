@@ -571,8 +571,10 @@ router.get("/:id/dashboard", async (req, res) => {
         };
       });
 
-      // Revenue at Risk
-      const totalPortfolioValue = communityData.reduce((sum, c) => sum + (Number(c.contract_value) || 0), 0);
+      // Revenue at Risk — use only communities present in filtered results
+      const filteredCommunityNames = new Set(enrichedCohorts.map(c => c.name.trim().toLowerCase()));
+      const filteredCommunityData = communityData.filter(c => filteredCommunityNames.has(c.community_name.trim().toLowerCase()));
+      const totalPortfolioValue = filteredCommunityData.reduce((sum, c) => sum + (Number(c.contract_value) || 0), 0);
       const atRiskCommunities = enrichedCohorts.filter(c => c.cohort === "detractor" && c.contract_value);
       const revenueAtRisk = atRiskCommunities.reduce((sum, c) => sum + c.contract_value, 0);
 
