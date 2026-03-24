@@ -3,6 +3,7 @@ import { generateSummary } from "./summaryGenerator.js";
 import logger from "./logger.js";
 import { createMessage } from "./anthropicClient.js";
 const MODEL = "claude-sonnet-4-5-20250929";
+const CHUNK_MODEL = "claude-haiku-4-5-20251001"; // Faster model for chunk analysis
 
 // Domain-specific stop words to exclude from word cloud
 const STOP_WORDS = new Set([
@@ -180,7 +181,7 @@ ${sessionContext}${alertContext}`;
       const chunkContext = chunk
         .map((s, i) => {
           const name = [s.first_name, s.last_name].filter(Boolean).join(" ") || s.email;
-          const trimmedSummary = (s.summary || "").slice(0, 500);
+          const trimmedSummary = (s.summary || "").slice(0, 300);
           return `Respondent ${i + 1} (${name}, ${s.community_name || "Unknown Community"}, NPS: ${s.nps_score}):
 ${trimmedSummary}`;
         })
@@ -212,7 +213,7 @@ Return a JSON object with:
 Only output valid JSON, no other text.`;
 
       const response = await createMessage({
-        model: MODEL,
+        model: CHUNK_MODEL,
         max_tokens: 2000,
         messages: [{ role: "user", content: prompt }],
       });
@@ -235,7 +236,7 @@ Only output valid JSON, no other text.`;
         chunkSummaries.push(result);
         logger.info(`Insights: chunk ${chunkSummaries.length}/${chunks.length} complete`);
       } catch (chunkErr) {
-        logger.error({ err: chunkErr }, `Insights: chunk ${chunkSummaries.length + 1} failed, using empty result`);
+        logger.error(`Insights: chunk ${chunkSummaries.length + 1} failed: ${chunkErr.message} (status: ${chunkErr.status || 'unknown'})`);
         chunkSummaries.push({ positive_themes: [], negative_themes: [], notable_feedback: [], community_patterns: [] });
       }
     }
