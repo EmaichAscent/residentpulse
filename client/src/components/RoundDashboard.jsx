@@ -1140,7 +1140,22 @@ export default function RoundDashboard() {
             </div>
           </div>
 
-          {insights ? (
+          {insights?.error ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-5 text-center">
+              <p className="text-sm text-red-700 font-medium mb-2">{insights.message}</p>
+              <p className="text-xs text-red-500 mb-3">
+                {insights.chunks_failed} of {insights.chunks_attempted} analysis batches failed.
+              </p>
+              <button
+                onClick={handleRegenerate}
+                disabled={regenerating}
+                className="px-4 py-2 text-sm font-medium text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+                style={{ backgroundColor: "var(--cam-blue)" }}
+              >
+                {regenerating ? "Retrying..." : "Retry Insights Generation"}
+              </button>
+            </div>
+          ) : insights ? (
             <div className="space-y-6">
               {/* Executive Summary */}
               {insights.executive_summary && (

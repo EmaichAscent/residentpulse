@@ -133,7 +133,7 @@ Average NPS Rating: ${avgNps}
 ${prevRound?.insights_json ? `\nPrevious Round Context: Insights were generated previously. Build on trends, don't repeat.\n` : ""}`;
 
   // --- MAP-REDUCE APPROACH: analyze ALL sessions, not just a sample ---
-  const CHUNK_SIZE = 100;
+  const CHUNK_SIZE = 50;
   const chunks = [];
 
   // Create balanced chunks with proportional NPS distribution
@@ -230,17 +230,39 @@ Only output valid JSON, no other text.`;
 
     // Process chunks sequentially to avoid rate limiting
     chunkSummaries = [];
+    let failedChunks = 0;
     for (const fn of chunkFns) {
       try {
         const result = await fn();
         chunkSummaries.push(result);
         logger.info(`Insights: chunk ${chunkSummaries.length}/${chunks.length} complete`);
       } catch (chunkErr) {
+        failedChunks++;
         logger.error(`Insights: chunk ${chunkSummaries.length + 1} failed: ${chunkErr.message} (status: ${chunkErr.status || 'unknown'})`);
         chunkSummaries.push({ positive_themes: [], negative_themes: [], notable_feedback: [], community_patterns: [] });
       }
     }
-    logger.info(`Insights: ${chunkSummaries.length} chunk analyses complete, running synthesis`);
+
+    // If more than half the chunks failed, abort and save a failure record
+    if (failedChunks > chunks.length / 2) {
+      logger.error(`Insights: ${failedChunks}/${chunks.length} chunks failed, aborting`);
+      const failedJson = {
+        error: true,
+        message: `Insight generation failed — ${failedChunks} of ${chunks.length} analysis batches could not be processed. Please try again.`,
+        nps_score: npsScore,
+        response_count: sessions.length,
+        chunks_attempted: chunks.length,
+        chunks_failed: failedChunks,
+        generated_at: new Date().toISOString(),
+      };
+      await db.run(
+        "UPDATE survey_rounds SET insights_json = ?, insights_generated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [JSON.stringify(failedJson), roundId]
+      );
+      return failedJson;
+    }
+
+    logger.info(`Insights: ${chunkSummaries.length} chunk analyses complete (${failedChunks} failed), running synthesis`);
 
     // REDUCE phase: synthesize all chunk analyses into final insights
     const synthesisContext = `${companyHeader}${alertContext}
