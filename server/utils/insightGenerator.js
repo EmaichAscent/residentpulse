@@ -3,6 +3,35 @@ import { generateSummary } from "./summaryGenerator.js";
 import logger from "./logger.js";
 import { createMessage } from "./anthropicClient.js";
 const MODEL = "claude-sonnet-4-5-20250929";
+
+/** Resilient JSON parser — handles truncated or wrapped JSON from LLM responses */
+function safeParseJSON(text, fallback) {
+  // Try direct parse
+  try { return JSON.parse(text); } catch {}
+  // Try extracting JSON object
+  try {
+    const objMatch = text.match(/\{[\s\S]*\}/);
+    if (objMatch) return JSON.parse(objMatch[0]);
+  } catch {}
+  // Try extracting JSON array
+  try {
+    const arrMatch = text.match(/\[[\s\S]*\]/);
+    if (arrMatch) return JSON.parse(arrMatch[0]);
+  } catch {}
+  // Try fixing truncated JSON by closing open brackets
+  try {
+    let fixed = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    const opens = (fixed.match(/\{/g) || []).length;
+    const closes = (fixed.match(/\}/g) || []).length;
+    for (let i = 0; i < opens - closes; i++) fixed += "}";
+    const openBrackets = (fixed.match(/\[/g) || []).length;
+    const closeBrackets = (fixed.match(/\]/g) || []).length;
+    for (let i = 0; i < openBrackets - closeBrackets; i++) fixed += "]";
+    return JSON.parse(fixed);
+  } catch {}
+  logger.warn(`Failed to parse JSON from LLM response (${text.length} chars)`);
+  return fallback;
+}
 const CHUNK_MODEL = "claude-haiku-4-5-20251001"; // Faster model for chunk analysis
 
 // Domain-specific stop words to exclude from word cloud
@@ -214,18 +243,12 @@ Only output valid JSON, no other text.`;
 
       const response = await createMessage({
         model: MODEL,
-        max_tokens: 2000,
+        max_tokens: 4000,
         messages: [{ role: "user", content: prompt }],
       });
 
       const text = response.content[0].text.trim();
-      try {
-        return JSON.parse(text);
-      } catch {
-        const match = text.match(/\{[\s\S]*\}/);
-        if (match) return JSON.parse(match[0]);
-        return { positive_themes: [], negative_themes: [], notable_feedback: [], community_patterns: [] };
-      }
+      return safeParseJSON(text, { positive_themes: [], negative_themes: [], notable_feedback: [], community_patterns: [] });
     });
 
     // Process chunks sequentially with delay to avoid rate limiting
@@ -360,13 +383,7 @@ ${context}`,
   });
 
   const text = response.content[0].text.trim();
-  try {
-    return JSON.parse(text);
-  } catch {
-    const match = text.match(/\[[\s\S]*\]/);
-    if (match) return JSON.parse(match[0]);
-    return [];
-  }
+  return safeParseJSON(text, []);
 }
 
 /**
@@ -398,18 +415,12 @@ Deduplicate overlapping items. Prioritize clarity and actionability. Only output
   });
 
   const text = response.content[0].text.trim();
-  try {
-    return JSON.parse(text);
-  } catch {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
-    return {
-      executive_summary: "Insights could not be fully synthesized. Please regenerate.",
-      key_findings: findings || [],
-      recommended_actions: actions || [],
-      cam_ascent_callouts: callouts || [],
-    };
-  }
+  return safeParseJSON(text, {
+    executive_summary: "Insights could not be fully synthesized. Please regenerate.",
+    key_findings: findings || [],
+    recommended_actions: actions || [],
+    cam_ascent_callouts: callouts || [],
+  });
 }
 
 /**
