@@ -361,6 +361,16 @@ async function initializeSchema() {
       logger.info("Locations migration skipped (already applied or file not found)");
     }
 
+    // Run scalability indexes migration
+    try {
+      const scalIndexPath = join(__dirname, "migrations", "add-scalability-indexes.sql");
+      const scalIndexSQL = readFileSync(scalIndexPath, "utf-8");
+      await client.query(scalIndexSQL);
+      logger.info("Scalability indexes migration applied successfully");
+    } catch (migrationErr) {
+      logger.info("Scalability indexes migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     logger.info("Database schema initialized successfully");
   } catch (err) {

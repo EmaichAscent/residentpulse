@@ -75,6 +75,17 @@ router.post("/import", requireClientAdmin, upload.single("file"), async (req, re
   let updated = 0;
   const errors = [];
 
+  // Pre-load existing users for this client to avoid per-row SELECT
+  const existingUsers = await db.all(
+    "SELECT id, LOWER(email) as email, active FROM users WHERE client_id = ? AND is_test = ?",
+    [req.clientId, req.isTestMode]
+  );
+  const existingMap = new Map(existingUsers.map(u => [u.email, u]));
+
+  // Parse all rows first, then batch
+  const toUpdate = [];
+  const toInsert = [];
+
   for (let i = 1; i < lines.length; i++) {
     const cols = parseCSVLine(lines[i]);
     const email = (cols[emailIdx] || "").trim().toLowerCase();
@@ -88,25 +99,41 @@ router.post("/import", requireClientAdmin, upload.single("file"), async (req, re
     const firstName = firstNameIdx >= 0 ? (cols[firstNameIdx] || "").trim() : "";
     const lastName = lastNameIdx >= 0 ? (cols[lastNameIdx] || "").trim() : "";
 
-    const existing = await db.get("SELECT id, active FROM users WHERE LOWER(email) = ? AND client_id = ? AND is_test = ?", [email, req.clientId, req.isTestMode]);
+    const existing = existingMap.get(email);
     if (existing) {
-      await db.run(
-        "UPDATE users SET first_name = ?, last_name = ?, community_name = ?, management_company = ?, active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
-        [firstName, lastName, community, company, existing.id, req.isTestMode]
-      );
+      toUpdate.push([firstName, lastName, community, company, existing.id, req.isTestMode]);
       updated++;
     } else {
       if (remainingSlots <= 0) {
         errors.push(`Row ${i + 1}: board member limit reached, skipped`);
         continue;
       }
-      await db.run(
-        "INSERT INTO users (first_name, last_name, email, community_name, management_company, client_id, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [firstName, lastName, email, community, company, req.clientId, req.isTestMode]
-      );
+      toInsert.push([firstName, lastName, email, community, company, req.clientId, req.isTestMode]);
       created++;
       remainingSlots--;
     }
+  }
+
+  // Execute updates in batches of 50
+  for (let i = 0; i < toUpdate.length; i += 50) {
+    const batch = toUpdate.slice(i, i + 50);
+    await Promise.all(batch.map(params =>
+      db.run(
+        "UPDATE users SET first_name = ?, last_name = ?, community_name = ?, management_company = ?, active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+        params
+      )
+    ));
+  }
+
+  // Execute inserts in batches of 50
+  for (let i = 0; i < toInsert.length; i += 50) {
+    const batch = toInsert.slice(i, i + 50);
+    await Promise.all(batch.map(params =>
+      db.run(
+        "INSERT INTO users (first_name, last_name, email, community_name, management_company, client_id, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        params
+      )
+    ));
   }
 
   res.json({ created, updated, errors, total: created + updated });

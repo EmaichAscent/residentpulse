@@ -69,6 +69,18 @@ router.post("/", async (req, res) => {
     systemPrompt += "\n\nADDITIONAL CLIENT CONTEXT:\n" + supplement.value;
   }
 
+  // Add community manager context if available — AI should ask about their manager
+  if (session.community_id) {
+    const communityMgr = await db.get(
+      `SELECT c.community_name, c.community_manager_name
+       FROM communities c WHERE c.id = ? AND c.community_manager_name IS NOT NULL AND c.community_manager_name != ''`,
+      [session.community_id]
+    );
+    if (communityMgr?.community_manager_name) {
+      systemPrompt += `\n\nMANAGER CONTEXT: This board member's community (${communityMgr.community_name}) is managed by ${communityMgr.community_manager_name}. During the conversation, naturally ask how they feel about their community manager's performance, communication, and responsiveness. Use their manager's name to personalize the question. This is important feedback for the management company.`;
+    }
+  }
+
   // Google review prompt for promoters (NPS 9-10) — skip if already responded
   if (session.nps_score !== null && session.nps_score >= 9 && !session.google_review_response) {
     const reviewEnabled = await db.get(

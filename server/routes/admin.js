@@ -14,18 +14,31 @@ const router = Router();
 // All admin routes require client admin authentication
 router.use(requireClientAdmin);
 
-// Get all sessions with message count (filtered by client)
+// Get sessions with message count (filtered by client) — paginated
 router.get("/responses", async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 100, 500);
+  const offset = Number(req.query.offset) || 0;
+  const roundId = req.query.round_id ? Number(req.query.round_id) : null;
+
+  let whereClause = "s.client_id = $1 AND s.is_mock IS NOT TRUE AND s.is_test = $2";
+  const params = [req.clientId, req.isTestMode];
+
+  if (roundId) {
+    whereClause += ` AND s.round_id = $${params.length + 1}`;
+    params.push(roundId);
+  }
+
   const sessions = await db.all(
     `SELECT s.*, COALESCE(sc.community_name, s.community_name) as community_name,
             COUNT(m.id) as message_count
      FROM sessions s
      LEFT JOIN messages m ON m.session_id = s.id
      LEFT JOIN communities sc ON sc.id = s.community_id
-     WHERE s.client_id = ? AND s.is_mock IS NOT TRUE AND s.is_test = ?
+     WHERE ${whereClause}
      GROUP BY s.id, sc.community_name
-     ORDER BY s.created_at DESC`,
-    [req.clientId, req.isTestMode]
+     ORDER BY s.created_at DESC
+     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, limit, offset]
   );
   res.json(sessions);
 });
@@ -716,23 +729,23 @@ router.delete("/account", async (req, res) => {
 
 // Get board members (users table) for current client
 router.get("/board-members", async (req, res) => {
-  // Include most recent delivery status from any round
+  // Include most recent delivery status from any round using window function
   const users = await db.all(
     `SELECT u.id, u.first_name, u.last_name, u.email,
             COALESCE(c.community_name, u.community_name) as community_name,
             u.management_company, u.active, u.updated_at,
-            il.delivery_status, il.email_status as invite_status
+            il_latest.delivery_status, il_latest.email_status as invite_status
      FROM users u
      LEFT JOIN communities c ON c.id = u.community_id
-     LEFT JOIN LATERAL (
-       SELECT il2.delivery_status, il2.email_status
-       FROM invitation_logs il2
-       WHERE il2.user_id = u.id AND il2.client_id = $1 AND il2.is_test = $2
-       ORDER BY il2.sent_at DESC LIMIT 1
-     ) il ON TRUE
+     LEFT JOIN (
+       SELECT DISTINCT ON (user_id) user_id, delivery_status, email_status
+       FROM invitation_logs
+       WHERE client_id = $1 AND is_test = $2
+       ORDER BY user_id, sent_at DESC
+     ) il_latest ON il_latest.user_id = u.id
      WHERE u.client_id = $1 AND u.active = TRUE AND u.is_test = $2
      ORDER BY
-       CASE WHEN il.delivery_status IN ('bounced', 'complained') THEN 0 ELSE 1 END,
+       CASE WHEN il_latest.delivery_status IN ('bounced', 'complained') THEN 0 ELSE 1 END,
        u.email`,
     [req.clientId, req.isTestMode]
   );

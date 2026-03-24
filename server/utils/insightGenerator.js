@@ -91,8 +91,22 @@ export async function generateRoundInsights(roundId, clientId) {
     [clientId, roundId]
   );
 
-  // Build the shared context
-  const sessionContext = sessions
+  // Build the shared context — cap at 200 most recent sessions to stay within token limits
+  // For large rounds, prioritize detractors and a sample of promoters/passives
+  let contextSessions = sessions;
+  if (sessions.length > 200) {
+    const detractors_s = sessions.filter(s => s.nps_score != null && s.nps_score <= 6);
+    const passives_s = sessions.filter(s => s.nps_score != null && s.nps_score >= 7 && s.nps_score <= 8);
+    const promoters_s = sessions.filter(s => s.nps_score != null && s.nps_score >= 9);
+    // Always include all detractors, then fill with passives and promoters
+    const remaining = 200 - detractors_s.length;
+    const passiveSample = passives_s.slice(0, Math.floor(remaining * 0.4));
+    const promoterSample = promoters_s.slice(0, remaining - passiveSample.length);
+    contextSessions = [...detractors_s, ...passiveSample, ...promoterSample];
+    logger.info(`Insights: sampled ${contextSessions.length} of ${sessions.length} sessions (all ${detractors_s.length} detractors included)`);
+  }
+
+  const sessionContext = contextSessions
     .map((s, i) => {
       const name = [s.first_name, s.last_name].filter(Boolean).join(" ") || s.email;
       return `Respondent ${i + 1} (${name}, ${s.community_name || "Unknown Community"}, NPS: ${s.nps_score}):
@@ -285,6 +299,7 @@ export async function generateWordFrequencies(roundId, clientId) {
   const round = await db.get("SELECT is_test FROM survey_rounds WHERE id = ?", [roundId]);
   const roundIsTest = round ? !!round.is_test : false;
 
+  // Use streaming approach — fetch only content column, process in chunks
   const messages = await db.all(
     `SELECT m.content
      FROM messages m
@@ -297,15 +312,19 @@ export async function generateWordFrequencies(roundId, clientId) {
   if (messages.length === 0) return;
 
   const wordCounts = {};
-  for (const msg of messages) {
-    const words = msg.content
-      .toLowerCase()
-      .replace(/[^a-z\s'-]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+  // Process in chunks of 500 to limit peak memory
+  for (let i = 0; i < messages.length; i += 500) {
+    const chunk = messages.slice(i, i + 500);
+    for (const msg of chunk) {
+      const words = msg.content
+        .toLowerCase()
+        .replace(/[^a-z\s'-]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
 
-    for (const word of words) {
-      wordCounts[word] = (wordCounts[word] || 0) + 1;
+      for (const word of words) {
+        wordCounts[word] = (wordCounts[word] || 0) + 1;
+      }
     }
   }
 

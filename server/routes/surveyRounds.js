@@ -171,18 +171,56 @@ router.get("/trends", async (req, res) => {
     );
     const isPaidTier = planResult && planResult.plan_name !== "free";
 
+    // Batch-load ALL sessions for all rounds in one query
+    const roundIds = rounds.map(r => r.id);
+    const allSessions = roundIds.length > 0 ? await db.all(
+      `SELECT s.round_id, s.nps_score, s.community_id, COALESCE(sc.community_name, s.community_name) as community_name,
+              COALESCE(loc.name, s.management_company) as location_name, s.completed
+       FROM sessions s
+       LEFT JOIN communities sc ON sc.id = s.community_id
+       LEFT JOIN locations loc ON loc.id = sc.location_id
+       WHERE s.round_id = ANY($1) AND s.client_id = $2 AND s.is_mock IS NOT TRUE AND s.is_test = $3`,
+      [roundIds, req.clientId, req.isTestMode]
+    ) : [];
+
+    // Group sessions by round_id for efficient lookup
+    const sessionsByRound = {};
+    for (const s of allSessions) {
+      if (!sessionsByRound[s.round_id]) sessionsByRound[s.round_id] = [];
+      sessionsByRound[s.round_id].push(s);
+    }
+
+    // Batch-load community snapshots/data for paid tier concluded rounds
+    let communityDataByRound = {};
+    if (isPaidTier) {
+      const concludedIds = rounds.filter(r => r.status === "concluded").map(r => r.id);
+      if (concludedIds.length > 0) {
+        const snapshots = await db.all(
+          `SELECT round_id, community_id as id, community_name, contract_value, community_manager_name
+           FROM round_community_snapshots WHERE round_id = ANY($1) AND status = 'active'`,
+          [concludedIds]
+        );
+        for (const s of snapshots) {
+          if (!communityDataByRound[s.round_id]) communityDataByRound[s.round_id] = [];
+          communityDataByRound[s.round_id].push(s);
+        }
+        // For rounds without snapshots, fall back to live data
+        const liveCommunities = await db.all(
+          `SELECT id, community_name, contract_value, community_manager_name
+           FROM communities WHERE client_id = $1 AND status = 'active'`,
+          [req.clientId]
+        );
+        for (const rId of concludedIds) {
+          if (!communityDataByRound[rId] || communityDataByRound[rId].length === 0) {
+            communityDataByRound[rId] = liveCommunities;
+          }
+        }
+      }
+    }
+
     const trendsData = [];
     for (const round of rounds) {
-      // Get session stats for this round
-      const sessions = await db.all(
-        `SELECT s.nps_score, s.community_id, COALESCE(sc.community_name, s.community_name) as community_name,
-              COALESCE(loc.name, s.management_company) as location_name, s.completed
-         FROM sessions s
-         LEFT JOIN communities sc ON sc.id = s.community_id
-         LEFT JOIN locations loc ON loc.id = sc.location_id
-         WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE AND s.is_test = ?`,
-        [round.id, req.clientId, req.isTestMode]
-      );
+      const sessions = sessionsByRound[round.id] || [];
 
       const completed = sessions.filter((s) => s.completed);
       const npsScores = completed.filter((s) => s.nps_score != null).map((s) => s.nps_score);
@@ -237,21 +275,7 @@ router.get("/trends", async (req, res) => {
       }
 
       if (isPaidTier && round.status === "concluded") {
-        // Get community metadata from snapshots (concluded) or live table
-        const hasSnapshots = await db.get(
-          "SELECT 1 FROM round_community_snapshots WHERE round_id = ? LIMIT 1", [round.id]
-        );
-        const communityData = hasSnapshots
-          ? await db.all(
-              `SELECT community_id as id, community_name, contract_value, community_manager_name
-               FROM round_community_snapshots WHERE round_id = ? AND status = 'active'`,
-              [round.id]
-            )
-          : await db.all(
-              `SELECT id, community_name, contract_value, community_manager_name
-               FROM communities WHERE client_id = ? AND status = 'active'`,
-              [req.clientId]
-            );
+        const communityData = communityDataByRound[round.id] || [];
 
         // Build community name lookup for matching with session data
         const communityLookup = {};
