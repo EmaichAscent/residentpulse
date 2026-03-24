@@ -24,7 +24,7 @@ export default function RoundDashboard() {
   const [finalizing, setFinalizing] = useState(null);
   const [goalsExpanded, setGoalsExpanded] = useState(false);
   const [expandedCommunities, setExpandedCommunities] = useState({});
-  const [filters, setFilters] = useState({ community_id: "", manager: "", property_type: "" });
+  const [filters, setFilters] = useState({ community_id: "", manager: "", property_type: "", location: "" });
   const [showAllCommunities, setShowAllCommunities] = useState(false);
   const [showAllManagers, setShowAllManagers] = useState(false);
   const [showAllAtRisk, setShowAllAtRisk] = useState(false);
@@ -44,6 +44,7 @@ export default function RoundDashboard() {
       if (filters.community_id) params.set("community_id", filters.community_id);
       if (filters.manager) params.set("manager", filters.manager);
       if (filters.property_type) params.set("property_type", filters.property_type);
+      if (filters.location) params.set("location", filters.location);
       const qs = params.toString();
       const res = await fetch(`/api/admin/survey-rounds/${roundId}/dashboard${qs ? `?${qs}` : ""}`, { credentials: "include" });
       if (res.ok) {
@@ -382,9 +383,14 @@ export default function RoundDashboard() {
     }
 
     // Active filter note
-    const hasActiveFilters = filters.community_id || filters.manager || filters.property_type;
+    const hasActiveFilters = filters.community_id || filters.manager || filters.property_type || filters.location;
+    const filterParts = [];
+    if (filters.community_id) filterParts.push("Community: " + (filter_options?.communities?.find(c => c.id == filters.community_id)?.name || filters.community_id));
+    if (filters.manager) filterParts.push("Manager: " + filters.manager);
+    if (filters.property_type) filterParts.push("Type: " + formatPropertyType(filters.property_type));
+    if (filters.location) filterParts.push("Location: " + filters.location);
     const filterNote = hasActiveFilters
-      ? `<p style="font-size:12px;color:#3B9FE7;margin:8px 0;font-style:italic;">Filtered by: ${filters.community_id ? "Community" : ""}${filters.manager ? (filters.community_id ? ", " : "") + "Manager: " + filters.manager : ""}${filters.property_type ? ((filters.community_id || filters.manager) ? ", " : "") + "Type: " + formatPropertyType(filters.property_type) : ""}</p>`
+      ? `<p style="font-size:12px;color:#3B9FE7;margin:8px 0;font-style:italic;">Filtered by: ${filterParts.join(", ")}</p>`
       : "";
 
     w.document.write(`<!DOCTYPE html><html><head><title>Round ${round.round_number} Report</title>
@@ -542,7 +548,7 @@ export default function RoundDashboard() {
       </div>
 
       {/* Dashboard Filters (paid tier only) */}
-      {filter_options && (filter_options.communities.length > 0 || filter_options.managers.length > 0 || filter_options.property_types.length > 0) && (
+      {filter_options && (filter_options.communities.length > 0 || filter_options.managers.length > 0 || filter_options.property_types.length > 0 || filter_options.locations?.length > 0) && (
         <div className="flex gap-3 flex-wrap items-center">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Filter:</span>
           {filter_options.communities.length > 0 && (
@@ -581,9 +587,21 @@ export default function RoundDashboard() {
               ))}
             </select>
           )}
-          {(filters.community_id || filters.manager || filters.property_type) && (
+          {filter_options.locations?.length > 0 && (
+            <select
+              value={filters.location}
+              onChange={(e) => setFilters({ ...filters, location: e.target.value })}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-300"
+            >
+              <option value="">All Locations</option>
+              {filter_options.locations.map((l) => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+          )}
+          {(filters.community_id || filters.manager || filters.property_type || filters.location) && (
             <button
-              onClick={() => setFilters({ community_id: "", manager: "", property_type: "" })}
+              onClick={() => setFilters({ community_id: "", manager: "", property_type: "", location: "" })}
               className="text-xs font-medium px-2 py-1 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition"
             >
               Clear Filters

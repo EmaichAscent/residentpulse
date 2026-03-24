@@ -387,10 +387,11 @@ router.get("/:id/dashboard", async (req, res) => {
   try {
     const roundId = Number(req.params.id);
 
-    // Optional filters (paid tier only — applied below)
+    // Optional filters — applied to sessions, alerts, and analytics
     const filterCommunityId = req.query.community_id ? Number(req.query.community_id) : null;
     const filterManager = req.query.manager || null;
     const filterPropertyType = req.query.property_type || null;
+    const filterLocation = req.query.location || null;
 
     const round = await db.get(
       "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ? AND is_test = ?",
@@ -429,6 +430,10 @@ router.get("/:id/dashboard", async (req, res) => {
         sessionFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
         sessionParams.push(filterPropertyType, req.clientId);
       }
+    }
+    if (filterLocation) {
+      sessionFilterSQL += " AND s.community_id IN (SELECT c.id FROM communities c JOIN locations l ON l.id = c.location_id WHERE l.name = ? AND c.client_id = ?)";
+      sessionParams.push(filterLocation, req.clientId);
     }
 
     // All sessions for this round (with optional filters)
@@ -699,27 +704,50 @@ router.get("/:id/dashboard", async (req, res) => {
           );
       const managers = [...new Set(allCommunities.map(c => c.community_manager_name).filter(Boolean))].sort();
       const propertyTypes = [...new Set(allCommunities.map(c => c.property_type).filter(Boolean))].sort();
+      const locationsList = await db.all(
+        "SELECT DISTINCT l.name FROM locations l JOIN communities c ON c.location_id = l.id WHERE c.client_id = ? AND c.status = 'active' ORDER BY l.name",
+        [req.clientId]
+      );
       filterOptions = {
         communities: allCommunities.map(c => ({ id: c.id, name: c.community_name })),
         managers,
         property_types: propertyTypes,
+        locations: locationsList.map(l => l.name),
       };
     }
 
-    // Critical alerts for this round
+    // Critical alerts for this round (filtered by same criteria as sessions)
+    let alertFilterSQL = "";
+    const alertParams = [roundId, req.clientId, req.isTestMode];
+    if (filterCommunityId) {
+      alertFilterSQL += " AND u.community_id = ?";
+      alertParams.push(filterCommunityId);
+    }
+    if (filterManager) {
+      alertFilterSQL += " AND u.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
+      alertParams.push(filterManager, req.clientId);
+    }
+    if (filterPropertyType) {
+      alertFilterSQL += " AND u.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
+      alertParams.push(filterPropertyType, req.clientId);
+    }
+    if (filterLocation) {
+      alertFilterSQL += " AND u.community_id IN (SELECT cm.id FROM communities cm JOIN locations l ON l.id = cm.location_id WHERE l.name = ? AND cm.client_id = ?)";
+      alertParams.push(filterLocation, req.clientId);
+    }
     const alerts = await db.all(
       `SELECT ca.*, u.first_name, u.last_name, u.email as user_email,
               COALESCE(c.community_name, u.community_name) as alert_community
        FROM critical_alerts ca
        LEFT JOIN users u ON u.id = ca.user_id
        LEFT JOIN communities c ON c.id = u.community_id
-       WHERE ca.round_id = ? AND ca.client_id = ? AND ca.is_test = ?
+       WHERE ca.round_id = ? AND ca.client_id = ? AND ca.is_test = ?${alertFilterSQL}
        ORDER BY ca.created_at DESC`,
-      [roundId, req.clientId, req.isTestMode]
+      alertParams
     );
 
     // Word frequencies (stored for concluded unless filtered, computed live for active or filtered)
-    const hasFilters = filterCommunityId || filterManager || filterPropertyType;
+    const hasFilters = filterCommunityId || filterManager || filterPropertyType || filterLocation;
     let wordFrequencies = null;
     if (round.word_frequencies && !hasFilters) {
       wordFrequencies = round.word_frequencies;
