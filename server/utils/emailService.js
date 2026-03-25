@@ -806,20 +806,20 @@ export async function notifyRoundApproaching({ clientId, roundNumber, scheduledD
   const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
   const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
   const dateStr = new Date(scheduledDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-  const isDayOf = daysUntil <= 0;
-  const subject = isDayOf
-    ? `Round ${roundNumber} is scheduled for today`
+  const isDayBefore = daysUntil === 1;
+  const subject = isDayBefore
+    ? `Round ${roundNumber} launches tomorrow`
     : `Round ${roundNumber} launches in ${daysUntil} days`;
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
       <div style="background: #3B9FE7; padding: 24px 32px; border-radius: 8px 8px 0 0;">
-        <h1 style="color: #fff; margin: 0; font-size: 22px;">${isDayOf ? "Round Launching Today" : "Upcoming Survey Round"}</h1>
+        <h1 style="color: #fff; margin: 0; font-size: 22px;">${isDayBefore ? "Round Launches Tomorrow" : "Upcoming Survey Round"}</h1>
       </div>
       <div style="padding: 24px 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
         <p>Hi {{firstName}},</p>
-        <p>${isDayOf
-          ? `Survey Round ${roundNumber} is scheduled to launch <strong>today</strong>.`
+        <p>${isDayBefore
+          ? `Survey Round ${roundNumber} launches <strong>tomorrow</strong> (${dateStr}).`
           : `Survey Round ${roundNumber} is scheduled for <strong>${dateStr}</strong> — ${daysUntil} days from now.`
         }</p>
         <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
