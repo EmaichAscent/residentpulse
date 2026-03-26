@@ -405,7 +405,7 @@ router.get("/account/logo", async (req, res) => {
 
   const buffer = Buffer.from(client.logo_base64, "base64");
   res.setHeader("Content-Type", client.logo_mime_type);
-  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.setHeader("Cache-Control", "private, no-cache, must-revalidate");
   res.send(buffer);
 });
 
