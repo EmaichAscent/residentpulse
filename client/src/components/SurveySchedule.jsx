@@ -104,6 +104,7 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
   };
 
   const handlePreLaunchCheck = async (roundId) => {
+    setConfirmLaunch(null);
     // Check if a re-interview should be offered before launching
     try {
       const res = await fetch("/api/admin/interview/status", { credentials: "include" });
@@ -404,34 +405,17 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
 
                 return (
                   <>
-                    {confirmLaunch === round.id ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Launch now?</span>
-                        <button
-                          onClick={() => handleLaunch(round.id)}
-                          disabled={launching === round.id || jobInProgress}
-                          className="text-xs px-3 py-1.5 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
-                        >
-                          {launching === round.id ? "Launching..." : "Confirm"}
-                        </button>
-                        <button
-                          onClick={() => setConfirmLaunch(null)}
-                          className="text-xs px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : tooEarly ? (
+                    {tooEarly ? (
                       <span className="text-xs text-gray-400 text-right leading-tight">
                         Available in {daysUntil - 30} day{daysUntil - 30 !== 1 ? "s" : ""}
                       </span>
                     ) : (
                       <button
-                        onClick={() => handlePreLaunchCheck(round.id)}
+                        onClick={() => setConfirmLaunch(round.id)}
                         disabled={jobInProgress}
                         className="text-sm px-4 py-2 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
                       >
-                        {jobInProgress ? "Sending..." : "Confirm & Launch"}
+                        {jobInProgress ? "Sending..." : "Launch Now"}
                       </button>
                     )}
                   </>
@@ -450,6 +434,33 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
           onSkip={() => { setReInterviewPrompt(null); handleLaunch(reInterviewPrompt.roundId); }}
           onClose={() => setReInterviewPrompt(null)}
         />
+      )}
+
+      {confirmLaunch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Launch Survey Now?</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Are you sure you want to launch this survey round now? Invitations will be sent to all active members immediately.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmLaunch(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handlePreLaunchCheck(confirmLaunch)}
+                disabled={launching === confirmLaunch}
+                className="px-4 py-2 text-sm font-medium text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+                style={{ backgroundColor: "var(--cam-blue)" }}
+              >
+                {launching === confirmLaunch ? "Launching..." : "Yes, Launch Now"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -25,6 +25,7 @@ export default function RoundsLanding() {
   const [googleReviewUrl, setGoogleReviewUrl] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewMessage, setReviewMessage] = useState(null);
+  const [scheduledFirstRound, setScheduledFirstRound] = useState(false);
 
   useEffect(() => {
     loadRounds();
@@ -243,8 +244,9 @@ export default function RoundsLanding() {
     : user?.company_name || null;
 
   // Show welcome page if no rounds have been launched yet (planned-only doesn't count)
+  // Once user schedules their first round from onboarding, transition to the normal dashboard
   const hasLaunchedRounds = rounds.some(r => r.status === "in_progress" || r.status === "concluded");
-  if (!hasLaunchedRounds) {
+  if (!hasLaunchedRounds && !scheduledFirstRound) {
     return (
       <div className="space-y-6">
         {/* Welcome Header */}
@@ -340,7 +342,7 @@ export default function RoundsLanding() {
                 <p className={`font-semibold ${memberCount > 0 ? "text-gray-900" : "text-gray-400"}`}>Schedule Your First Round</p>
                 {memberCount > 0 ? (
                   <div className="mt-2">
-                    <SurveySchedule embedded onScheduled={loadRounds} />
+                    <SurveySchedule embedded onScheduled={() => { setScheduledFirstRound(true); loadRounds(); }} />
                   </div>
                 ) : (
                   <p className="text-sm text-gray-400 mt-0.5">Add members first to unlock scheduling.</p>
