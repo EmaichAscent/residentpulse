@@ -15,6 +15,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // Get all survey rounds for this client
 router.get("/", async (req, res) => {
   try {
+    logger.info({ clientId: req.clientId, isTestMode: req.isTestMode, userId: req.userId }, "GET /survey-rounds");
     // Auto-fill: ensure `cadence` planned rounds exist — but ONLY if user has already
     // scheduled or launched at least one round. New accounts should see the date picker first.
     const anyRound = await db.get(
@@ -92,9 +93,10 @@ router.get("/", async (req, res) => {
        ORDER BY sr.round_number`,
       [req.isTestMode, req.isTestMode, req.isTestMode, req.isTestMode, req.clientId, req.isTestMode]
     );
+    logger.info({ clientId: req.clientId, roundCount: rounds.length, statuses: rounds.map(r => r.status) }, "GET /survey-rounds response");
     res.json(rounds);
   } catch (err) {
-    logger.error({ err }, "Error fetching survey rounds");
+    logger.error({ err, clientId: req.clientId }, "Error fetching survey rounds");
     res.status(500).json({ error: err.message });
   }
 });
