@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS survey_rounds (
   reminder_20_sent BOOLEAN DEFAULT FALSE,
   members_invited INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(client_id, round_number)
+  UNIQUE(client_id, round_number, is_test)
 );
 
 CREATE INDEX IF NOT EXISTS idx_survey_rounds_client_id ON survey_rounds(client_id);

@@ -157,6 +157,9 @@ router.post("/schedule", async (req, res) => {
     res.json(createdRounds);
   } catch (err) {
     logger.error({ err }, "Error scheduling rounds");
+    if (err.message?.includes("unique constraint")) {
+      return res.status(400).json({ error: "Survey rounds already exist for this account. Please contact support if you need to reschedule." });
+    }
     res.status(500).json({ error: err.message });
   }
 });
