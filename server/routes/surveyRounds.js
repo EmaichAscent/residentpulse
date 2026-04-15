@@ -916,6 +916,43 @@ router.get("/:id/export", async (req, res) => {
   }
 });
 
+// Reschedule a planned round
+router.patch("/:id/reschedule", async (req, res) => {
+  try {
+    const roundId = Number(req.params.id);
+    const { scheduled_date } = req.body;
+
+    if (!scheduled_date) {
+      return res.status(400).json({ error: "scheduled_date is required" });
+    }
+
+    const parsedDate = new Date(scheduled_date + "T00:00:00Z");
+    if (isNaN(parsedDate.getTime())) {
+      return res.status(400).json({ error: "Invalid date format" });
+    }
+
+    const round = await db.get(
+      "SELECT id, status FROM survey_rounds WHERE id = ? AND client_id = ? AND is_test = ?",
+      [roundId, req.clientId, req.isTestMode]
+    );
+    if (!round) return res.status(404).json({ error: "Round not found" });
+    if (round.status !== "planned") {
+      return res.status(400).json({ error: "Only planned rounds can be rescheduled" });
+    }
+
+    await db.run(
+      "UPDATE survey_rounds SET scheduled_date = ?, admin_reminder_14_sent = FALSE, admin_reminder_7_sent = FALSE, admin_reminder_1_sent = FALSE WHERE id = ?",
+      [scheduled_date, roundId]
+    );
+
+    const updated = await db.get("SELECT * FROM survey_rounds WHERE id = ?", [roundId]);
+    res.json(updated);
+  } catch (err) {
+    logger.error({ err }, "Error rescheduling round");
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Close a round early
 router.post("/:id/close", async (req, res) => {
   try {
