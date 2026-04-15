@@ -11,7 +11,32 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
   const [error, setError] = useState(null);
   const [reInterviewPrompt, setReInterviewPrompt] = useState(null);
   const [activeJob, setActiveJob] = useState(null);
+  const [editingDateId, setEditingDateId] = useState(null);
+  const [editDateValue, setEditDateValue] = useState("");
+  const [savingDate, setSavingDate] = useState(false);
   const pollRef = useRef(null);
+
+  const handleSaveDate = async (roundId) => {
+    if (!editDateValue) return;
+    setSavingDate(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/survey-rounds/${roundId}/reschedule`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ scheduled_date: editDateValue }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to reschedule");
+      setEditingDateId(null);
+      await loadRounds();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingDate(false);
+    }
+  };
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -391,34 +416,58 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
                   </span>
                 </div>
                 <div className="text-sm text-gray-500">
-                  <span>Scheduled for {formatDate(round.scheduled_date)}</span>
+                  {editingDateId === round.id ? (
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="date"
+                        value={editDateValue}
+                        onChange={(e) => setEditDateValue(e.target.value)}
+                        className="text-sm px-2 py-1 border border-gray-300 rounded"
+                      />
+                      <button
+                        onClick={() => handleSaveDate(round.id)}
+                        disabled={savingDate}
+                        className="text-xs px-3 py-1 bg-[var(--cam-blue)] text-white rounded font-medium hover:opacity-90 disabled:opacity-50"
+                      >
+                        {savingDate ? "Saving..." : "Save"}
+                      </button>
+                      <button
+                        onClick={() => setEditingDateId(null)}
+                        className="text-xs px-3 py-1 text-gray-600 hover:text-gray-800"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span>Scheduled for {formatDate(round.scheduled_date)}</span>
+                      <button
+                        onClick={() => {
+                          setEditingDateId(round.id);
+                          setEditDateValue(round.scheduled_date?.split("T")[0] || "");
+                        }}
+                        className="ml-2 text-xs text-[var(--cam-blue)] hover:underline font-medium"
+                      >
+                        Change
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
               {(() => {
-                // Allow launch only within 30 days of scheduled date
-                const daysUntil = round.scheduled_date
-                  ? Math.ceil((new Date(round.scheduled_date) - new Date()) / (1000 * 60 * 60 * 24))
-                  : 0;
-                const tooEarly = daysUntil > 30;
                 const jobInProgress = activeJob?.status === "in_progress";
+                const anotherRoundActive = rounds.some((r) => r.status === "in_progress");
 
                 return (
-                  <>
-                    {tooEarly ? (
-                      <span className="text-xs text-gray-400 text-right leading-tight">
-                        Available in {daysUntil - 30} day{daysUntil - 30 !== 1 ? "s" : ""}
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => setConfirmLaunch(round.id)}
-                        disabled={jobInProgress}
-                        className="text-sm px-4 py-2 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
-                      >
-                        {jobInProgress ? "Sending..." : "Launch Now"}
-                      </button>
-                    )}
-                  </>
+                  <button
+                    onClick={() => setConfirmLaunch(round.id)}
+                    disabled={jobInProgress || anotherRoundActive}
+                    title={anotherRoundActive ? "Another round is currently in progress" : ""}
+                    className="text-sm px-4 py-2 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {jobInProgress ? "Sending..." : "Launch Now"}
+                  </button>
                 );
               })()}
             </div>
