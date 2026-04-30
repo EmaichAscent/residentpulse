@@ -1,110 +1,99 @@
 import { describe, it, expect } from "vitest";
 import { buildWelcomeMessage } from "./chatWelcome";
 
-describe("buildWelcomeMessage", () => {
-  it("personalizes by first name and includes the company", () => {
+describe("buildWelcomeMessage — trust-contract welcome (Phase 3)", () => {
+  it("personalizes by first name and uses the named CM when available", () => {
     const msg = buildWelcomeMessage({
-      firstName: "Amy",
+      firstName: "Andrew",
       company: "Zee Best Management",
-      community: "Riverwalk Cove",
-      hasSynth: false,
-      hasSpeechRecognition: false,
+      community: "Aspen Heights",
+      communityManagerName: "Sarah Johnson",
     });
-    expect(msg).toMatch(/^Hi Amy/);
-    expect(msg).toMatch(/on behalf of Zee Best Management/);
-    expect(msg).toMatch(/as a board member at Riverwalk Cove/);
+    expect(msg).toMatch(/^Hi Andrew/);
+    // First name only of the CM, then "at {company}"
+    expect(msg).toMatch(/Sarah at Zee Best Management/);
+    expect(msg).not.toMatch(/Sarah Johnson at/);
+  });
+
+  it("falls back to 'your team at {company}' when no CM is assigned", () => {
+    const msg = buildWelcomeMessage({
+      firstName: "Andrew",
+      company: "Zee Best Management",
+      community: "Aspen Heights",
+      communityManagerName: null,
+    });
+    expect(msg).toMatch(/your team at Zee Best Management asked me to check in/);
+    expect(msg).not.toMatch(/at undefined/);
+  });
+
+  it("falls back to 'your management company' when company is empty", () => {
+    const msg = buildWelcomeMessage({
+      firstName: "Andrew",
+      company: "",
+      community: "",
+      communityManagerName: null,
+    });
+    expect(msg).toMatch(/your team at your management company/);
   });
 
   it("falls back to 'there' when first name is missing", () => {
     const msg = buildWelcomeMessage({
       firstName: "",
-      company: "Acme",
-      community: "Some Place",
+      company: "Acme PM",
+      communityManagerName: null,
     });
     expect(msg).toMatch(/^Hi there/);
   });
 
-  it("omits the 'on behalf of' phrase when company is empty", () => {
+  it("commits to 'about 5 minutes' (not '2 minutes' which contradicts the V2 depth budget)", () => {
     const msg = buildWelcomeMessage({
-      firstName: "Amy",
-      company: "",
-      community: "Riverwalk Cove",
+      firstName: "Andrew",
+      company: "Acme",
+      communityManagerName: null,
     });
-    expect(msg).not.toMatch(/on behalf of/);
+    expect(msg).toMatch(/About 5 minutes/);
+    expect(msg).not.toMatch(/Two minutes/);
   });
 
-  it("falls back to a generic 'as a board member' when community is missing", () => {
+  it("commits to the privacy contract: summary only, never the exchange", () => {
     const msg = buildWelcomeMessage({
-      firstName: "Amy",
+      firstName: "Andrew",
       company: "Acme",
-      community: "",
+      communityManagerName: null,
     });
-    expect(msg).toMatch(/as a board member\./);
-    expect(msg).not.toMatch(/at\s+\./);
-  });
-
-  it("appends speaker hint only when speech synthesis is supported", () => {
-    const msg = buildWelcomeMessage({
-      firstName: "Amy",
-      company: "Acme",
-      community: "Cove",
-      hasSynth: true,
-      hasSpeechRecognition: false,
-    });
-    expect(msg).toMatch(/click the speaker button/);
-    expect(msg).not.toMatch(/click the microphone button/);
-  });
-
-  it("appends mic hint only when speech recognition is supported", () => {
-    const msg = buildWelcomeMessage({
-      firstName: "Amy",
-      company: "Acme",
-      community: "Cove",
-      hasSynth: false,
-      hasSpeechRecognition: true,
-    });
-    expect(msg).toMatch(/click the microphone button/);
-    expect(msg).not.toMatch(/click the speaker button/);
-  });
-
-  it("appends both voice hints with 'and' when both APIs are available", () => {
-    const msg = buildWelcomeMessage({
-      firstName: "Amy",
-      company: "Acme",
-      community: "Cove",
-      hasSynth: true,
-      hasSpeechRecognition: true,
-    });
-    expect(msg).toMatch(/speaker button.*and.*microphone button/);
+    expect(msg).toMatch(/sees only a summary/i);
+    expect(msg).toMatch(/not this conversation/i);
+    // Regression: the design's original wording suggested name removal,
+    // which doesn't match how the product actually works (transcripts are
+    // hidden, not just names). Make sure we're not promising name removal.
+    expect(msg).not.toMatch(/your name removed/i);
+    expect(msg).not.toMatch(/with your name/i);
   });
 
   it("does NOT prompt the user to use the End Chat button (V2 rule)", () => {
     const msg = buildWelcomeMessage({
-      firstName: "Amy",
+      firstName: "Andrew",
       company: "Acme",
-      community: "Cove",
-      hasSynth: true,
-      hasSpeechRecognition: true,
+      communityManagerName: null,
     });
     expect(msg).not.toMatch(/End Chat/i);
-    expect(msg).not.toMatch(/click "End Chat"/i);
   });
 
   it("does NOT use the old 'we're collecting feedback' framing", () => {
     const msg = buildWelcomeMessage({
-      firstName: "Amy",
+      firstName: "Andrew",
       company: "Acme",
-      community: "Cove",
+      communityManagerName: null,
     });
     expect(msg).not.toMatch(/We're collecting feedback/i);
   });
 
-  it("ends with the rating-prompt sentence (so the NPS scale appears next)", () => {
+  it("ends with the 'Sound good?' beat (so the trust-gate button is the next step)", () => {
     const msg = buildWelcomeMessage({
-      firstName: "Amy",
+      firstName: "Andrew",
       company: "Acme",
-      community: "Cove",
+      communityManagerName: null,
     });
-    expect(msg).toMatch(/Let's start with a quick rating\.$/);
+    expect(msg).toMatch(/Sound good\?$/);
   });
 });

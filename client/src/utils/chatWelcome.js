@@ -1,37 +1,30 @@
 /**
- * Build the personalized welcome message shown above the resident chat,
- * before the AI takes over.
+ * Build the trust-contract welcome message shown above the resident chat
+ * before they tap "Sounds good →" to engage.
  *
- * V2 voice rules (mirrors the V2 board-interview system prompt):
- *   - Warm but direct. No "we're collecting feedback" corporate framing.
- *   - Do NOT prompt the resident to use the End Chat button. The V2
- *     system prompt explicitly forbids the AI from doing so; the welcome
- *     should match.
- *   - Optional voice hints are appended only when the browser supports
- *     speech synthesis or recognition.
+ * Voice rules (from V2 board-interview prompt + design handoff §5.8):
+ *   - Warm, human, concrete. Names a real CM if we have one.
+ *   - States the timing expectation honestly ("about 5 minutes").
+ *   - Sets the privacy contract: management company sees a summary,
+ *     never the actual exchange. (Per ResidentPulse founder, transcripts
+ *     are hidden from clients; only summaries flow back.)
+ *   - Ends with a "Sound good?" beat that gives the resident agency to
+ *     opt in before any score is asked.
+ *   - No "End Chat" prompt — V2 forbids that. Voice/mic hints live
+ *     elsewhere (input area), not in the welcome.
  */
-export function buildWelcomeMessage({
-  firstName,
-  company,
-  community,
-  hasSynth,
-  hasSpeechRecognition,
-}) {
+export function buildWelcomeMessage({ firstName, company, community, communityManagerName }) {
   const userName = firstName || "there";
-  const companyText = company ? ` on behalf of ${company}` : "";
-  const roleText = community ? ` as a board member at ${community}` : " as a board member";
+  const companyName = company || "your management company";
+  // Prefer the named CM; fall back to "your team at {company}" so the
+  // copy still feels human when no manager is assigned to the community.
+  const introducer = communityManagerName
+    ? `${communityManagerName.split(" ")[0]} at ${companyName}`
+    : `your team at ${companyName}`;
 
-  const voiceHints = [];
-  if (hasSynth) {
-    voiceHints.push("click the speaker button to hear responses read aloud");
-  }
-  if (hasSpeechRecognition) {
-    voiceHints.push(
-      "click the microphone button to speak your responses (your browser will ask for permission the first time)"
-    );
-  }
-  const voiceText =
-    voiceHints.length > 0 ? ` You can type your responses, or ${voiceHints.join(", and ")}.` : "";
+  // We don't include community in the welcome itself anymore — it's in
+  // the header. Argument retained for forward compatibility / tests.
+  void community;
 
-  return `Hi ${userName} — quick read on how things are going${companyText} for you${roleText}.${voiceText} Let's start with a quick rating.`;
+  return `Hi ${userName} — ${introducer} asked me to check in. About 5 minutes, totally honest answers. Your management company sees only a summary, not this conversation. Sound good?`;
 }

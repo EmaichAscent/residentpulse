@@ -1,62 +1,67 @@
 import { useState } from "react";
 
+/**
+ * NPS scale — Polished variant rebuild (Phase 3).
+ *
+ * Differences from the original:
+ *   - 11 outlined circles 0-10 — no red/amber/green color-coding
+ *     (avoids biasing the resident toward any direction).
+ *   - Auto-advance on tap. No "Submit Score" button. Confirms instantly
+ *     so the next AI message arrives without a second click.
+ *   - "Tap a number — it'll auto-advance" hint replaces the "How likely"
+ *     prompt (the AI message above this scale already asks the question).
+ *   - Subtle "Not at all" / "Extremely likely" anchors at the ends.
+ *
+ * Auto-advance is debounced briefly so the user sees their selection
+ * highlight before the chat moves forward.
+ */
 export default function NpsScale({ onSelect }) {
   const [selected, setSelected] = useState(null);
   const [confirmed, setConfirmed] = useState(false);
 
-  const getColor = (n) => {
-    if (selected === n) {
-      if (n <= 6) return "bg-red-600 text-white";
-      if (n <= 8) return "bg-yellow-500 text-white";
-      return "nps-selected-high";
-    }
-    if (n <= 6) return "bg-red-50 text-red-700 hover:bg-red-100";
-    if (n <= 8) return "bg-yellow-50 text-yellow-700 hover:bg-yellow-100";
-    return "bg-green-50 text-green-700 hover:bg-green-100";
+  const handleSelect = (n) => {
+    if (confirmed) return;
+    setSelected(n);
+    setConfirmed(true);
+    // Brief delay so the user sees their selection register, then advance.
+    setTimeout(() => onSelect(n), 220);
   };
-
-  const handleConfirm = () => {
-    if (selected !== null) {
-      setConfirmed(true);
-      onSelect(selected);
-    }
-  };
-
-  if (confirmed) {
-    return (
-      <div className="text-center py-4 text-lg text-gray-500">
-        You selected: <span className="font-bold text-gray-900">{selected}</span>
-      </div>
-    );
-  }
 
   return (
-    <div className="py-4">
-      <p className="text-lg font-medium text-gray-700 mb-4 text-center">
-        How likely are you to recommend your management company? (0-10)
-      </p>
-      <div className="flex gap-1.5 mb-4">
-        {Array.from({ length: 11 }, (_, i) => (
-          <button
-            key={i}
-            onClick={() => setSelected(i)}
-            className={`flex-1 min-h-[48px] rounded-lg text-lg font-bold transition-all ${getColor(i)} border-2 ${selected === i ? "border-transparent ring-2 ring-offset-1 nps-ring" : "border-transparent"}`}
-          >
-            {i}
-          </button>
-        ))}
-      </div>
-      <div className="flex justify-between text-sm text-gray-400 mb-5 px-1">
-        <span>Not likely</span>
+    <div
+      className="rounded-xl border p-4"
+      style={{ borderColor: "var(--line)", backgroundColor: "white" }}
+      data-testid="nps-scale"
+    >
+      <div className="flex justify-between text-[11px] mb-2 px-1" style={{ color: "var(--ink-4)" }}>
+        <span>Not at all</span>
         <span>Extremely likely</span>
       </div>
-      <button
-        onClick={handleConfirm}
-        disabled={selected === null}
-        className="btn-primary disabled:opacity-30"
-      >
-        Submit Score
-      </button>
+      <div className="flex gap-1.5 justify-between mb-3">
+        {Array.from({ length: 11 }, (_, i) => {
+          const isSelected = selected === i;
+          return (
+            <button
+              key={i}
+              onClick={() => handleSelect(i)}
+              disabled={confirmed && !isSelected}
+              className="flex-1 aspect-square min-w-[34px] max-w-[44px] rounded-lg text-sm font-semibold transition-colors disabled:opacity-40"
+              style={{
+                border: `1.5px solid ${isSelected ? "var(--ink)" : "var(--line-2)"}`,
+                backgroundColor: isSelected ? "var(--ink)" : "white",
+                color: isSelected ? "white" : "var(--ink-2)",
+              }}
+              aria-label={`NPS score ${i}`}
+              aria-pressed={isSelected}
+            >
+              {i}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-center" style={{ color: "var(--ink-4)" }}>
+        {confirmed ? "Got it." : "Tap a number — it'll auto-advance."}
+      </p>
     </div>
   );
 }
