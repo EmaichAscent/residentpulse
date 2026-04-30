@@ -8,13 +8,19 @@ export default function ChatBubble({ role, content, timestamp, compact = false }
   };
 
   const bubbleClass = isUser
-    ? (compact ? "bubble-user-sm" : "bubble-user")
-    : (compact ? "bubble-assistant-sm" : "bubble-assistant");
+    ? compact
+      ? "bubble-user-sm"
+      : "bubble-user"
+    : compact
+      ? "bubble-assistant-sm"
+      : "bubble-assistant";
 
   const iconSize = compact ? "w-6 h-6" : "w-8 h-8";
 
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"} ${compact ? "mb-3" : "mb-4"}`}>
+    <div
+      className={`flex ${isUser ? "justify-end" : "justify-start"} ${compact ? "mb-3" : "mb-4"}`}
+    >
       {!isUser && (
         <img
           src="/camascent-chat-icon.png"
@@ -23,9 +29,7 @@ export default function ChatBubble({ role, content, timestamp, compact = false }
         />
       )}
       <div>
-        <div className={bubbleClass}>
-          {content}
-        </div>
+        <div className={bubbleClass}>{content}</div>
         {timestamp && (
           <p className={`text-xs text-gray-400 mt-1 ${isUser ? "text-right" : "text-left"}`}>
             {formatTime(timestamp)}

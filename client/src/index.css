@@ -4,10 +4,10 @@
 
 @layer base {
   :root {
-    --cam-blue: #3B9FE7;
-    --cam-blue-dark: #2B7FC0;
-    --cam-green: #1AB06E;
-    --cam-green-dark: #15905A;
+    --cam-blue: #3b9fe7;
+    --cam-blue-dark: #2b7fc0;
+    --cam-green: #1ab06e;
+    --cam-green-dark: #15905a;
   }
 }
 

@@ -1,10 +1,14 @@
 import cron from "node-cron";
 import db from "./db.js";
-import { sendReminder, notifyRoundConcluded, notifyRoundApproaching } from "./utils/emailService.js";
+import {
+  sendReminder,
+  notifyRoundConcluded,
+  notifyRoundApproaching,
+} from "./utils/emailService.js";
 import { generateRoundInsights } from "./utils/insightGenerator.js";
 import logger from "./utils/logger.js";
 
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Auto-conclude rounds that have passed their close date
@@ -39,11 +43,18 @@ async function concludeExpiredRounds() {
       "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE AND is_mock IS NOT TRUE",
       [round.id, round.client_id]
     );
-    const roundDetails = await db.get("SELECT members_invited FROM survey_rounds WHERE id = ?", [round.id]);
+    const roundDetails = await db.get("SELECT members_invited FROM survey_rounds WHERE id = ?", [
+      round.id,
+    ]);
     notifyRoundConcluded({
-      clientId: round.client_id, roundNumber: round.round_number,
-      totalResponses: completedCount?.count || 0, totalInvited: roundDetails?.members_invited || 0, db
-    }).catch(err => logger.error(`Failed to send conclusion notifications for round ${round.id}: %s`, err.message));
+      clientId: round.client_id,
+      roundNumber: round.round_number,
+      totalResponses: completedCount?.count || 0,
+      totalInvited: roundDetails?.members_invited || 0,
+      db,
+    }).catch((err) =>
+      logger.error(`Failed to send conclusion notifications for round ${round.id}: %s`, err.message)
+    );
 
     // Generate AI insights asynchronously
     generateRoundInsights(round.id, round.client_id).catch((err) =>
@@ -68,7 +79,9 @@ async function sendReminders() {
   for (const round of day10Rounds) {
     await sendRoundReminders(round, 10);
     await db.run("UPDATE survey_rounds SET reminder_10_sent = true WHERE id = ?", [round.id]);
-    logger.info(`Day 10 reminders sent for round ${round.round_number} (client ${round.client_id})`);
+    logger.info(
+      `Day 10 reminders sent for round ${round.round_number} (client ${round.client_id})`
+    );
   }
 
   // Day 20 reminders (skip test rounds)
@@ -83,7 +96,9 @@ async function sendReminders() {
   for (const round of day20Rounds) {
     await sendRoundReminders(round, 20);
     await db.run("UPDATE survey_rounds SET reminder_20_sent = true WHERE id = ?", [round.id]);
-    logger.info(`Day 20 reminders sent for round ${round.round_number} (client ${round.client_id})`);
+    logger.info(
+      `Day 20 reminders sent for round ${round.round_number} (client ${round.client_id})`
+    );
   }
 }
 
@@ -122,7 +137,11 @@ async function sendRoundReminders(round, dayNumber) {
     if (!user.invitation_token) continue;
 
     try {
-      await sendReminder(user, user.invitation_token, { daysRemaining, companyName, clientId: round.client_id });
+      await sendReminder(user, user.invitation_token, {
+        daysRemaining,
+        companyName,
+        clientId: round.client_id,
+      });
     } catch (err) {
       logger.error(`Failed to send day ${dayNumber} reminder to ${user.email}: %s`, err.message);
     }
@@ -149,15 +168,25 @@ async function sendApproachingRoundReminders() {
   );
 
   for (const round of day14Rounds) {
-    const daysUntil = Math.ceil((new Date(round.scheduled_date) - new Date()) / (1000 * 60 * 60 * 24));
-    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = FALSE", [round.client_id]);
+    const daysUntil = Math.ceil(
+      (new Date(round.scheduled_date) - new Date()) / (1000 * 60 * 60 * 24)
+    );
+    const memberCount = await db.get(
+      "SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = FALSE",
+      [round.client_id]
+    );
     await notifyRoundApproaching({
-      clientId: round.client_id, roundNumber: round.round_number,
-      scheduledDate: round.scheduled_date, daysUntil,
-      memberCount: memberCount?.count || 0, db
+      clientId: round.client_id,
+      roundNumber: round.round_number,
+      scheduledDate: round.scheduled_date,
+      daysUntil,
+      memberCount: memberCount?.count || 0,
+      db,
     });
     await db.run("UPDATE survey_rounds SET admin_reminder_14_sent = true WHERE id = ?", [round.id]);
-    logger.info(`14-day approaching reminder sent for round ${round.round_number} (client ${round.client_id})`);
+    logger.info(
+      `14-day approaching reminder sent for round ${round.round_number} (client ${round.client_id})`
+    );
   }
 
   // 7-day reminder (skip test rounds)
@@ -171,15 +200,25 @@ async function sendApproachingRoundReminders() {
   );
 
   for (const round of day7Rounds) {
-    const daysUntil = Math.ceil((new Date(round.scheduled_date) - new Date()) / (1000 * 60 * 60 * 24));
-    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = FALSE", [round.client_id]);
+    const daysUntil = Math.ceil(
+      (new Date(round.scheduled_date) - new Date()) / (1000 * 60 * 60 * 24)
+    );
+    const memberCount = await db.get(
+      "SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = FALSE",
+      [round.client_id]
+    );
     await notifyRoundApproaching({
-      clientId: round.client_id, roundNumber: round.round_number,
-      scheduledDate: round.scheduled_date, daysUntil,
-      memberCount: memberCount?.count || 0, db
+      clientId: round.client_id,
+      roundNumber: round.round_number,
+      scheduledDate: round.scheduled_date,
+      daysUntil,
+      memberCount: memberCount?.count || 0,
+      db,
     });
     await db.run("UPDATE survey_rounds SET admin_reminder_7_sent = true WHERE id = ?", [round.id]);
-    logger.info(`7-day approaching reminder sent for round ${round.round_number} (client ${round.client_id})`);
+    logger.info(
+      `7-day approaching reminder sent for round ${round.round_number} (client ${round.client_id})`
+    );
   }
 
   // Day-before reminder (skip test rounds)
@@ -192,14 +231,22 @@ async function sendApproachingRoundReminders() {
   );
 
   for (const round of day1Rounds) {
-    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = FALSE", [round.client_id]);
+    const memberCount = await db.get(
+      "SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND is_test = FALSE",
+      [round.client_id]
+    );
     await notifyRoundApproaching({
-      clientId: round.client_id, roundNumber: round.round_number,
-      scheduledDate: round.scheduled_date, daysUntil: 1,
-      memberCount: memberCount?.count || 0, db
+      clientId: round.client_id,
+      roundNumber: round.round_number,
+      scheduledDate: round.scheduled_date,
+      daysUntil: 1,
+      memberCount: memberCount?.count || 0,
+      db,
     });
     await db.run("UPDATE survey_rounds SET admin_reminder_1_sent = true WHERE id = ?", [round.id]);
-    logger.info(`Day-before approaching reminder sent for round ${round.round_number} (client ${round.client_id})`);
+    logger.info(
+      `Day-before approaching reminder sent for round ${round.round_number} (client ${round.client_id})`
+    );
   }
 }
 

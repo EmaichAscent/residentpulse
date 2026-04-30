@@ -2,7 +2,11 @@ import { Router } from "express";
 import crypto from "crypto";
 import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
-import { sendInvitation, notifyRoundLaunched, notifyRoundConcluded } from "../utils/emailService.js";
+import {
+  sendInvitation,
+  notifyRoundLaunched,
+  notifyRoundConcluded,
+} from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
 import { generateRoundInsights, computeLiveWordFrequencies } from "../utils/insightGenerator.js";
 import logger from "../utils/logger.js";
@@ -10,7 +14,7 @@ import logger from "../utils/logger.js";
 const router = Router();
 router.use(requireClientAdmin);
 
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Get all survey rounds for this client
 router.get("/", async (req, res) => {
@@ -53,20 +57,24 @@ router.get("/", async (req, res) => {
         const anchorDate = lastPlanned
           ? new Date(lastPlanned.scheduled_date)
           : lastRound
-          ? new Date(lastRound.closes_at || lastRound.launched_at)
-          : null;
+            ? new Date(lastRound.closes_at || lastRound.launched_at)
+            : null;
 
         if (anchorDate) {
-          const maxRoundNum = Math.max(lastRound?.round_number || 0, lastPlanned?.round_number || 0);
+          const maxRoundNum = Math.max(
+            lastRound?.round_number || 0,
+            lastPlanned?.round_number || 0
+          );
           const currentPlanned = plannedCount?.count || 0;
           const now = new Date();
 
           for (let i = 0; i < cadence - currentPlanned; i++) {
             const nextDate = new Date(anchorDate);
             nextDate.setMonth(nextDate.getMonth() + intervalMonths * (i + 1));
-            const finalDate = nextDate <= now
-              ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i + 1))
-              : nextDate;
+            const finalDate =
+              nextDate <= now
+                ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i + 1))
+                : nextDate;
 
             await db.run(
               "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test) VALUES (?, ?, ?, 'planned', ?)",
@@ -120,7 +128,9 @@ router.post("/schedule", async (req, res) => {
       [req.clientId, req.isTestMode]
     );
     if (existing) {
-      return res.status(400).json({ error: "Survey rounds already scheduled. Use recalculate to adjust." });
+      return res
+        .status(400)
+        .json({ error: "Survey rounds already scheduled. Use recalculate to adjust." });
     }
 
     // Get cadence from subscription
@@ -139,7 +149,7 @@ router.post("/schedule", async (req, res) => {
     const rounds = [];
     for (let i = 0; i < cadence; i++) {
       const roundDate = new Date(parsedDate);
-      roundDate.setMonth(roundDate.getMonth() + (i * monthsBetween));
+      roundDate.setMonth(roundDate.getMonth() + i * monthsBetween);
 
       await db.run(
         "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, is_test) VALUES (?, ?, ?, ?)",
@@ -158,7 +168,10 @@ router.post("/schedule", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "Error scheduling rounds");
     if (err.message?.includes("unique constraint")) {
-      return res.status(400).json({ error: "Survey rounds already exist for this account. Please contact support if you need to reschedule." });
+      return res.status(400).json({
+        error:
+          "Survey rounds already exist for this account. Please contact support if you need to reschedule.",
+      });
     }
     res.status(500).json({ error: err.message });
   }
@@ -186,16 +199,19 @@ router.get("/trends", async (req, res) => {
     const isPaidTier = planResult && planResult.plan_name !== "free";
 
     // Batch-load ALL sessions for all rounds in one query
-    const roundIds = rounds.map(r => r.id);
-    const allSessions = roundIds.length > 0 ? await db.all(
-      `SELECT s.round_id, s.nps_score, s.community_id, COALESCE(sc.community_name, s.community_name) as community_name,
+    const roundIds = rounds.map((r) => r.id);
+    const allSessions =
+      roundIds.length > 0
+        ? await db.all(
+            `SELECT s.round_id, s.nps_score, s.community_id, COALESCE(sc.community_name, s.community_name) as community_name,
               COALESCE(loc.name, s.management_company) as location_name, s.completed
        FROM sessions s
        LEFT JOIN communities sc ON sc.id = s.community_id
        LEFT JOIN locations loc ON loc.id = sc.location_id
        WHERE s.round_id = ANY($1) AND s.client_id = $2 AND s.is_mock IS NOT TRUE AND s.is_test = $3`,
-      [roundIds, req.clientId, req.isTestMode]
-    ) : [];
+            [roundIds, req.clientId, req.isTestMode]
+          )
+        : [];
 
     // Group sessions by round_id for efficient lookup
     const sessionsByRound = {};
@@ -207,7 +223,7 @@ router.get("/trends", async (req, res) => {
     // Batch-load community snapshots/data for concluded rounds
     let communityDataByRound = {};
     {
-      const concludedIds = rounds.filter(r => r.status === "concluded").map(r => r.id);
+      const concludedIds = rounds.filter((r) => r.status === "concluded").map((r) => r.id);
       if (concludedIds.length > 0) {
         const snapshots = await db.all(
           `SELECT round_id, community_id as id, community_name, contract_value, community_manager_name, number_of_units
@@ -240,9 +256,10 @@ router.get("/trends", async (req, res) => {
       const npsScores = completed.filter((s) => s.nps_score != null).map((s) => s.nps_score);
       const promoters = npsScores.filter((n) => n >= 9).length;
       const detractors = npsScores.filter((n) => n <= 6).length;
-      const npsScore = npsScores.length > 0
-        ? Math.round(((promoters - detractors) / npsScores.length) * 100)
-        : null;
+      const npsScore =
+        npsScores.length > 0
+          ? Math.round(((promoters - detractors) / npsScores.length) * 100)
+          : null;
 
       // Community cohort: group by community, take median NPS, classify
       const communities = {};
@@ -281,8 +298,8 @@ router.get("/trends", async (req, res) => {
         locationPerformance = Object.entries(locationScores)
           .filter(([_, scores]) => scores.length > 0)
           .map(([location, scores]) => {
-            const p = scores.filter(n => n >= 9).length;
-            const d = scores.filter(n => n <= 6).length;
+            const p = scores.filter((n) => n >= 9).length;
+            const d = scores.filter((n) => n <= 6).length;
             const nps = Math.round(((p - d) / scores.length) * 100);
             return { location, nps, respondents: scores.length };
           })
@@ -299,8 +316,11 @@ router.get("/trends", async (req, res) => {
         }
 
         // Revenue at Risk: sum contract_value for detractor communities
-        const totalPortfolioValue = communityData.reduce((sum, c) => sum + (Number(c.contract_value) || 0), 0);
-        const atRiskCommunities = communityDetails.filter(c => c.cohort === "detractor");
+        const totalPortfolioValue = communityData.reduce(
+          (sum, c) => sum + (Number(c.contract_value) || 0),
+          0
+        );
+        const atRiskCommunities = communityDetails.filter((c) => c.cohort === "detractor");
         const atRiskValue = atRiskCommunities.reduce((sum, c) => {
           const meta = communityLookup[c.name.trim().toLowerCase()];
           return sum + (meta ? Number(meta.contract_value) || 0 : 0);
@@ -309,7 +329,8 @@ router.get("/trends", async (req, res) => {
         revenueAtRisk = {
           total_portfolio_value: totalPortfolioValue,
           at_risk_value: atRiskValue,
-          percent_at_risk: totalPortfolioValue > 0 ? Math.round((atRiskValue / totalPortfolioValue) * 100) : 0,
+          percent_at_risk:
+            totalPortfolioValue > 0 ? Math.round((atRiskValue / totalPortfolioValue) * 100) : 0,
         };
 
         // Manager Performance: group session NPS by manager
@@ -336,15 +357,22 @@ router.get("/trends", async (req, res) => {
         managerPerformance = Object.entries(managerScores)
           .filter(([_, data]) => data.scores.length > 0)
           .map(([manager, data]) => {
-            const p = data.scores.filter(n => n >= 9).length;
-            const d = data.scores.filter(n => n <= 6).length;
+            const p = data.scores.filter((n) => n >= 9).length;
+            const d = data.scores.filter((n) => n <= 6).length;
             const nps = Math.round(((p - d) / data.scores.length) * 100);
-            return { manager, communities: data.communities.length, nps, respondents: data.scores.length };
+            return {
+              manager,
+              communities: data.communities.length,
+              nps,
+              respondents: data.scores.length,
+            };
           })
           .sort((a, b) => b.nps - a.nps);
 
         // Size cohorts for trends
-        const withUnits = communityData.filter(c => c.number_of_units).sort((a, b) => a.number_of_units - b.number_of_units);
+        const withUnits = communityData
+          .filter((c) => c.number_of_units)
+          .sort((a, b) => a.number_of_units - b.number_of_units);
         if (withUnits.length >= 4) {
           const cohortCount = withUnits.length >= 10 ? 5 : 4;
           const perCohort = Math.ceil(withUnits.length / cohortCount);
@@ -355,14 +383,21 @@ router.get("/trends", async (req, res) => {
             if (slice.length === 0) continue;
             const minU = slice[0].number_of_units;
             const maxU = slice[slice.length - 1].number_of_units;
-            const allScores = slice.flatMap(c => {
+            const allScores = slice.flatMap((c) => {
               const key = c.community_name.trim().toLowerCase();
-              return (communityScores[key] || []);
+              return communityScores[key] || [];
             });
-            const p = allScores.filter(n => n >= 9).length;
-            const d = allScores.filter(n => n <= 6).length;
-            const nps = allScores.length > 0 ? Math.round(((p - d) / allScores.length) * 100) : null;
-            sizePerformance.push({ name: labels[si], range: `${minU}-${maxU}`, nps, respondents: allScores.length, communities: slice.length });
+            const p = allScores.filter((n) => n >= 9).length;
+            const d = allScores.filter((n) => n <= 6).length;
+            const nps =
+              allScores.length > 0 ? Math.round(((p - d) / allScores.length) * 100) : null;
+            sizePerformance.push({
+              name: labels[si],
+              range: `${minU}-${maxU}`,
+              nps,
+              respondents: allScores.length,
+              communities: slice.length,
+            });
           }
         }
       }
@@ -376,9 +411,10 @@ router.get("/trends", async (req, res) => {
         nps_score: npsScore,
         response_count: completed.length,
         invited_count: round.members_invited || 0,
-        response_rate: round.members_invited > 0
-          ? Math.round((completed.length / round.members_invited) * 100)
-          : 0,
+        response_rate:
+          round.members_invited > 0
+            ? Math.round((completed.length / round.members_invited) * 100)
+            : 0,
         community_cohorts: cohorts,
         community_details: communityDetails,
         word_frequencies: round.word_frequencies || null,
@@ -415,7 +451,8 @@ router.get("/:id/dashboard", async (req, res) => {
 
     // Check if snapshots exist for this round (concluded rounds with post-migration data)
     const hasSnapshots = await db.get(
-      "SELECT 1 FROM round_community_snapshots WHERE round_id = ? LIMIT 1", [roundId]
+      "SELECT 1 FROM round_community_snapshots WHERE round_id = ? LIMIT 1",
+      [roundId]
     );
     const useSnapshots = !!(hasSnapshots && round.status === "concluded");
 
@@ -429,24 +466,29 @@ router.get("/:id/dashboard", async (req, res) => {
     }
     if (filterManager) {
       if (useSnapshots) {
-        sessionFilterSQL += " AND s.community_id IN (SELECT community_id FROM round_community_snapshots WHERE community_manager_name = ? AND round_id = ?)";
+        sessionFilterSQL +=
+          " AND s.community_id IN (SELECT community_id FROM round_community_snapshots WHERE community_manager_name = ? AND round_id = ?)";
         sessionParams.push(filterManager, roundId);
       } else {
-        sessionFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
+        sessionFilterSQL +=
+          " AND s.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
         sessionParams.push(filterManager, req.clientId);
       }
     }
     if (filterPropertyType) {
       if (useSnapshots) {
-        sessionFilterSQL += " AND s.community_id IN (SELECT community_id FROM round_community_snapshots WHERE property_type = ? AND round_id = ?)";
+        sessionFilterSQL +=
+          " AND s.community_id IN (SELECT community_id FROM round_community_snapshots WHERE property_type = ? AND round_id = ?)";
         sessionParams.push(filterPropertyType, roundId);
       } else {
-        sessionFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
+        sessionFilterSQL +=
+          " AND s.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
         sessionParams.push(filterPropertyType, req.clientId);
       }
     }
     if (filterLocation) {
-      sessionFilterSQL += " AND s.community_id IN (SELECT c.id FROM communities c JOIN locations l ON l.id = c.location_id WHERE l.name = ? AND c.client_id = ?)";
+      sessionFilterSQL +=
+        " AND s.community_id IN (SELECT c.id FROM communities c JOIN locations l ON l.id = c.location_id WHERE l.name = ? AND c.client_id = ?)";
       sessionParams.push(filterLocation, req.clientId);
     }
 
@@ -474,19 +516,23 @@ router.get("/:id/dashboard", async (req, res) => {
     }
     if (filterManager) {
       if (useSnapshots) {
-        invitedFilterSQL += " AND u.community_id IN (SELECT community_id FROM round_community_snapshots WHERE community_manager_name = ? AND round_id = ?)";
+        invitedFilterSQL +=
+          " AND u.community_id IN (SELECT community_id FROM round_community_snapshots WHERE community_manager_name = ? AND round_id = ?)";
         invitedParams.push(filterManager, roundId);
       } else {
-        invitedFilterSQL += " AND u.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
+        invitedFilterSQL +=
+          " AND u.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
         invitedParams.push(filterManager, req.clientId);
       }
     }
     if (filterPropertyType) {
       if (useSnapshots) {
-        invitedFilterSQL += " AND u.community_id IN (SELECT community_id FROM round_community_snapshots WHERE property_type = ? AND round_id = ?)";
+        invitedFilterSQL +=
+          " AND u.community_id IN (SELECT community_id FROM round_community_snapshots WHERE property_type = ? AND round_id = ?)";
         invitedParams.push(filterPropertyType, roundId);
       } else {
-        invitedFilterSQL += " AND u.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
+        invitedFilterSQL +=
+          " AND u.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
         invitedParams.push(filterPropertyType, req.clientId);
       }
     }
@@ -502,9 +548,7 @@ router.get("/:id/dashboard", async (req, res) => {
     );
 
     // Non-responders: invited but no completed session
-    const completedUserIds = new Set(
-      sessions.filter((s) => s.completed).map((s) => s.email)
-    );
+    const completedUserIds = new Set(sessions.filter((s) => s.completed).map((s) => s.email));
     const nonResponders = invitedUsers.filter((u) => !completedUserIds.has(u.email));
 
     // NPS calculations
@@ -513,9 +557,8 @@ router.get("/:id/dashboard", async (req, res) => {
     const promoters = npsScores.filter((n) => n >= 9).length;
     const passives = npsScores.filter((n) => n >= 7 && n <= 8).length;
     const detractors = npsScores.filter((n) => n <= 6).length;
-    const npsScore = npsScores.length > 0
-      ? Math.round(((promoters - detractors) / npsScores.length) * 100)
-      : null;
+    const npsScore =
+      npsScores.length > 0 ? Math.round(((promoters - detractors) / npsScores.length) * 100) : null;
 
     // Community cohorts
     const communities = {};
@@ -574,7 +617,7 @@ router.get("/:id/dashboard", async (req, res) => {
       }
 
       // Enrich cohorts with business data
-      const enrichedCohorts = communityCohorts.map(cohort => {
+      const enrichedCohorts = communityCohorts.map((cohort) => {
         const meta = communityLookup[cohort.name.trim().toLowerCase()];
         return {
           ...cohort,
@@ -586,10 +629,19 @@ router.get("/:id/dashboard", async (req, res) => {
       });
 
       // Revenue at Risk — use only communities present in filtered results
-      const filteredCommunityNames = new Set(enrichedCohorts.map(c => c.name.trim().toLowerCase()));
-      const filteredCommunityData = communityData.filter(c => filteredCommunityNames.has(c.community_name.trim().toLowerCase()));
-      const totalPortfolioValue = filteredCommunityData.reduce((sum, c) => sum + (Number(c.contract_value) || 0), 0);
-      const atRiskCommunities = enrichedCohorts.filter(c => c.cohort === "detractor" && c.contract_value);
+      const filteredCommunityNames = new Set(
+        enrichedCohorts.map((c) => c.name.trim().toLowerCase())
+      );
+      const filteredCommunityData = communityData.filter((c) =>
+        filteredCommunityNames.has(c.community_name.trim().toLowerCase())
+      );
+      const totalPortfolioValue = filteredCommunityData.reduce(
+        (sum, c) => sum + (Number(c.contract_value) || 0),
+        0
+      );
+      const atRiskCommunities = enrichedCohorts.filter(
+        (c) => c.cohort === "detractor" && c.contract_value
+      );
       const revenueAtRisk = atRiskCommunities.reduce((sum, c) => sum + c.contract_value, 0);
 
       // Manager Performance: group scores by manager
@@ -607,10 +659,15 @@ router.get("/:id/dashboard", async (req, res) => {
       const managerPerformance = Object.entries(managerScores)
         .filter(([_, data]) => data.scores.length > 0)
         .map(([manager, data]) => {
-          const p = data.scores.filter(n => n >= 9).length;
-          const d = data.scores.filter(n => n <= 6).length;
+          const p = data.scores.filter((n) => n >= 9).length;
+          const d = data.scores.filter((n) => n <= 6).length;
           const nps = Math.round(((p - d) / data.scores.length) * 100);
-          return { manager, communities: data.communities.length, nps, respondents: data.scores.length };
+          return {
+            manager,
+            communities: data.communities.length,
+            nps,
+            respondents: data.scores.length,
+          };
         })
         .sort((a, b) => b.nps - a.nps);
 
@@ -620,7 +677,8 @@ router.get("/:id/dashboard", async (req, res) => {
         if (!c.property_type) continue;
         const key = c.community_name.trim().toLowerCase();
         const scores = communityScores[key] || [];
-        if (!typeScores[c.property_type]) typeScores[c.property_type] = { communities: 0, scores: [] };
+        if (!typeScores[c.property_type])
+          typeScores[c.property_type] = { communities: 0, scores: [] };
         if (scores.length > 0) {
           typeScores[c.property_type].communities++;
           typeScores[c.property_type].scores.push(...scores);
@@ -630,15 +688,22 @@ router.get("/:id/dashboard", async (req, res) => {
       const propertyTypeAnalysis = Object.entries(typeScores)
         .filter(([_, data]) => data.scores.length > 0)
         .map(([type, data]) => {
-          const p = data.scores.filter(n => n >= 9).length;
-          const d = data.scores.filter(n => n <= 6).length;
+          const p = data.scores.filter((n) => n >= 9).length;
+          const d = data.scores.filter((n) => n <= 6).length;
           const nps = Math.round(((p - d) / data.scores.length) * 100);
-          return { property_type: type, communities: data.communities, nps, respondents: data.scores.length };
+          return {
+            property_type: type,
+            communities: data.communities,
+            nps,
+            respondents: data.scores.length,
+          };
         })
         .sort((a, b) => b.nps - a.nps);
 
       // Size-Based Trends — group into 4-5 cohorts by unit count
-      const withUnits = enrichedCohorts.filter(c => c.number_of_units).sort((a, b) => a.number_of_units - b.number_of_units);
+      const withUnits = enrichedCohorts
+        .filter((c) => c.number_of_units)
+        .sort((a, b) => a.number_of_units - b.number_of_units);
       let sizeTrends = [];
       if (withUnits.length >= 4) {
         const cohortCount = withUnits.length >= 10 ? 5 : 4;
@@ -648,12 +713,12 @@ router.get("/:id/dashboard", async (req, res) => {
           if (slice.length === 0) continue;
           const minUnits = slice[0].number_of_units;
           const maxUnits = slice[slice.length - 1].number_of_units;
-          const allScores = slice.flatMap(c => {
+          const allScores = slice.flatMap((c) => {
             const key = c.name.trim().toLowerCase();
-            return (communityScores[key] || []);
+            return communityScores[key] || [];
           });
-          const p = allScores.filter(n => n >= 9).length;
-          const d = allScores.filter(n => n <= 6).length;
+          const p = allScores.filter((n) => n >= 9).length;
+          const d = allScores.filter((n) => n <= 6).length;
           const nps = allScores.length > 0 ? Math.round(((p - d) / allScores.length) * 100) : null;
           const labels = ["Small", "Medium", "Large", "Very Large", "Extra Large"];
           sizeTrends.push({
@@ -666,7 +731,13 @@ router.get("/:id/dashboard", async (req, res) => {
         }
       } else {
         // Too few communities for cohorts — show individually
-        sizeTrends = withUnits.map(c => ({ name: c.name, units: c.number_of_units, median: c.median, cohort: c.cohort, respondents: c.respondents }));
+        sizeTrends = withUnits.map((c) => ({
+          name: c.name,
+          units: c.number_of_units,
+          median: c.median,
+          cohort: c.cohort,
+          respondents: c.respondents,
+        }));
       }
 
       // Location Performance: group scores by management_company (displayed as "Location")
@@ -681,8 +752,8 @@ router.get("/:id/dashboard", async (req, res) => {
       const locationPerformance = Object.entries(locationScores)
         .filter(([_, scores]) => scores.length > 0)
         .map(([location, scores]) => {
-          const p = scores.filter(n => n >= 9).length;
-          const d = scores.filter(n => n <= 6).length;
+          const p = scores.filter((n) => n >= 9).length;
+          const d = scores.filter((n) => n <= 6).length;
           const nps = Math.round(((p - d) / scores.length) * 100);
           return { location, nps, respondents: scores.length };
         })
@@ -692,11 +763,19 @@ router.get("/:id/dashboard", async (req, res) => {
         revenue_at_risk: {
           total_portfolio_value: totalPortfolioValue,
           at_risk_value: revenueAtRisk,
-          percent_at_risk: totalPortfolioValue > 0 ? Math.round((revenueAtRisk / totalPortfolioValue) * 100) : 0,
+          percent_at_risk:
+            totalPortfolioValue > 0 ? Math.round((revenueAtRisk / totalPortfolioValue) * 100) : 0,
           at_risk_communities: atRiskCommunities
-            .sort((a, b) => a.median - b.median || (Number(b.contract_value) || 0) - (Number(a.contract_value) || 0))
-            .map(c => ({
-              name: c.name, contract_value: c.contract_value, median: c.median, respondents: c.respondents,
+            .sort(
+              (a, b) =>
+                a.median - b.median ||
+                (Number(b.contract_value) || 0) - (Number(a.contract_value) || 0)
+            )
+            .map((c) => ({
+              name: c.name,
+              contract_value: c.contract_value,
+              median: c.median,
+              respondents: c.respondents,
             })),
         },
         manager_performance: managerPerformance,
@@ -718,17 +797,21 @@ router.get("/:id/dashboard", async (req, res) => {
             "SELECT id, community_name, community_manager_name, property_type FROM communities WHERE client_id = ? AND status = 'active' ORDER BY community_name",
             [req.clientId]
           );
-      const managers = [...new Set(allCommunities.map(c => c.community_manager_name).filter(Boolean))].sort();
-      const propertyTypes = [...new Set(allCommunities.map(c => c.property_type).filter(Boolean))].sort();
+      const managers = [
+        ...new Set(allCommunities.map((c) => c.community_manager_name).filter(Boolean)),
+      ].sort();
+      const propertyTypes = [
+        ...new Set(allCommunities.map((c) => c.property_type).filter(Boolean)),
+      ].sort();
       const locationsList = await db.all(
         "SELECT DISTINCT l.name FROM locations l JOIN communities c ON c.location_id = l.id WHERE c.client_id = ? AND c.status = 'active' ORDER BY l.name",
         [req.clientId]
       );
       filterOptions = {
-        communities: allCommunities.map(c => ({ id: c.id, name: c.community_name })),
+        communities: allCommunities.map((c) => ({ id: c.id, name: c.community_name })),
         managers,
         property_types: propertyTypes,
-        locations: locationsList.map(l => l.name),
+        locations: locationsList.map((l) => l.name),
       };
     }
 
@@ -740,15 +823,18 @@ router.get("/:id/dashboard", async (req, res) => {
       alertParams.push(filterCommunityId);
     }
     if (filterManager) {
-      alertFilterSQL += " AND u.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
+      alertFilterSQL +=
+        " AND u.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
       alertParams.push(filterManager, req.clientId);
     }
     if (filterPropertyType) {
-      alertFilterSQL += " AND u.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
+      alertFilterSQL +=
+        " AND u.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
       alertParams.push(filterPropertyType, req.clientId);
     }
     if (filterLocation) {
-      alertFilterSQL += " AND u.community_id IN (SELECT cm.id FROM communities cm JOIN locations l ON l.id = cm.location_id WHERE l.name = ? AND cm.client_id = ?)";
+      alertFilterSQL +=
+        " AND u.community_id IN (SELECT cm.id FROM communities cm JOIN locations l ON l.id = cm.location_id WHERE l.name = ? AND cm.client_id = ?)";
       alertParams.push(filterLocation, req.clientId);
     }
     const alerts = await db.all(
@@ -777,19 +863,23 @@ router.get("/:id/dashboard", async (req, res) => {
       }
       if (filterManager) {
         if (useSnapshots) {
-          wfFilterSQL += " AND s.community_id IN (SELECT community_id FROM round_community_snapshots WHERE community_manager_name = ? AND round_id = ?)";
+          wfFilterSQL +=
+            " AND s.community_id IN (SELECT community_id FROM round_community_snapshots WHERE community_manager_name = ? AND round_id = ?)";
           wfParams.push(filterManager, roundId);
         } else {
-          wfFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
+          wfFilterSQL +=
+            " AND s.community_id IN (SELECT id FROM communities WHERE community_manager_name = ? AND client_id = ?)";
           wfParams.push(filterManager, req.clientId);
         }
       }
       if (filterPropertyType) {
         if (useSnapshots) {
-          wfFilterSQL += " AND s.community_id IN (SELECT community_id FROM round_community_snapshots WHERE property_type = ? AND round_id = ?)";
+          wfFilterSQL +=
+            " AND s.community_id IN (SELECT community_id FROM round_community_snapshots WHERE property_type = ? AND round_id = ?)";
           wfParams.push(filterPropertyType, roundId);
         } else {
-          wfFilterSQL += " AND s.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
+          wfFilterSQL +=
+            " AND s.community_id IN (SELECT id FROM communities WHERE property_type = ? AND client_id = ?)";
           wfParams.push(filterPropertyType, req.clientId);
         }
       }
@@ -813,10 +903,10 @@ router.get("/:id/dashboard", async (req, res) => {
     );
     const delivery = { sent: 0, delivered: 0, bounced: 0, complained: 0 };
     for (const row of deliveryStats) {
-      if (row.email_status === 'sent') delivery.sent += row.count;
-      else if (row.email_status === 'delivered') delivery.delivered += row.count;
-      else if (row.email_status === 'bounced') delivery.bounced += row.count;
-      else if (row.email_status === 'complained') delivery.complained += row.count;
+      if (row.email_status === "sent") delivery.sent += row.count;
+      else if (row.email_status === "delivered") delivery.delivered += row.count;
+      else if (row.email_status === "bounced") delivery.bounced += row.count;
+      else if (row.email_status === "complained") delivery.complained += row.count;
     }
     delivery.total = delivery.sent + delivery.delivered + delivery.bounced + delivery.complained;
 
@@ -851,9 +941,10 @@ router.get("/:id/dashboard", async (req, res) => {
       response_rate: {
         completed: completedSessions.length,
         invited: invitedUsers.length,
-        percentage: invitedUsers.length > 0
-          ? Math.round((completedSessions.length / invitedUsers.length) * 100)
-          : 0,
+        percentage:
+          invitedUsers.length > 0
+            ? Math.round((completedSessions.length / invitedUsers.length) * 100)
+            : 0,
       },
       sessions,
       non_responders: nonResponders,
@@ -897,18 +988,26 @@ router.get("/:id/export", async (req, res) => {
     );
 
     const header = "first_name,last_name,email,community_name,nps_score,completed,summary,date";
-    const rows = sessions.map(s =>
+    const rows = sessions.map((s) =>
       [
-        s.first_name || "", s.last_name || "", s.email || "",
-        s.community_name || "", s.nps_score ?? "", s.completed ? "Yes" : "No",
-        s.summary || "", s.created_at ? new Date(s.created_at).toLocaleDateString("en-US") : "",
+        s.first_name || "",
+        s.last_name || "",
+        s.email || "",
+        s.community_name || "",
+        s.nps_score ?? "",
+        s.completed ? "Yes" : "No",
+        s.summary || "",
+        s.created_at ? new Date(s.created_at).toLocaleDateString("en-US") : "",
       ]
-        .map(v => `"${String(v).replace(/"/g, '""')}"`)
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
         .join(",")
     );
 
     res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", `attachment; filename=round-${round.round_number}-results.csv`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=round-${round.round_number}-results.csv`
+    );
     res.send([header, ...rows].join("\n"));
   } catch (err) {
     logger.error({ err }, "Error exporting round results");
@@ -992,7 +1091,7 @@ router.post("/:id/close", async (req, res) => {
       entityType: "survey_round",
       entityId: roundId,
       clientId: req.clientId,
-      metadata: { round_number: round.round_number }
+      metadata: { round_number: round.round_number },
     });
 
     // Generate insights asynchronously
@@ -1006,9 +1105,14 @@ router.post("/:id/close", async (req, res) => {
       [roundId, req.clientId, req.isTestMode]
     );
     notifyRoundConcluded({
-      clientId: req.clientId, roundNumber: round.round_number,
-      totalResponses: completedCount?.count || 0, totalInvited: round.members_invited || 0, db
-    }).catch(err => logger.error("Failed to send round conclusion notifications: %s", err.message));
+      clientId: req.clientId,
+      roundNumber: round.round_number,
+      totalResponses: completedCount?.count || 0,
+      totalInvited: round.members_invited || 0,
+      db,
+    }).catch((err) =>
+      logger.error("Failed to send round conclusion notifications: %s", err.message)
+    );
 
     res.json({ ok: true, message: "Round closed. AI insights are being generated." });
   } catch (err) {
@@ -1046,13 +1150,27 @@ router.post("/:id/regenerate-insights", async (req, res) => {
 
     res.json({ ok: true, insights });
   } catch (err) {
-    logger.error({ err: { message: err.message, stack: err.stack, status: err.status } }, "Error regenerating insights");
+    logger.error(
+      { err: { message: err.message, stack: err.stack, status: err.status } },
+      "Error regenerating insights"
+    );
     res.status(500).json({ error: err.message });
   }
 });
 
 // Background email sending for round launch
-async function processEmailJob(jobId, roundId, members, closesAt, clientId, userId, userEmail, roundNumber, companyName, isTestMode) {
+async function processEmailJob(
+  jobId,
+  roundId,
+  members,
+  closesAt,
+  clientId,
+  userId,
+  userEmail,
+  roundNumber,
+  companyName,
+  isTestMode
+) {
   let sentCount = 0;
   let failedCount = 0;
 
@@ -1132,22 +1250,26 @@ async function processEmailJob(jobId, roundId, members, closesAt, clientId, user
       entityType: "survey_round",
       entityId: roundId,
       clientId,
-      metadata: { sent: sentCount, failed: failedCount, round_number: roundNumber }
+      metadata: { sent: sentCount, failed: failedCount, round_number: roundNumber },
     });
 
     // Brief delay after invitation emails before sending admin notifications
     await sleep(1000);
     notifyRoundLaunched({
-      clientId, roundNumber,
-      membersInvited: sentCount, closesAt: closesAt.toISOString(), db
-    }).catch(err => logger.error("Failed to send round launch notifications: %s", err.message));
-
+      clientId,
+      roundNumber,
+      membersInvited: sentCount,
+      closesAt: closesAt.toISOString(),
+      db,
+    }).catch((err) => logger.error("Failed to send round launch notifications: %s", err.message));
   } catch (err) {
     logger.error({ err }, "Email job fatal error");
-    await db.run(
-      "UPDATE email_jobs SET status = 'failed', sent_count = ?, failed_count = ?, error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
-      [sentCount, failedCount, err.message, jobId, isTestMode]
-    ).catch(() => {});
+    await db
+      .run(
+        "UPDATE email_jobs SET status = 'failed', sent_count = ?, failed_count = ?, error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+        [sentCount, failedCount, err.message, jobId, isTestMode]
+      )
+      .catch(() => {});
   }
 }
 
@@ -1177,7 +1299,10 @@ router.post("/:id/launch", async (req, res) => {
     );
 
     if (activeRound) {
-      return res.status(400).json({ error: "Another survey round is already in progress. Wait for it to conclude before launching a new one." });
+      return res.status(400).json({
+        error:
+          "Another survey round is already in progress. Wait for it to conclude before launching a new one.",
+      });
     }
 
     // Get client company name for emails
@@ -1197,7 +1322,9 @@ router.post("/:id/launch", async (req, res) => {
     );
 
     if (members.length === 0) {
-      return res.status(400).json({ error: "No active board members found. Add board members before launching a survey round." });
+      return res.status(400).json({
+        error: "No active board members found. Add board members before launching a survey round.",
+      });
     }
 
     // Check member limit
@@ -1209,7 +1336,7 @@ router.post("/:id/launch", async (req, res) => {
     );
     if (sub?.member_limit && members.length > sub.member_limit) {
       return res.status(400).json({
-        error: `You have ${members.length} board members but your plan supports ${sub.member_limit}. Remove board members or upgrade your plan before launching.`
+        error: `You have ${members.length} board members but your plan supports ${sub.member_limit}. Remove board members or upgrade your plan before launching.`,
       });
     }
 
@@ -1265,13 +1392,22 @@ router.post("/:id/launch", async (req, res) => {
       ok: true,
       job_id: jobId,
       total: members.length,
-      closes_at: closesAt.toISOString()
+      closes_at: closesAt.toISOString(),
     });
 
     // Fire-and-forget background processing
-    processEmailJob(jobId, roundId, members, closesAt, req.clientId, req.userId, req.userEmail, round.round_number, companyName, req.isTestMode)
-      .catch(err => logger.error({ err }, "Email job failed"));
-
+    processEmailJob(
+      jobId,
+      roundId,
+      members,
+      closesAt,
+      req.clientId,
+      req.userId,
+      req.userEmail,
+      round.round_number,
+      companyName,
+      req.isTestMode
+    ).catch((err) => logger.error({ err }, "Email job failed"));
   } catch (err) {
     logger.error({ err }, "Error launching round");
     res.status(500).json({ error: err.message });
@@ -1343,10 +1479,9 @@ router.post("/recalculate", async (req, res) => {
     // Always create `cadence` planned rounds into the future
     for (let i = 0; i < cadence; i++) {
       const roundDate = new Date(baseDate);
-      roundDate.setMonth(roundDate.getMonth() + ((i + 1) * monthsBetween));
-      const finalDate = roundDate <= now
-        ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i + 1))
-        : roundDate;
+      roundDate.setMonth(roundDate.getMonth() + (i + 1) * monthsBetween);
+      const finalDate =
+        roundDate <= now ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i + 1)) : roundDate;
 
       await db.run(
         "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test) VALUES (?, ?, ?, 'planned', ?)",

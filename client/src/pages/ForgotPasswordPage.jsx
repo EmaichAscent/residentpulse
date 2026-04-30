@@ -17,7 +17,7 @@ export default function ForgotPasswordPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
-        credentials: "include"
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -53,7 +53,8 @@ export default function ForgotPasswordPage() {
             <div>
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
                 <p className="text-sm text-green-700">
-                  If an account exists with that email, you'll receive a password reset link shortly. Check your inbox.
+                  If an account exists with that email, you'll receive a password reset link
+                  shortly. Check your inbox.
                 </p>
               </div>
               <Link
@@ -92,11 +93,7 @@ export default function ForgotPasswordPage() {
                 </div>
               )}
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full btn-primary"
-              >
+              <button type="submit" disabled={loading} className="w-full btn-primary">
                 {loading ? "Sending..." : "Send Reset Link"}
               </button>
 

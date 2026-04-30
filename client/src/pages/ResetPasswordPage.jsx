@@ -61,7 +61,7 @@ export default function ResetPasswordPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, password }),
-        credentials: "include"
+        credentials: "include",
       });
 
       const data = await response.json();
@@ -79,8 +79,7 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4"
->
+    <div className="min-h-screen flex flex-col items-center justify-center px-4">
       <div className="max-w-md w-full">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -98,14 +97,9 @@ export default function ResetPasswordPage() {
           {success ? (
             <div>
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                <p className="text-sm text-green-700">
-                  Your password has been reset successfully.
-                </p>
+                <p className="text-sm text-green-700">Your password has been reset successfully.</p>
               </div>
-              <Link
-                to="/admin/login"
-                className="block text-center w-full btn-primary"
-              >
+              <Link to="/admin/login" className="block text-center w-full btn-primary">
                 Go to Login
               </Link>
             </div>
@@ -130,7 +124,10 @@ export default function ResetPasswordPage() {
               </div>
 
               <div className="mb-6">
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="confirmPassword"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Confirm Password
                 </label>
                 <input
@@ -160,11 +157,7 @@ export default function ResetPasswordPage() {
                 </div>
               )}
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full btn-primary"
-              >
+              <button type="submit" disabled={loading} className="w-full btn-primary">
                 {loading ? "Resetting..." : "Reset Password"}
               </button>
             </form>

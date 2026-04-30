@@ -19,7 +19,7 @@ export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, first_name: firstName, last_name: lastName }),
-        credentials: "include"
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -58,11 +58,14 @@ export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
             <div className="p-4 bg-green-50 border border-green-200 rounded-md">
               <p className="text-sm text-green-800 font-medium mb-2">Admin user created!</p>
               <p className="text-sm text-green-700">
-                Login credentials have been sent to <strong>{success.email}</strong>. They can use the temporary password in the email to log in.
+                Login credentials have been sent to <strong>{success.email}</strong>. They can use
+                the temporary password in the email to log in.
               </p>
             </div>
 
-            <p className="text-xs text-gray-500">This dialog will close automatically in 5 seconds...</p>
+            <p className="text-xs text-gray-500">
+              This dialog will close automatically in 5 seconds...
+            </p>
 
             <button
               onClick={() => {
@@ -81,9 +84,7 @@ export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  First Name
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
                 <input
                   type="text"
                   value={firstName}
@@ -94,9 +95,7 @@ export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Last Name
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
                 <input
                   type="text"
                   value={lastName}
@@ -139,11 +138,7 @@ export default function AddAdminUserModal({ isOpen, onClose, onAdd }) {
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                className="flex-1 btn-primary"
-                disabled={loading}
-              >
+              <button type="submit" className="flex-1 btn-primary" disabled={loading}>
                 {loading ? "Adding..." : "Add Admin User"}
               </button>
             </div>

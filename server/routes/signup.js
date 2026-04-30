@@ -15,7 +15,7 @@ const router = Router();
 const signupLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 3, // 3 attempts per window
-  message: { error: "Too many signup attempts, please try again later" }
+  message: { error: "Too many signup attempts, please try again later" },
 });
 
 // Get available subscription plans
@@ -34,12 +34,32 @@ router.get("/plans", async (req, res) => {
 // Register a new client
 router.post("/register", signupLimiter, async (req, res) => {
   const {
-    company_name, address_line1, address_line2, city, state, zip,
-    phone_number, admin_first_name, admin_last_name, admin_email, password, plan_id
+    company_name,
+    address_line1,
+    address_line2,
+    city,
+    state,
+    zip,
+    phone_number,
+    admin_first_name,
+    admin_last_name,
+    admin_email,
+    password,
+    plan_id,
   } = req.body;
 
   // Validate required fields
-  if (!company_name || !address_line1 || !city || !state || !zip || !phone_number || !admin_email || !password || !plan_id) {
+  if (
+    !company_name ||
+    !address_line1 ||
+    !city ||
+    !state ||
+    !zip ||
+    !phone_number ||
+    !admin_email ||
+    !password ||
+    !plan_id
+  ) {
     return res.status(400).json({ error: "All fields are required" });
   }
 
@@ -60,7 +80,10 @@ router.post("/register", signupLimiter, async (req, res) => {
     }
 
     // Verify plan exists and is public
-    const plan = await db.get("SELECT id, name, price_cents, zoho_plan_code FROM subscription_plans WHERE id = ? AND is_public = TRUE", [plan_id]);
+    const plan = await db.get(
+      "SELECT id, name, price_cents, zoho_plan_code FROM subscription_plans WHERE id = ? AND is_public = TRUE",
+      [plan_id]
+    );
     if (!plan) {
       return res.status(400).json({ error: "Invalid subscription plan" });
     }
@@ -71,7 +94,17 @@ router.post("/register", signupLimiter, async (req, res) => {
     const clientCode = await generateClientCode();
     const clientResult = await db.run(
       "INSERT INTO clients (company_name, address_line1, address_line2, city, state, zip, phone_number, status, client_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [company_name, address_line1, address_line2 || null, city, state, zip, phone_number, "pending", clientCode]
+      [
+        company_name,
+        address_line1,
+        address_line2 || null,
+        city,
+        state,
+        zip,
+        phone_number,
+        "pending",
+        clientCode,
+      ]
     );
     const clientId = clientResult.lastInsertRowid;
 
@@ -85,22 +118,34 @@ router.post("/register", signupLimiter, async (req, res) => {
     // Create admin user
     await db.run(
       "INSERT INTO client_admins (client_id, email, password_hash, email_verified, email_verification_token, email_verification_expires, first_name, last_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [clientId, email, passwordHash, false, verificationToken, expires.toISOString(), admin_first_name || null, admin_last_name || null]
+      [
+        clientId,
+        email,
+        passwordHash,
+        false,
+        verificationToken,
+        expires.toISOString(),
+        admin_first_name || null,
+        admin_last_name || null,
+      ]
     );
 
     // Create subscription
-    await db.run(
-      "INSERT INTO client_subscriptions (client_id, plan_id, status) VALUES (?, ?, ?)",
-      [clientId, plan_id, isPaidPlan ? "pending_payment" : "active"]
-    );
+    await db.run("INSERT INTO client_subscriptions (client_id, plan_id, status) VALUES (?, ?, ?)", [
+      clientId,
+      plan_id,
+      isPaidPlan ? "pending_payment" : "active",
+    ]);
 
     // Copy global system prompt
-    const globalPrompt = await db.get("SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL");
+    const globalPrompt = await db.get(
+      "SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL"
+    );
     if (globalPrompt) {
-      await db.run(
-        "INSERT INTO settings (key, value, client_id) VALUES ('system_prompt', ?, ?)",
-        [globalPrompt.value, clientId]
-      );
+      await db.run("INSERT INTO settings (key, value, client_id) VALUES ('system_prompt', ?, ?)", [
+        globalPrompt.value,
+        clientId,
+      ]);
     }
 
     if (isPaidPlan) {
@@ -112,12 +157,13 @@ router.post("/register", signupLimiter, async (req, res) => {
         entityType: "client",
         entityId: clientId,
         clientId,
-        metadata: { plan_name: plan.name }
+        metadata: { plan_name: plan.name },
       });
 
       if (!isZohoConfigured()) {
         return res.status(502).json({
-          error: "Payment system is not yet configured. Please contact us to complete your subscription setup."
+          error:
+            "Payment system is not yet configured. Please contact us to complete your subscription setup.",
         });
       }
 
@@ -146,7 +192,8 @@ router.post("/register", signupLimiter, async (req, res) => {
       } catch (zohoErr) {
         logger.error({ err: zohoErr }, "Zoho checkout creation failed");
         return res.status(502).json({
-          error: "Payment system is temporarily unavailable. Your account has been created. Please contact support to complete setup."
+          error:
+            "Payment system is temporarily unavailable. Your account has been created. Please contact support to complete setup.",
         });
       }
     }
@@ -157,7 +204,9 @@ router.post("/register", signupLimiter, async (req, res) => {
     } catch (emailErr) {
       // Log but don't fail — account is created, user can request resend
       logger.error("Failed to send verification email: %s", emailErr.message);
-      logger.info(`Verification link: ${(process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "")}/admin/verify-email?token=${verificationToken}`);
+      logger.info(
+        `Verification link: ${(process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "")}/admin/verify-email?token=${verificationToken}`
+      );
     }
 
     await logActivity({
@@ -166,7 +215,7 @@ router.post("/register", signupLimiter, async (req, res) => {
       action: "signup",
       entityType: "client",
       entityId: clientId,
-      clientId
+      clientId,
     });
 
     res.json({ ok: true, message: "Check your email to verify your account." });
@@ -191,7 +240,9 @@ router.get("/verify", async (req, res) => {
     );
 
     if (!admin) {
-      return res.status(400).json({ ok: false, error: "This verification link has expired or is invalid." });
+      return res
+        .status(400)
+        .json({ ok: false, error: "This verification link has expired or is invalid." });
     }
 
     // Mark email as verified
@@ -201,10 +252,7 @@ router.get("/verify", async (req, res) => {
     );
 
     // Activate the client
-    await db.run(
-      "UPDATE clients SET status = 'active' WHERE id = ?",
-      [admin.client_id]
-    );
+    await db.run("UPDATE clients SET status = 'active' WHERE id = ?", [admin.client_id]);
 
     res.json({ ok: true, message: "Email verified! You can now log in." });
   } catch (err) {
@@ -214,47 +262,60 @@ router.get("/verify", async (req, res) => {
 });
 
 // Resend verification email
-router.post("/resend-verification", rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 3,
-  message: { error: "Too many requests, please try again later" }
-}), async (req, res) => {
-  const { email } = req.body;
+router.post(
+  "/resend-verification",
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 3,
+    message: { error: "Too many requests, please try again later" },
+  }),
+  async (req, res) => {
+    const { email } = req.body;
 
-  if (!email) {
-    return res.status(400).json({ error: "Email is required" });
-  }
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
 
-  try {
-    const admin = await db.get(
-      `SELECT ca.id, ca.email, ca.email_verified
+    try {
+      const admin = await db.get(
+        `SELECT ca.id, ca.email, ca.email_verified
        FROM client_admins ca
        JOIN clients c ON c.id = ca.client_id
        WHERE ca.email = ? AND c.status = 'pending'`,
-      [email.toLowerCase().trim()]
-    );
+        [email.toLowerCase().trim()]
+      );
 
-    if (!admin || admin.email_verified) {
-      // Don't reveal whether account exists
-      return res.json({ message: "If an unverified account exists with that email, a new verification link has been sent." });
+      if (!admin || admin.email_verified) {
+        // Don't reveal whether account exists
+        return res.json({
+          message:
+            "If an unverified account exists with that email, a new verification link has been sent.",
+        });
+      }
+
+      // Generate new token
+      const verificationToken = crypto.randomBytes(32).toString("hex");
+      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await db.run(
+        "UPDATE client_admins SET email_verification_token = ?, email_verification_expires = ? WHERE id = ?",
+        [verificationToken, expires.toISOString(), admin.id]
+      );
+
+      await sendVerificationEmail(admin.email, verificationToken);
+
+      res.json({
+        message:
+          "If an unverified account exists with that email, a new verification link has been sent.",
+      });
+    } catch (err) {
+      logger.error({ err }, "Error resending verification");
+      res.json({
+        message:
+          "If an unverified account exists with that email, a new verification link has been sent.",
+      });
     }
-
-    // Generate new token
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    await db.run(
-      "UPDATE client_admins SET email_verification_token = ?, email_verification_expires = ? WHERE id = ?",
-      [verificationToken, expires.toISOString(), admin.id]
-    );
-
-    await sendVerificationEmail(admin.email, verificationToken);
-
-    res.json({ message: "If an unverified account exists with that email, a new verification link has been sent." });
-  } catch (err) {
-    logger.error({ err }, "Error resending verification");
-    res.json({ message: "If an unverified account exists with that email, a new verification link has been sent." });
   }
-});
+);
 
 export default router;

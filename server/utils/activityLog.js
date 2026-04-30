@@ -14,7 +14,16 @@ import logger from "./logger.js";
  * @param {number} [params.clientId]
  * @param {Object} [params.metadata] - arbitrary JSON metadata
  */
-export async function logActivity({ actorType, actorId, actorEmail, action, entityType, entityId, clientId, metadata }) {
+export async function logActivity({
+  actorType,
+  actorId,
+  actorEmail,
+  action,
+  entityType,
+  entityId,
+  clientId,
+  metadata,
+}) {
   try {
     await db.run(
       `INSERT INTO activity_log (actor_type, actor_id, actor_email, action, entity_type, entity_id, client_id, metadata)
@@ -27,7 +36,7 @@ export async function logActivity({ actorType, actorId, actorEmail, action, enti
         entityType || null,
         entityId || null,
         clientId || null,
-        metadata ? JSON.stringify(metadata) : null
+        metadata ? JSON.stringify(metadata) : null,
       ]
     );
   } catch (err) {

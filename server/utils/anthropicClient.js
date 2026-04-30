@@ -16,7 +16,9 @@ export async function createMessage(params) {
       const retryable = [429, 500, 502, 503, 529].includes(err.status);
       if (attempt < 2 && retryable) {
         const delay = (attempt + 1) * 3000;
-        logger.warn(`Anthropic API error ${err.status}, retrying in ${delay/1000}s (attempt ${attempt + 1}/3)...`);
+        logger.warn(
+          `Anthropic API error ${err.status}, retrying in ${delay / 1000}s (attempt ${attempt + 1}/3)...`
+        );
         await new Promise((r) => setTimeout(r, delay));
         continue;
       }

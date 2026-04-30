@@ -18,7 +18,7 @@ export default function SuperAdminLoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
-        credentials: "include"
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -51,7 +51,12 @@ export default function SuperAdminLoginPage() {
           <h1 className="text-4xl lg:text-5xl font-extrabold text-white tracking-tight mb-2">
             ResidentPulse
           </h1>
-          <a href="https://camascent.com" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 text-white/70 hover:text-white/90 transition-colors">
+          <a
+            href="https://camascent.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 text-white/70 hover:text-white/90 transition-colors"
+          >
             <span className="text-base font-medium">Powered by</span>
             <img src="/CAMAscent.png" alt="CAM Ascent" className="h-8 object-contain" />
             <span className="text-base font-semibold">CAM Ascent Analytical Insights</span>
@@ -62,7 +67,9 @@ export default function SuperAdminLoginPage() {
         <div className="w-full max-w-md">
           <div className="bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl p-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-1">SuperAdmin Portal</h2>
-            <p className="text-base text-gray-500 mb-6">Sign in to manage all clients and settings</p>
+            <p className="text-base text-gray-500 mb-6">
+              Sign in to manage all clients and settings
+            </p>
 
             <form onSubmit={handleSubmit}>
               <div className="mb-4">
@@ -82,7 +89,10 @@ export default function SuperAdminLoginPage() {
               </div>
 
               <div className="mb-6">
-                <label htmlFor="password" className="block text-base font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="password"
+                  className="block text-base font-medium text-gray-700 mb-2"
+                >
                   Password
                 </label>
                 <input
@@ -102,11 +112,7 @@ export default function SuperAdminLoginPage() {
                 </div>
               )}
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full btn-primary"
-              >
+              <button type="submit" disabled={loading} className="w-full btn-primary">
                 {loading ? "Logging in..." : "Login"}
               </button>
 
@@ -122,9 +128,7 @@ export default function SuperAdminLoginPage() {
             </form>
           </div>
 
-          <p className="text-center text-sm text-white/50 mt-6">
-            SuperAdmin access only
-          </p>
+          <p className="text-center text-sm text-white/50 mt-6">SuperAdmin access only</p>
         </div>
       </div>
     </div>

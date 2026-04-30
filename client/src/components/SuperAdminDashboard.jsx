@@ -39,7 +39,7 @@ export default function SuperAdminDashboard() {
       launch_round: "launched a survey round",
       start_interview: "started an onboarding interview",
       complete_interview: "completed an onboarding interview",
-      abandon_interview: "skipped onboarding interview"
+      abandon_interview: "skipped onboarding interview",
     };
     return actions[entry.action] || entry.action;
   };
@@ -69,7 +69,11 @@ export default function SuperAdminDashboard() {
     <div className="space-y-6">
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Clients" value={stats.total_clients} sub={`${stats.active_clients} active`} />
+        <StatCard
+          label="Total Clients"
+          value={stats.total_clients}
+          sub={`${stats.active_clients} active`}
+        />
         <StatCard label="Active Rounds" value={stats.active_rounds} />
         <StatCard label="Total Responses" value={stats.total_responses} />
         <StatCard label="Board Members" value={stats.total_members} />
@@ -92,11 +96,11 @@ export default function SuperAdminDashboard() {
                 className="block w-full text-left px-3 py-2 text-sm text-amber-900 bg-amber-100/50 rounded-lg hover:bg-amber-100 transition"
               >
                 <span className="font-medium">{w.company_name}</span>
-                <span className="text-amber-700 ml-2 text-xs">
-                  {w.client_code}
-                </span>
+                <span className="text-amber-700 ml-2 text-xs">{w.client_code}</span>
                 <span className="text-amber-600 ml-2 text-xs">
-                  {w.last_login ? `Last login: ${new Date(w.last_login).toLocaleDateString()}` : "Never logged in"}
+                  {w.last_login
+                    ? `Last login: ${new Date(w.last_login).toLocaleDateString()}`
+                    : "Never logged in"}
                 </span>
               </button>
             ))}
@@ -112,19 +116,25 @@ export default function SuperAdminDashboard() {
         ) : (
           <div className="space-y-2">
             {activity.map((entry) => (
-              <div key={entry.id} className="flex items-start gap-3 text-sm py-1.5 border-b border-gray-50 last:border-0">
-                <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${
-                  entry.actor_type === "superadmin" ? "bg-purple-400" : "bg-blue-400"
-                }`} />
+              <div
+                key={entry.id}
+                className="flex items-start gap-3 text-sm py-1.5 border-b border-gray-50 last:border-0"
+              >
+                <span
+                  className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${
+                    entry.actor_type === "superadmin" ? "bg-purple-400" : "bg-blue-400"
+                  }`}
+                />
                 <div className="flex-1 min-w-0">
-                  <span className="font-medium text-gray-800">{entry.actor_email || "System"}</span>
-                  {" "}
+                  <span className="font-medium text-gray-800">{entry.actor_email || "System"}</span>{" "}
                   <span className="text-gray-500">{formatAction(entry)}</span>
                   {entry.company_name && (
                     <span className="text-gray-400"> — {entry.company_name}</span>
                   )}
                 </div>
-                <span className="text-xs text-gray-400 flex-shrink-0">{formatTime(entry.created_at)}</span>
+                <span className="text-xs text-gray-400 flex-shrink-0">
+                  {formatTime(entry.created_at)}
+                </span>
               </div>
             ))}
           </div>

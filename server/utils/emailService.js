@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import logger from "./logger.js";
 
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const EMAIL_FROM = process.env.EMAIL_FROM || "ResidentPulse <residentpulse@camascent.com>";
 
 /**
@@ -50,7 +50,8 @@ function getResendClient() {
 function buildInvitationEmail(user, surveyLink, roundInfo) {
   const firstName = user.first_name || "Board Member";
   const communityName = user.community_name || "your community";
-  const managementCompany = roundInfo?.companyName || user.management_company || "your management company";
+  const managementCompany =
+    roundInfo?.companyName || user.management_company || "your management company";
   const logoUrl = roundInfo?.logoUrl || null;
 
   return `
@@ -63,11 +64,15 @@ function buildInvitationEmail(user, surveyLink, roundInfo) {
     </head>
     <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
-        ${logoUrl ? `
+        ${
+          logoUrl
+            ? `
         <!-- Client Logo -->
         <div style="padding: 24px 20px 0; text-align: center;">
           <img src="${logoUrl}" alt="${managementCompany}" style="max-height: 60px; max-width: 200px; object-fit: contain;" />
-        </div>` : ""}
+        </div>`
+            : ""
+        }
         <!-- Header Banner -->
         <div style="background-color: #3B9FE7; padding: 24px 20px; text-align: center;">
           <h1 style="color: #ffffff; font-size: 28px; margin: 0 0 4px 0; font-weight: bold;">ResidentPulse</h1>
@@ -122,9 +127,11 @@ function buildInvitationEmail(user, surveyLink, roundInfo) {
           <!-- Footer -->
           <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #eeeeee;">
             <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0 0 10px 0;">
-              ${roundInfo?.closesAt
-                ? `This survey is open until ${new Date(roundInfo.closesAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
-                : "This invitation expires in 48 hours."}
+              ${
+                roundInfo?.closesAt
+                  ? `This survey is open until ${new Date(roundInfo.closesAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
+                  : "This invitation expires in 48 hours."
+              }
             </p>
             <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 0;">
               Questions? Contact your property manager.
@@ -248,7 +255,11 @@ function buildPasswordResetEmail(resetLink) {
  * @param {string} resetToken - Password reset token
  * @returns {Promise<Object>} Resend response with email ID
  */
-export async function sendPasswordResetEmail(email, resetToken, { resetPath = "/admin/reset-password" } = {}) {
+export async function sendPasswordResetEmail(
+  email,
+  resetToken,
+  { resetPath = "/admin/reset-password" } = {}
+) {
   const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
   const resetLink = `${baseUrl}${resetPath}?token=${resetToken}`;
 
@@ -397,11 +408,15 @@ function buildReminderEmail(user, surveyLink, daysRemaining, companyName, logoUr
     </head>
     <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
-        ${logoUrl ? `
+        ${
+          logoUrl
+            ? `
         <!-- Client Logo -->
         <div style="padding: 24px 20px 0; text-align: center;">
           <img src="${logoUrl}" alt="${mgmtCompany}" style="max-height: 60px; max-width: 200px; object-fit: contain;" />
-        </div>` : ""}
+        </div>`
+            : ""
+        }
         <!-- Header Banner -->
         <div style="background-color: #3B9FE7; padding: 24px 20px; text-align: center;">
           <h1 style="color: #ffffff; font-size: 28px; margin: 0 0 4px 0; font-weight: bold;">ResidentPulse</h1>
@@ -626,11 +641,17 @@ async function sendAdminNotification(email, subject, emailHtml) {
  * Notify all admins that a survey round has launched
  */
 export async function notifyRoundLaunched({ clientId, roundNumber, membersInvited, closesAt, db }) {
-  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [
+    clientId,
+  ]);
   const client = await db.get("SELECT company_name FROM clients WHERE id = ?", [clientId]);
   const companyName = client?.company_name || "Your company";
   const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
-  const closesDate = new Date(closesAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const closesDate = new Date(closesAt).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
@@ -652,7 +673,11 @@ export async function notifyRoundLaunched({ clientId, roundNumber, membersInvite
 
   for (let i = 0; i < admins.length; i++) {
     const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
-    await sendAdminNotification(admins[i].email, `Round ${roundNumber} launched — ${membersInvited} invitations sent`, personalized);
+    await sendAdminNotification(
+      admins[i].email,
+      `Round ${roundNumber} launched — ${membersInvited} invitations sent`,
+      personalized
+    );
     if (i < admins.length - 1) await sleep(500);
   }
 }
@@ -660,8 +685,18 @@ export async function notifyRoundLaunched({ clientId, roundNumber, membersInvite
 /**
  * Notify all admins that a new survey response was received
  */
-export async function notifyNewResponse({ clientId, roundNumber, respondentName, communityName, totalResponses, totalInvited, db }) {
-  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+export async function notifyNewResponse({
+  clientId,
+  roundNumber,
+  respondentName,
+  communityName,
+  totalResponses,
+  totalInvited,
+  db,
+}) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [
+    clientId,
+  ]);
   const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
   const responseRate = totalInvited > 0 ? Math.round((totalResponses / totalInvited) * 100) : 0;
 
@@ -684,7 +719,11 @@ export async function notifyNewResponse({ clientId, roundNumber, respondentName,
 
   for (let i = 0; i < admins.length; i++) {
     const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
-    await sendAdminNotification(admins[i].email, `New response — Round ${roundNumber} (${totalResponses}/${totalInvited})`, personalized);
+    await sendAdminNotification(
+      admins[i].email,
+      `New response — Round ${roundNumber} (${totalResponses}/${totalInvited})`,
+      personalized
+    );
     if (i < admins.length - 1) await sleep(500);
   }
 }
@@ -692,8 +731,16 @@ export async function notifyNewResponse({ clientId, roundNumber, respondentName,
 /**
  * Notify all admins that a survey round has concluded
  */
-export async function notifyRoundConcluded({ clientId, roundNumber, totalResponses, totalInvited, db }) {
-  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+export async function notifyRoundConcluded({
+  clientId,
+  roundNumber,
+  totalResponses,
+  totalInvited,
+  db,
+}) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [
+    clientId,
+  ]);
   const client = await db.get("SELECT company_name FROM clients WHERE id = ?", [clientId]);
   const companyName = client?.company_name || "Your company";
   const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
@@ -719,7 +766,11 @@ export async function notifyRoundConcluded({ clientId, roundNumber, totalRespons
 
   for (let i = 0; i < admins.length; i++) {
     const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
-    await sendAdminNotification(admins[i].email, `Round ${roundNumber} complete — ${responseRate}% response rate`, personalized);
+    await sendAdminNotification(
+      admins[i].email,
+      `Round ${roundNumber} complete — ${responseRate}% response rate`,
+      personalized
+    );
     if (i < admins.length - 1) await sleep(500);
   }
 }
@@ -727,8 +778,19 @@ export async function notifyRoundConcluded({ clientId, roundNumber, totalRespons
 /**
  * Notify all admins that a critical alert was triggered during a survey
  */
-export async function notifyCriticalAlert({ clientId, alertType, severity, description, respondentName, communityName, roundNumber, db }) {
-  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+export async function notifyCriticalAlert({
+  clientId,
+  alertType,
+  severity,
+  description,
+  respondentName,
+  communityName,
+  roundNumber,
+  db,
+}) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [
+    clientId,
+  ]);
   const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
 
   const alertLabels = {
@@ -761,7 +823,11 @@ export async function notifyCriticalAlert({ clientId, alertType, severity, descr
 
   for (let i = 0; i < admins.length; i++) {
     const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
-    await sendAdminNotification(admins[i].email, `ALERT: ${alertLabel} — ${respondentName || "Board member"}`, personalized);
+    await sendAdminNotification(
+      admins[i].email,
+      `ALERT: ${alertLabel} — ${respondentName || "Board member"}`,
+      personalized
+    );
     if (i < admins.length - 1) await sleep(500);
   }
 }
@@ -769,8 +835,16 @@ export async function notifyCriticalAlert({ clientId, alertType, severity, descr
 /**
  * Notify all admins that a board member invitation bounced
  */
-export async function notifyBouncedInvitation({ clientId, memberEmail, memberName, bounceType, db }) {
-  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+export async function notifyBouncedInvitation({
+  clientId,
+  memberEmail,
+  memberName,
+  bounceType,
+  db,
+}) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [
+    clientId,
+  ]);
   const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
 
   const html = `
@@ -794,7 +868,11 @@ export async function notifyBouncedInvitation({ clientId, memberEmail, memberNam
 
   for (let i = 0; i < admins.length; i++) {
     const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
-    await sendAdminNotification(admins[i].email, `Bounced invitation — ${memberEmail}`, personalized);
+    await sendAdminNotification(
+      admins[i].email,
+      `Bounced invitation — ${memberEmail}`,
+      personalized
+    );
     if (i < admins.length - 1) await sleep(500);
   }
 }
@@ -802,10 +880,23 @@ export async function notifyBouncedInvitation({ clientId, memberEmail, memberNam
 /**
  * Notify all admins that a round is approaching (14 days or day-of)
  */
-export async function notifyRoundApproaching({ clientId, roundNumber, scheduledDate, daysUntil, memberCount, db }) {
-  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+export async function notifyRoundApproaching({
+  clientId,
+  roundNumber,
+  scheduledDate,
+  daysUntil,
+  memberCount,
+  db,
+}) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [
+    clientId,
+  ]);
   const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
-  const dateStr = new Date(scheduledDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const dateStr = new Date(scheduledDate).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
   const isDayBefore = daysUntil === 1;
   const subject = isDayBefore
     ? `Round ${roundNumber} launches tomorrow`
@@ -818,9 +909,10 @@ export async function notifyRoundApproaching({ clientId, roundNumber, scheduledD
       </div>
       <div style="padding: 24px 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
         <p>Hi {{firstName}},</p>
-        <p>${isDayBefore
-          ? `Survey Round ${roundNumber} launches <strong>tomorrow</strong> (${dateStr}).`
-          : `Survey Round ${roundNumber} is scheduled for <strong>${dateStr}</strong> — ${daysUntil} days from now.`
+        <p>${
+          isDayBefore
+            ? `Survey Round ${roundNumber} launches <strong>tomorrow</strong> (${dateStr}).`
+            : `Survey Round ${roundNumber} is scheduled for <strong>${dateStr}</strong> — ${daysUntil} days from now.`
         }</p>
         <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
           <tr><td style="padding: 8px 0; color: #666;">Round</td><td style="padding: 8px 0; font-weight: bold;">${roundNumber}</td></tr>
@@ -844,8 +936,19 @@ export async function notifyRoundApproaching({ clientId, roundNumber, scheduledD
  * Notify all admins about a detractor (low NPS) response.
  * If critical alerts exist for the same session, includes them to avoid separate emails.
  */
-export async function notifyDetractorAlert({ clientId, npsScore, respondentName, communityName, roundNumber, summary, criticalAlerts, db }) {
-  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [clientId]);
+export async function notifyDetractorAlert({
+  clientId,
+  npsScore,
+  respondentName,
+  communityName,
+  roundNumber,
+  summary,
+  criticalAlerts,
+  db,
+}) {
+  const admins = await db.all("SELECT email, first_name FROM client_admins WHERE client_id = ?", [
+    clientId,
+  ]);
   const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
 
   const hasCriticalAlerts = criticalAlerts && criticalAlerts.length > 0;
@@ -856,11 +959,13 @@ export async function notifyDetractorAlert({ clientId, npsScore, respondentName,
     other_critical: "Critical Concern",
   };
 
-  const criticalSection = hasCriticalAlerts ? `
+  const criticalSection = hasCriticalAlerts
+    ? `
         <div style="background: #fef2f2; border-left: 3px solid #dc2626; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0;">
           <p style="margin: 0 0 8px 0; font-weight: bold; color: #dc2626; font-size: 14px;">Critical Alerts Flagged</p>
-          ${criticalAlerts.map(a => `<p style="margin: 4px 0; font-size: 14px; color: #333;"><strong>${alertLabels[a.alert_type] || "Alert"}:</strong> ${a.description}</p>`).join("")}
-        </div>` : "";
+          ${criticalAlerts.map((a) => `<p style="margin: 4px 0; font-size: 14px; color: #333;"><strong>${alertLabels[a.alert_type] || "Alert"}:</strong> ${a.description}</p>`).join("")}
+        </div>`
+    : "";
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
@@ -877,11 +982,15 @@ export async function notifyDetractorAlert({ clientId, npsScore, respondentName,
           ${roundNumber ? `<tr><td style="padding: 8px 0; color: #666;">Survey round</td><td style="padding: 8px 0; font-weight: bold;">${roundNumber}</td></tr>` : ""}
         </table>
         ${criticalSection}
-        ${summary ? `
+        ${
+          summary
+            ? `
         <div style="background: #fffbeb; border-left: 3px solid #f59e0b; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0;">
           <p style="margin: 0 0 4px 0; font-weight: bold; color: #92400e; font-size: 14px;">AI Summary</p>
           <p style="margin: 0; font-size: 14px; color: #333; line-height: 1.5;">${summary}</p>
-        </div>` : ""}
+        </div>`
+            : ""
+        }
         <p style="font-size: 14px; color: #666; line-height: 1.5;">Consider reaching out to this board member to understand their concerns and demonstrate that their feedback is valued.</p>
         <a href="${baseUrl}/admin" style="display: inline-block; background: #3B9FE7; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-top: 8px;">View Dashboard</a>
         <p style="margin-top: 24px; font-size: 12px; color: #999;">ResidentPulse by CAMAscent</p>
@@ -890,9 +999,26 @@ export async function notifyDetractorAlert({ clientId, npsScore, respondentName,
 
   for (let i = 0; i < admins.length; i++) {
     const personalized = html.replace("{{firstName}}", admins[i].first_name || "there");
-    await sendAdminNotification(admins[i].email, `Low score feedback — ${respondentName || "Board member"} (${npsScore}/10)`, personalized);
+    await sendAdminNotification(
+      admins[i].email,
+      `Low score feedback — ${respondentName || "Board member"} (${npsScore}/10)`,
+      personalized
+    );
     if (i < admins.length - 1) await sleep(500);
   }
 }
 
-export default { sendInvitation, sendPasswordResetEmail, sendVerificationEmail, sendReminder, sendNewAdminEmail, notifyRoundLaunched, notifyNewResponse, notifyRoundConcluded, notifyCriticalAlert, notifyBouncedInvitation, notifyRoundApproaching, notifyDetractorAlert };
+export default {
+  sendInvitation,
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+  sendReminder,
+  sendNewAdminEmail,
+  notifyRoundLaunched,
+  notifyNewResponse,
+  notifyRoundConcluded,
+  notifyCriticalAlert,
+  notifyBouncedInvitation,
+  notifyRoundApproaching,
+  notifyDetractorAlert,
+};

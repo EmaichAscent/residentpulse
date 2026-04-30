@@ -29,12 +29,15 @@ export async function deactivateExcessMembers(clientId, newLimit) {
   );
 
   if (excessMembers.length > 0) {
-    const ids = excessMembers.map(m => m.id);
+    const ids = excessMembers.map((m) => m.id);
     await db.run(
       `UPDATE users SET active = FALSE WHERE id IN (${ids.map(() => "?").join(",")})`,
       ids
     );
-    logger.info({ clientId, deactivatedCount: excessMembers.length }, "Deactivated excess members after downgrade");
+    logger.info(
+      { clientId, deactivatedCount: excessMembers.length },
+      "Deactivated excess members after downgrade"
+    );
   }
 
   return {

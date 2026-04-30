@@ -9,11 +9,7 @@ const WORD_COLORS = [
 
 export default function WordCloud({ frequencies, maxWords = 30 }) {
   if (!frequencies || frequencies.length === 0) {
-    return (
-      <p className="text-sm text-gray-400 text-center py-6">
-        No word data available yet.
-      </p>
-    );
+    return <p className="text-sm text-gray-400 text-center py-6">No word data available yet.</p>;
   }
 
   const words = frequencies.slice(0, maxWords);

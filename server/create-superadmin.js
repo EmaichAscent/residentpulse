@@ -40,7 +40,6 @@ async function createSuperAdmin() {
     console.log("Email:", result.rows[0].email);
     console.log("Role:", result.rows[0].role);
     console.log("\nYou can now login at /superadmin/login");
-
   } catch (err) {
     if (err.code === "23505") {
       console.error("❌ Error: A user with this email already exists");

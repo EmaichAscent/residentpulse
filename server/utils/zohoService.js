@@ -79,18 +79,15 @@ export async function createCheckoutSession({ planCode, customerInfo, clientId, 
     additional_param: String(clientId),
   };
 
-  const response = await fetch(
-    "https://www.zohoapis.com/billing/v1/hostedpages/newsubscription",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Zoho-oauthtoken ${token}`,
-        "X-com-zoho-subscriptions-organizationid": process.env.ZOHO_ORG_ID,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    }
-  );
+  const response = await fetch("https://www.zohoapis.com/billing/v1/hostedpages/newsubscription", {
+    method: "POST",
+    headers: {
+      Authorization: `Zoho-oauthtoken ${token}`,
+      "X-com-zoho-subscriptions-organizationid": process.env.ZOHO_ORG_ID,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
 
   const data = await response.json();
 
@@ -123,16 +120,10 @@ export function verifyZohoWebhook(rawBody, signature) {
     return false;
   }
 
-  const computed = crypto
-    .createHmac("sha256", secret)
-    .update(rawBody)
-    .digest("base64");
+  const computed = crypto.createHmac("sha256", secret).update(rawBody).digest("base64");
 
   try {
-    return crypto.timingSafeEqual(
-      Buffer.from(computed),
-      Buffer.from(signature)
-    );
+    return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(signature));
   } catch {
     return false;
   }
@@ -146,7 +137,11 @@ export function verifyZohoWebhook(rawBody, signature) {
  * @param {string} options.redirectUrl - URL to redirect after successful update
  * @returns {Promise<{hostedpage_id: string, url: string}>}
  */
-export async function updateSubscriptionHostedPage({ zohoSubscriptionId, newPlanCode, redirectUrl }) {
+export async function updateSubscriptionHostedPage({
+  zohoSubscriptionId,
+  newPlanCode,
+  redirectUrl,
+}) {
   if (!isZohoConfigured()) {
     throw new Error("Zoho Subscriptions is not configured");
   }
@@ -258,6 +253,10 @@ export async function reactivateSubscription(zohoSubscriptionId) {
 }
 
 export default {
-  isZohoConfigured, createCheckoutSession, verifyZohoWebhook,
-  updateSubscriptionHostedPage, cancelSubscription, reactivateSubscription
+  isZohoConfigured,
+  createCheckoutSession,
+  verifyZohoWebhook,
+  updateSubscriptionHostedPage,
+  cancelSubscription,
+  reactivateSubscription,
 };

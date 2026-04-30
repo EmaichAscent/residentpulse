@@ -13,14 +13,14 @@ const router = Router();
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20, // 20 attempts per window
-  message: { error: "Too many login attempts, please try again later" }
+  message: { error: "Too many login attempts, please try again later" },
 });
 
 // Separate rate limiter for password reset (more generous)
 const resetLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 3, // 3 reset requests per window
-  message: { error: "Too many password reset requests, please try again later" }
+  message: { error: "Too many password reset requests, please try again later" },
 });
 
 // SuperAdmin login
@@ -47,22 +47,22 @@ router.post("/superadmin/login", loginLimiter, async (req, res) => {
   req.session.user = {
     id: admin.id,
     email: admin.email,
-    role: "superadmin"
+    role: "superadmin",
   };
 
   await logActivity({
     actorType: "superadmin",
     actorId: admin.id,
     actorEmail: admin.email,
-    action: "login"
+    action: "login",
   });
 
   res.json({
     user: {
       id: admin.id,
       email: admin.email,
-      role: "superadmin"
-    }
+      role: "superadmin",
+    },
   });
 });
 
@@ -92,14 +92,17 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
   // Check if client is pending email verification
   if (admin.client_status === "pending") {
     return res.status(403).json({
-      error: "Please verify your email before logging in. Check your inbox for the verification link.",
-      pending_verification: true
+      error:
+        "Please verify your email before logging in. Check your inbox for the verification link.",
+      pending_verification: true,
     });
   }
 
   // Check if client is active
   if (admin.client_status !== "active") {
-    return res.status(403).json({ error: "Your account has been deactivated. Please contact support." });
+    return res
+      .status(403)
+      .json({ error: "Your account has been deactivated. Please contact support." });
   }
 
   const isValidPassword = await comparePassword(password, admin.password_hash);
@@ -109,7 +112,9 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
   }
 
   // Track last login
-  await db.run("UPDATE client_admins SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?", [admin.id]);
+  await db.run("UPDATE client_admins SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?", [
+    admin.id,
+  ]);
 
   // Create session (include onboarding_completed for redirect logic)
   req.session.user = {
@@ -120,7 +125,7 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
     company_name: admin.company_name,
     first_name: admin.first_name || null,
     onboarding_completed: admin.onboarding_completed || false,
-    plan_name: admin.plan_name || "free"
+    plan_name: admin.plan_name || "free",
   };
 
   await logActivity({
@@ -128,7 +133,7 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
     actorId: admin.id,
     actorEmail: admin.email,
     action: "login",
-    clientId: admin.client_id
+    clientId: admin.client_id,
   });
 
   res.json({
@@ -139,8 +144,8 @@ router.post("/admin/login", loginLimiter, async (req, res) => {
       client_id: admin.client_id,
       company_name: admin.company_name,
       first_name: admin.first_name || null,
-      onboarding_completed: admin.onboarding_completed || false
-    }
+      onboarding_completed: admin.onboarding_completed || false,
+    },
   });
 });
 
@@ -175,10 +180,14 @@ router.post("/admin/forgot-password", resetLimiter, async (req, res) => {
     }
 
     // Always return success to avoid leaking whether email exists
-    res.json({ message: "If an account exists with that email, a password reset link has been sent." });
+    res.json({
+      message: "If an account exists with that email, a password reset link has been sent.",
+    });
   } catch (err) {
     logger.error({ err }, "Password reset request error");
-    res.json({ message: "If an account exists with that email, a password reset link has been sent." });
+    res.json({
+      message: "If an account exists with that email, a password reset link has been sent.",
+    });
   }
 });
 
@@ -201,7 +210,9 @@ router.post("/admin/reset-password", async (req, res) => {
     );
 
     if (!admin) {
-      return res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." });
+      return res
+        .status(400)
+        .json({ error: "Invalid or expired reset link. Please request a new one." });
     }
 
     const passwordHash = await hashPassword(password);
@@ -227,10 +238,9 @@ router.post("/superadmin/forgot-password", resetLimiter, async (req, res) => {
   }
 
   try {
-    const admin = await db.get(
-      "SELECT id, email FROM admins WHERE email = ?",
-      [email.toLowerCase().trim()]
-    );
+    const admin = await db.get("SELECT id, email FROM admins WHERE email = ?", [
+      email.toLowerCase().trim(),
+    ]);
 
     if (admin) {
       const token = crypto.randomBytes(32).toString("hex");
@@ -245,10 +255,14 @@ router.post("/superadmin/forgot-password", resetLimiter, async (req, res) => {
     }
 
     // Always return success to avoid leaking whether email exists
-    res.json({ message: "If an account exists with that email, a password reset link has been sent." });
+    res.json({
+      message: "If an account exists with that email, a password reset link has been sent.",
+    });
   } catch (err) {
     logger.error({ err }, "SuperAdmin password reset request error");
-    res.json({ message: "If an account exists with that email, a password reset link has been sent." });
+    res.json({
+      message: "If an account exists with that email, a password reset link has been sent.",
+    });
   }
 });
 
@@ -271,7 +285,9 @@ router.post("/superadmin/reset-password", async (req, res) => {
     );
 
     if (!admin) {
-      return res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." });
+      return res
+        .status(400)
+        .json({ error: "Invalid or expired reset link. Please request a new one." });
     }
 
     const passwordHash = await hashPassword(password);
@@ -305,7 +321,9 @@ router.post("/admin/change-password", async (req, res) => {
   }
 
   try {
-    const admin = await db.get("SELECT id, password_hash FROM client_admins WHERE id = ?", [req.session.user.id]);
+    const admin = await db.get("SELECT id, password_hash FROM client_admins WHERE id = ?", [
+      req.session.user.id,
+    ]);
     if (!admin) {
       return res.status(404).json({ error: "Account not found" });
     }
@@ -371,7 +389,7 @@ router.get("/status", async (req, res) => {
 
   res.json({
     authenticated: true,
-    user: req.session.user
+    user: req.session.user,
   });
 });
 

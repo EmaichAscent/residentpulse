@@ -28,21 +28,19 @@ export default function HelpPanel() {
   const getMatchingPages = () => {
     const context = getPageContext();
     const mappings = {
-      "rounds": ["rounds"],
+      rounds: ["rounds"],
       "rounds/:id": ["rounds/:roundId"],
-      "trends": ["trends"],
-      "communities": ["communities"],
-      "members": ["members"],
-      "account": ["account"],
-      "onboarding": ["rounds"],
+      trends: ["trends"],
+      communities: ["communities"],
+      members: ["members"],
+      account: ["account"],
+      onboarding: ["rounds"],
     };
     return mappings[context] || [];
   };
 
   const contextPages = getMatchingPages();
-  const contextArticles = helpArticles.filter((a) =>
-    a.pages.some((p) => contextPages.includes(p))
-  );
+  const contextArticles = helpArticles.filter((a) => a.pages.some((p) => contextPages.includes(p)));
 
   // Search filtering
   const searchLower = searchQuery.toLowerCase().trim();
@@ -108,21 +106,14 @@ export default function HelpPanel() {
           onClick={() => setExpandedId(isExpanded ? null : article.id)}
           className="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition"
         >
-          <span className="text-sm font-medium text-gray-900 pr-4">
-            {article.title}
-          </span>
+          <span className="text-sm font-medium text-gray-900 pr-4">{article.title}</span>
           <svg
             className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 9l-7 7-7-7"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
         {isExpanded && (
@@ -140,9 +131,7 @@ export default function HelpPanel() {
       if (filteredArticles.length === 0) {
         return (
           <div className="px-4 py-8 text-center">
-            <p className="text-sm text-gray-500">
-              No articles match your search.
-            </p>
+            <p className="text-sm text-gray-500">No articles match your search.</p>
             <p className="text-xs text-gray-400 mt-1">
               Try different keywords or clear your search to browse all topics.
             </p>
@@ -203,7 +192,7 @@ export default function HelpPanel() {
         body: JSON.stringify({
           question,
           history: chatMessages,
-          articles: helpArticles.map(a => ({ title: a.title, body: a.body })),
+          articles: helpArticles.map((a) => ({ title: a.title, body: a.body })),
         }),
       });
       const data = await res.json();
@@ -227,7 +216,11 @@ export default function HelpPanel() {
         <p key={i} className={i > 0 ? "mt-1" : ""}>
           {parts.map((part, j) => {
             if (part.startsWith("**") && part.endsWith("**")) {
-              return <strong key={j} className="font-semibold">{part.slice(2, -2)}</strong>;
+              return (
+                <strong key={j} className="font-semibold">
+                  {part.slice(2, -2)}
+                </strong>
+              );
             }
             return <span key={j}>{part}</span>;
           })}
@@ -243,8 +236,18 @@ export default function HelpPanel() {
         {chatMessages.length === 0 && (
           <div className="text-center py-8">
             <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3">
-              <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              <svg
+                className="w-6 h-6 text-blue-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                />
               </svg>
             </div>
             <p className="text-sm font-medium text-gray-700 mb-1">Ask me anything</p>
@@ -255,15 +258,10 @@ export default function HelpPanel() {
         )}
 
         {chatMessages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-          >
+          <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
-                msg.role === "user"
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-100 text-gray-800"
+                msg.role === "user" ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-800"
               }`}
             >
               {renderChatMessage(msg.content)}
@@ -275,9 +273,18 @@ export default function HelpPanel() {
           <div className="flex justify-start">
             <div className="bg-gray-100 rounded-xl px-3 py-2">
               <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                <div
+                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                  style={{ animationDelay: "0ms" }}
+                />
+                <div
+                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                  style={{ animationDelay: "150ms" }}
+                />
+                <div
+                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                  style={{ animationDelay: "300ms" }}
+                />
               </div>
             </div>
           </div>
@@ -287,7 +294,10 @@ export default function HelpPanel() {
       </div>
 
       {/* Input area */}
-      <form onSubmit={handleChatSubmit} className="border-t border-gray-200 px-4 py-3 flex-shrink-0">
+      <form
+        onSubmit={handleChatSubmit}
+        className="border-t border-gray-200 px-4 py-3 flex-shrink-0"
+      >
         <div className="flex gap-2">
           <input
             type="text"
@@ -304,7 +314,12 @@ export default function HelpPanel() {
             style={{ backgroundColor: "var(--cam-blue)" }}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+              />
             </svg>
           </button>
         </div>
@@ -341,12 +356,7 @@ export default function HelpPanel() {
                 onClick={() => setIsOpen(false)}
                 className="p-1 text-gray-400 hover:text-gray-600 transition"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -399,14 +409,10 @@ export default function HelpPanel() {
                 </div>
 
                 {/* Article List */}
-                <div className="flex-1 overflow-y-auto">
-                  {renderArticleList()}
-                </div>
+                <div className="flex-1 overflow-y-auto">{renderArticleList()}</div>
               </>
             ) : (
-              <div className="flex-1 flex flex-col overflow-hidden">
-                {renderChat()}
-              </div>
+              <div className="flex-1 flex flex-col overflow-hidden">{renderChat()}</div>
             )}
           </div>
         </>

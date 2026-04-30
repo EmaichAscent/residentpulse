@@ -9,7 +9,18 @@ const synth = window.speechSynthesis;
 export default function ChatPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { sessionId, email, firstName, community, company, clientId, hasLogo, companyName, isMock, googleReviewUrl } = location.state || {};
+  const {
+    sessionId,
+    email,
+    firstName,
+    community,
+    company,
+    clientId,
+    hasLogo,
+    companyName,
+    isMock,
+    googleReviewUrl,
+  } = location.state || {};
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -41,11 +52,13 @@ export default function ChatPage() {
 
         // Set messages if any exist
         if (data.messages && data.messages.length > 0) {
-          setMessages(data.messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-            timestamp: m.created_at,
-          })));
+          setMessages(
+            data.messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+              timestamp: m.created_at,
+            }))
+          );
         }
 
         // Set state based on session data
@@ -88,23 +101,27 @@ export default function ChatPage() {
   }, []);
 
   // Speak text using browser Speech Synthesis
-  const speakText = useCallback((text) => {
-    if (!synth || !speechEnabled) return;
-    synth.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    // Prefer a natural-sounding voice
-    const voices = synth.getVoices();
-    const preferred = voices.find((v) => v.name.includes("Google") && v.lang.startsWith("en"))
-      || voices.find((v) => v.name.includes("Samantha"))
-      || voices.find((v) => v.lang.startsWith("en") && v.localService);
-    if (preferred) utterance.voice = preferred;
-    utterance.onstart = () => setSpeaking(true);
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-    synth.speak(utterance);
-  }, [speechEnabled]);
+  const speakText = useCallback(
+    (text) => {
+      if (!synth || !speechEnabled) return;
+      synth.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      // Prefer a natural-sounding voice
+      const voices = synth.getVoices();
+      const preferred =
+        voices.find((v) => v.name.includes("Google") && v.lang.startsWith("en")) ||
+        voices.find((v) => v.name.includes("Samantha")) ||
+        voices.find((v) => v.lang.startsWith("en") && v.localService);
+      if (preferred) utterance.voice = preferred;
+      utterance.onstart = () => setSpeaking(true);
+      utterance.onend = () => setSpeaking(false);
+      utterance.onerror = () => setSpeaking(false);
+      synth.speak(utterance);
+    },
+    [speechEnabled]
+  );
 
   // Auto-speak new AI messages
   useEffect(() => {
@@ -135,12 +152,20 @@ export default function ChatPage() {
 
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: data.message, timestamp: data.timestamp || new Date().toISOString() },
+        {
+          role: "assistant",
+          content: data.message,
+          timestamp: data.timestamp || new Date().toISOString(),
+        },
       ]);
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Sorry, something went wrong. Please try again.", timestamp: new Date().toISOString() },
+        {
+          role: "assistant",
+          content: "Sorry, something went wrong. Please try again.",
+          timestamp: new Date().toISOString(),
+        },
       ]);
     } finally {
       setLoading(false);
@@ -196,7 +221,9 @@ export default function ChatPage() {
           const data = await res.json();
           setReviewResponse(data.session.google_review_response || null);
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
   };
 
@@ -245,8 +272,12 @@ export default function ChatPage() {
 
   const voiceHints = [];
   if (synth) voiceHints.push("click the speaker button to hear responses read aloud");
-  if (SpeechRecognition) voiceHints.push("click the microphone button to speak your responses (your browser will ask for permission the first time)");
-  const voiceText = voiceHints.length > 0 ? ` You can type your responses, or ${voiceHints.join(", and ")}.` : "";
+  if (SpeechRecognition)
+    voiceHints.push(
+      "click the microphone button to speak your responses (your browser will ask for permission the first time)"
+    );
+  const voiceText =
+    voiceHints.length > 0 ? ` You can type your responses, or ${voiceHints.join(", and ")}.` : "";
 
   const welcomeContent = `Hi ${userName}! We're collecting feedback${companyText} about how well they serve you${roleText}.${voiceText} When you're finished, click "End Chat" at any time. Let's start with a quick rating.`;
 
@@ -261,7 +292,10 @@ export default function ChatPage() {
                 src={`/api/sessions/logo/${clientId}`}
                 alt={companyName || "Company logo"}
                 className="h-12 max-w-[180px] object-contain"
-                onError={(e) => { e.target.style.display = "none"; e.target.nextElementSibling.style.display = "block"; }}
+                onError={(e) => {
+                  e.target.style.display = "none";
+                  e.target.nextElementSibling.style.display = "block";
+                }}
               />
             ) : null}
             <div style={hasLogo && clientId ? { display: "none" } : {}}>
@@ -287,82 +321,93 @@ export default function ChatPage() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-5 py-6 bg-gradient-to-b from-gray-50 to-white">
-        {/* Initial greeting + NPS */}
-        {!npsSubmitted && (
-          <>
-            <ChatBubble role="assistant" content={welcomeContent} />
-            <div className="ml-10">
-              <NpsScale onSelect={handleNpsSelect} />
-            </div>
-          </>
-        )}
+          {/* Initial greeting + NPS */}
+          {!npsSubmitted && (
+            <>
+              <ChatBubble role="assistant" content={welcomeContent} />
+              <div className="ml-10">
+                <NpsScale onSelect={handleNpsSelect} />
+              </div>
+            </>
+          )}
 
-        {messages.map((msg, i) => (
-          <ChatBubble key={i} role={msg.role} content={msg.content} timestamp={msg.timestamp} />
-        ))}
+          {messages.map((msg, i) => (
+            <ChatBubble key={i} role={msg.role} content={msg.content} timestamp={msg.timestamp} />
+          ))}
 
-        {loading && (
-          <div className="flex justify-start mb-4">
-            <img
-              src="/camascent-chat-icon.png"
-              alt="CAM Ascent"
-              className="w-8 h-8 rounded-full object-contain bg-white border border-gray-200 mr-2 mt-1 flex-shrink-0"
-            />
-            <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-5 py-4 shadow-sm">
-              <div className="flex space-x-2">
-                <div className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce" />
-                <div className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.15s]" />
-                <div className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.3s]" />
+          {loading && (
+            <div className="flex justify-start mb-4">
+              <img
+                src="/camascent-chat-icon.png"
+                alt="CAM Ascent"
+                className="w-8 h-8 rounded-full object-contain bg-white border border-gray-200 mr-2 mt-1 flex-shrink-0"
+              />
+              <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-5 py-4 shadow-sm">
+                <div className="flex space-x-2">
+                  <div className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce" />
+                  <div className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.15s]" />
+                  <div className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.3s]" />
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {completed && (
-          <div className="text-center py-6">
-            <p className="text-lg text-gray-500">Session complete. Thank you for your feedback!</p>
+          {completed && (
+            <div className="text-center py-6">
+              <p className="text-lg text-gray-500">
+                Session complete. Thank you for your feedback!
+              </p>
 
-            {/* Google Review CTA — only for promoters (NPS 9-10) */}
-            {googleReviewUrl && npsScore >= 9 && reviewResponse !== "no" && (
-              <a
-                href={googleReviewUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 px-6 py-3 text-base font-semibold text-white rounded-xl shadow-md hover:shadow-lg transition"
-                style={{ backgroundColor: "var(--cam-blue, #2563eb)" }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                  <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clipRule="evenodd" />
-                </svg>
-                Leave a Google Review
-              </a>
-            )}
-
-            {googleReviewUrl && npsScore >= 9 && reviewResponse === "no" && (
-              <p className="mt-4">
+              {/* Google Review CTA — only for promoters (NPS 9-10) */}
+              {googleReviewUrl && npsScore >= 9 && reviewResponse !== "no" && (
                 <a
                   href={googleReviewUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-gray-400 hover:text-gray-600 underline transition"
+                  className="mt-4 inline-flex items-center gap-2 px-6 py-3 text-base font-semibold text-white rounded-xl shadow-md hover:shadow-lg transition"
+                  style={{ backgroundColor: "var(--cam-blue, #2563eb)" }}
                 >
-                  Changed your mind? We'd be grateful for a review.
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  Leave a Google Review
                 </a>
-              </p>
-            )}
+              )}
 
-            {isMock && (
-              <button
-                onClick={() => navigate(`/superadmin/clients/${clientId}`)}
-                className="mt-3 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100"
-              >
-                Return to Client Detail
-              </button>
-            )}
-          </div>
-        )}
+              {googleReviewUrl && npsScore >= 9 && reviewResponse === "no" && (
+                <p className="mt-4">
+                  <a
+                    href={googleReviewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-gray-400 hover:text-gray-600 underline transition"
+                  >
+                    Changed your mind? We'd be grateful for a review.
+                  </a>
+                </p>
+              )}
 
-        <div ref={bottomRef} />
+              {isMock && (
+                <button
+                  onClick={() => navigate(`/superadmin/clients/${clientId}`)}
+                  className="mt-3 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100"
+                >
+                  Return to Client Detail
+                </button>
+              )}
+            </div>
+          )}
+
+          <div ref={bottomRef} />
         </div>
 
         {/* Powered by footer */}
@@ -376,92 +421,109 @@ export default function ChatPage() {
         {/* Bottom bar: input + end chat */}
         {npsSubmitted && !completed && (
           <div className="bg-white border-t flex-shrink-0">
-          <form onSubmit={handleSubmit} className="px-5 py-4 flex gap-3 items-end">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your response..."
-              disabled={loading}
-              rows={2}
-              className="input-field flex-1 disabled:bg-gray-50 resize-none"
-              style={{ maxHeight: 150 }}
-              autoFocus
-            />
-            {synth && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (speechEnabled) stopSpeaking();
-                  setSpeechEnabled((prev) => !prev);
-                }}
-                className={`p-4 rounded-xl transition ${
-                  speechEnabled
-                    ? speaking
-                      ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
-                      : "bg-blue-50 text-blue-500 hover:bg-blue-100"
-                    : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                }`}
-                title={speechEnabled ? (speaking ? "AI is speaking... (click to disable)" : "AI voice on (click to disable)") : "Enable AI voice"}
-              >
-                <div className="relative">
-                  {speechEnabled ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-                      <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM18.584 5.106a.75.75 0 011.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 01-1.06-1.06 8.25 8.25 0 000-11.668.75.75 0 010-1.06z" />
-                      <path d="M15.932 7.757a.75.75 0 011.061 0 6 6 0 010 8.486.75.75 0 01-1.06-1.061 4.5 4.5 0 000-6.364.75.75 0 010-1.06z" />
+            <form onSubmit={handleSubmit} className="px-5 py-4 flex gap-3 items-end">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Type your response..."
+                disabled={loading}
+                rows={2}
+                className="input-field flex-1 disabled:bg-gray-50 resize-none"
+                style={{ maxHeight: 150 }}
+                autoFocus
+              />
+              {synth && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (speechEnabled) stopSpeaking();
+                    setSpeechEnabled((prev) => !prev);
+                  }}
+                  className={`p-4 rounded-xl transition ${
+                    speechEnabled
+                      ? speaking
+                        ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
+                        : "bg-blue-50 text-blue-500 hover:bg-blue-100"
+                      : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                  }`}
+                  title={
+                    speechEnabled
+                      ? speaking
+                        ? "AI is speaking... (click to disable)"
+                        : "AI voice on (click to disable)"
+                      : "Enable AI voice"
+                  }
+                >
+                  <div className="relative">
+                    {speechEnabled ? (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="w-6 h-6"
+                      >
+                        <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM18.584 5.106a.75.75 0 011.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 01-1.06-1.06 8.25 8.25 0 000-11.668.75.75 0 010-1.06z" />
+                        <path d="M15.932 7.757a.75.75 0 011.061 0 6 6 0 010 8.486.75.75 0 01-1.06-1.061 4.5 4.5 0 000-6.364.75.75 0 010-1.06z" />
+                      </svg>
+                    ) : (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="w-6 h-6"
+                      >
+                        <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM17.78 9.22a.75.75 0 10-1.06 1.06L18.44 12l-1.72 1.72a.75.75 0 001.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 101.06-1.06L20.56 12l1.72-1.72a.75.75 0 00-1.06-1.06l-1.72 1.72-1.72-1.72z" />
+                      </svg>
+                    )}
+                    {speaking && (
+                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse" />
+                    )}
+                  </div>
+                </button>
+              )}
+              {SpeechRecognition && (
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  className={`p-4 rounded-xl transition ${
+                    listening
+                      ? "bg-red-100 text-red-600 hover:bg-red-200"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                  title={listening ? "Stop recording" : "Start voice input"}
+                >
+                  <div className="relative">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="w-6 h-6"
+                    >
+                      <path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
+                      <path d="M6 11a1 1 0 10-2 0 8 8 0 0016 0 1 1 0 10-2 0 6 6 0 01-12 0z" />
+                      <path d="M11 19.93A8.01 8.01 0 014 12a1 1 0 112 0 6 6 0 0012 0 1 1 0 112 0 8.01 8.01 0 01-7 7.93V22a1 1 0 11-2 0v-2.07z" />
                     </svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-                      <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM17.78 9.22a.75.75 0 10-1.06 1.06L18.44 12l-1.72 1.72a.75.75 0 001.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 101.06-1.06L20.56 12l1.72-1.72a.75.75 0 00-1.06-1.06l-1.72 1.72-1.72-1.72z" />
-                    </svg>
-                  )}
-                  {speaking && (
-                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse" />
-                  )}
-                </div>
+                    {listening && (
+                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                    )}
+                  </div>
+                </button>
+              )}
+              <button type="submit" disabled={loading || !input.trim()} className="btn-send">
+                Send
               </button>
-            )}
-            {SpeechRecognition && (
+            </form>
+            <div className="px-5 pb-4">
               <button
-                type="button"
-                onClick={toggleListening}
-                className={`p-4 rounded-xl transition ${
-                  listening
-                    ? "bg-red-100 text-red-600 hover:bg-red-200"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-                title={listening ? "Stop recording" : "Start voice input"}
+                onClick={handleEndChat}
+                disabled={loading}
+                className="w-full py-2 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50"
               >
-                <div className="relative">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-                    <path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
-                    <path d="M6 11a1 1 0 10-2 0 8 8 0 0016 0 1 1 0 10-2 0 6 6 0 01-12 0z" />
-                    <path d="M11 19.93A8.01 8.01 0 014 12a1 1 0 112 0 6 6 0 0012 0 1 1 0 112 0 8.01 8.01 0 01-7 7.93V22a1 1 0 11-2 0v-2.07z" />
-                  </svg>
-                  {listening && (
-                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                  )}
-                </div>
+                End Chat
               </button>
-            )}
-            <button
-              type="submit"
-              disabled={loading || !input.trim()}
-              className="btn-send"
-            >
-              Send
-            </button>
-          </form>
-          <div className="px-5 pb-4">
-            <button
-              onClick={handleEndChat}
-              disabled={loading}
-              className="w-full py-2 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50"
-            >
-              End Chat
-            </button>
-          </div>
+            </div>
           </div>
         )}
       </div>
