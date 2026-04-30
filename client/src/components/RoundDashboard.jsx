@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { COLORS, barColor, npsColor, copyInsights } from "../utils/npsHelpers";
 import WordCloud from "./WordCloud";
+import ActionDrawer from "./ActionDrawer";
 
 export default function RoundDashboard() {
   const { roundId } = useParams();
@@ -42,6 +43,9 @@ export default function RoundDashboard() {
   const [showSummaries, setShowSummaries] = useState(false);
   const [includeSummariesInPrint, setIncludeSummariesInPrint] = useState(false);
   const [showAllAlerts, setShowAllAlerts] = useState(false);
+  // Promote-to-Action: when set, opens the ActionDrawer with seed data drawn
+  // from the warning. After save, the action shows up on /admin/actions.
+  const [promoteSeed, setPromoteSeed] = useState(null);
 
   useEffect(() => {
     loadDashboard();
@@ -869,6 +873,48 @@ export default function RoundDashboard() {
         </div>
       </div>
 
+      {/* AI narrative — concluded rounds with insights only.
+          Promotes the executive_summary to the top so the round verdict is
+          a quick read. The full insights deep-dive still lives further
+          down on the page. */}
+      {isConcluded && insights?.executive_summary && !insights.error && (
+        <div
+          className="rounded-xl overflow-hidden border"
+          style={{ borderColor: "var(--plum-soft)", backgroundColor: "white" }}
+          data-testid="ai-narrative"
+        >
+          <div
+            className="px-5 py-2.5 flex items-center gap-2"
+            style={{ backgroundColor: "var(--plum-tint)" }}
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="var(--plum)">
+              <path d="M8 1l1.7 4.4L14 7l-4.3 1.6L8 13l-1.7-4.4L2 7l4.3-1.6z" />
+            </svg>
+            <p
+              className="text-[11px] font-semibold uppercase tracking-wider"
+              style={{ color: "var(--plum)", letterSpacing: "0.12em" }}
+            >
+              The round in 60 seconds
+            </p>
+            <span className="ml-auto text-[11px]" style={{ color: "var(--ink-4)" }}>
+              Synthesized by AI
+            </span>
+          </div>
+          <p
+            className="px-5 py-4"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 19,
+              lineHeight: 1.5,
+              color: "var(--ink-2)",
+              textWrap: "pretty",
+            }}
+          >
+            {insights.executive_summary}
+          </p>
+        </div>
+      )}
+
       {/* Warnings Section — grouped by community */}
       {alerts.length > 0 &&
         (() => {
@@ -1041,6 +1087,26 @@ export default function RoundDashboard() {
                                             className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition"
                                           >
                                             Mark Solved
+                                          </button>
+                                          <button
+                                            onClick={() =>
+                                              setPromoteSeed({
+                                                theme:
+                                                  alert.alert_type?.replace(/_/g, " ") ||
+                                                  "Critical alert",
+                                                title: "",
+                                                details: `From Round ${round.round_number} — ${alert.alert_community || "Unknown community"}: ${alert.description}`,
+                                              })
+                                            }
+                                            className="text-xs font-semibold px-2.5 py-1 rounded-lg transition border-2 border-dashed"
+                                            style={{
+                                              borderColor: "var(--plum-soft)",
+                                              color: "var(--plum)",
+                                              backgroundColor: "transparent",
+                                            }}
+                                            title="Graduate this community-level warning into an org-wide Action"
+                                          >
+                                            Promote to Action
                                           </button>
                                           <button
                                             onClick={() => handleDismissAlert(alert.id)}
@@ -1835,6 +1901,19 @@ export default function RoundDashboard() {
           )}
         </div>
       )}
+
+      <ActionDrawer
+        isOpen={!!promoteSeed}
+        seed={promoteSeed}
+        ownerDefault={undefined}
+        onClose={() => setPromoteSeed(null)}
+        onSaved={() => {
+          setPromoteSeed(null);
+          // Friendly hand-off to the Actions screen so the admin sees their
+          // newly-promoted warning land in the journal.
+          navigate("/admin/actions");
+        }}
+      />
     </div>
   );
 }
