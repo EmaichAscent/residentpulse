@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import ChatBubble from "../components/ChatBubble";
 import NpsScale from "../components/NpsScale";
 import { buildWelcomeMessage } from "../utils/chatWelcome";
 
@@ -342,18 +341,18 @@ export default function ChatPage() {
 
   return (
     <div
-      className="flex flex-col min-h-screen items-center justify-center px-4 py-6"
+      className="flex flex-col min-h-screen items-center px-4 py-6"
       style={{
         background: "linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%)",
       }}
     >
       <div
-        className="flex flex-col w-full max-w-2xl rounded-2xl overflow-hidden bg-white"
+        className="flex flex-col w-full max-w-2xl rounded-2xl overflow-hidden bg-white my-auto"
         style={{
           boxShadow: "var(--shadow-lg)",
           border: "1px solid var(--line)",
-          maxHeight: "min(900px, 100vh - 48px)",
-          minHeight: 600,
+          maxHeight: "min(900px, 100vh - 80px)",
+          height: "min(720px, 100vh - 80px)",
         }}
         data-testid="chat-card"
       >
@@ -444,12 +443,15 @@ export default function ChatPage() {
           {/* Phase 1: Trust gate — welcome bubble + Sounds good button */}
           {!trustAccepted && (
             <>
-              <ChatBubble role="assistant" content={welcomeContent} />
-              <div className="ml-10 mt-3" data-testid="trust-gate-actions">
+              <ChatMessage role="assistant" content={welcomeContent} />
+              <div className="ml-10 mt-2 mb-2" data-testid="trust-gate-actions">
                 <button
                   onClick={handleAcceptTrust}
-                  className="text-sm font-semibold px-4 py-2 rounded-full text-white transition hover:opacity-90"
-                  style={{ backgroundColor: "var(--pulse)" }}
+                  className="text-base font-semibold px-6 py-3 rounded-xl text-white transition hover:opacity-90"
+                  style={{
+                    backgroundColor: "var(--pulse)",
+                    boxShadow: "var(--shadow-md)",
+                  }}
                 >
                   Sounds good →
                 </button>
@@ -460,8 +462,8 @@ export default function ChatPage() {
           {/* Phase 2: Trust accepted, NPS pending — show welcome + NPS prompt + scale */}
           {trustAccepted && !npsSubmitted && (
             <>
-              <ChatBubble role="assistant" content={welcomeContent} />
-              <ChatBubble role="assistant" content={npsPrompt} />
+              <ChatMessage role="assistant" content={welcomeContent} />
+              <ChatMessage role="assistant" content={npsPrompt} />
               <div className="ml-10 mt-3">
                 <NpsScale onSelect={handleNpsSelect} />
               </div>
@@ -470,7 +472,7 @@ export default function ChatPage() {
 
           {/* Phase 3+: conversation */}
           {messages.map((msg, i) => (
-            <ChatBubble key={i} role={msg.role} content={msg.content} timestamp={msg.timestamp} />
+            <ChatMessage key={i} role={msg.role} content={msg.content} timestamp={msg.timestamp} />
           ))}
 
           {loading && (
@@ -579,23 +581,6 @@ export default function ChatPage() {
           )}
 
           <div ref={bottomRef} />
-        </div>
-
-        {/* Footer */}
-        <div
-          className="flex-shrink-0 flex items-center justify-center gap-2 px-5 py-2"
-          style={{ borderTop: "1px solid var(--line)", backgroundColor: "var(--paper-2)" }}
-        >
-          <span className="text-[11px]" style={{ color: "var(--ink-4)" }}>
-            Powered by
-          </span>
-          <span className="text-[11px] font-semibold" style={{ color: "var(--ink-3)" }}>
-            ResidentPulse
-          </span>
-          <span className="text-[11px]" style={{ color: "var(--ink-5)" }}>
-            |
-          </span>
-          <img src="/CAMAscent.png" alt="CAM Ascent" className="h-4 object-contain opacity-70" />
         </div>
 
         {/* Bottom bar: input + end chat (only after NPS picked) */}
@@ -723,6 +708,94 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+
+      {/* Powered-by — outside the card, on the page wrapper */}
+      <div className="flex items-center justify-center gap-2 mt-4 mb-2">
+        <span className="text-[11px]" style={{ color: "var(--ink-4)" }}>
+          Powered by
+        </span>
+        <span className="text-[11px] font-semibold" style={{ color: "var(--ink-3)" }}>
+          ResidentPulse
+        </span>
+        <span className="text-[11px]" style={{ color: "var(--ink-5)" }}>
+          |
+        </span>
+        <img src="/CAMAscent.png" alt="CAM Ascent" className="h-4 object-contain opacity-70" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Inline chat message — design-token styled, distinct from the legacy
+ * ChatBubble used in admin Test Interview UI. Renders a small pulse-mark
+ * avatar for assistant messages and an ink-black bubble for user
+ * messages. Bubbles cap at 85% so long responses can breathe but short
+ * ones don't stretch awkwardly.
+ */
+function ChatMessage({ role, content, timestamp }) {
+  const isUser = role === "user";
+  const time = timestamp
+    ? new Date(timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : null;
+
+  return (
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-3`}>
+      {!isUser && <PulseAvatar />}
+      <div
+        className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}
+        style={{ maxWidth: "85%" }}
+      >
+        <div
+          className={`px-4 py-3 text-base leading-relaxed whitespace-pre-wrap break-words ${
+            isUser ? "rounded-2xl rounded-br-md" : "rounded-2xl rounded-bl-md"
+          }`}
+          style={
+            isUser
+              ? { backgroundColor: "var(--ink)", color: "white" }
+              : {
+                  backgroundColor: "white",
+                  border: "1px solid var(--line)",
+                  color: "var(--ink)",
+                  boxShadow: "var(--shadow-sm)",
+                }
+          }
+        >
+          {content}
+        </div>
+        {time && (
+          <p className="text-[11px] mt-1" style={{ color: "var(--ink-4)" }}>
+            {time}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Small pulse-mark avatar used for assistant messages in the chat.
+ * Mirrors the BrandAvatar fallback but at message-bubble scale.
+ */
+function PulseAvatar() {
+  return (
+    <div
+      className="h-8 w-8 rounded-full flex items-center justify-center mr-2 mt-0.5 flex-shrink-0"
+      style={{ background: "linear-gradient(135deg, var(--pulse), var(--pulse-deep))" }}
+      aria-hidden="true"
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="white"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 12h4l2-7 4 14 2-7h6" />
+      </svg>
     </div>
   );
 }
