@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ChatBubble from "../components/ChatBubble";
 import ConfirmModal from "../components/ConfirmModal";
+import TypedConfirmModal from "../components/TypedConfirmModal";
 import MockSurveyModal from "../components/MockSurveyModal";
 
 export default function SuperAdminClientDetailPage() {
@@ -264,46 +265,32 @@ export default function SuperAdminClientDetailPage() {
             <h1 className="text-xl font-bold text-white">{client.company_name}</h1>
             <p className="text-sm text-white/60">{client.client_code}</p>
           </div>
+          {/* Safe actions only — destructive (Reset / Deactivate / Delete) live
+              in the Danger Zone at the bottom of this page. */}
           <div className="flex gap-2">
-            {client.status === "pending" && (
-              <button
-                onClick={() => setConfirmAction({ type: "delete" })}
-                className="px-4 py-2 text-sm font-semibold text-red-800 bg-red-200 rounded-lg hover:bg-red-300 shadow-sm transition"
-              >
-                Delete
-              </button>
-            )}
-            <button
-              onClick={() => setConfirmAction({ type: "reset" })}
-              disabled={resetting}
-              className="px-4 py-2 text-sm font-semibold text-red-800 bg-red-200 rounded-lg hover:bg-red-300 shadow-sm transition disabled:opacity-40"
-            >
-              {resetting ? "Resetting..." : "Reset"}
-            </button>
             <button
               onClick={() => setShowMockModal(true)}
               disabled={client.status !== "active"}
-              className="px-4 py-2 text-sm font-semibold text-purple-800 bg-purple-200 rounded-lg hover:bg-purple-300 shadow-sm transition disabled:opacity-40"
+              className="px-4 py-2 text-sm font-semibold text-white rounded-lg shadow-sm transition disabled:opacity-40"
+              style={{ backgroundColor: "var(--pulse)" }}
             >
               Test Survey
             </button>
             <button
               onClick={() => setConfirmAction({ type: "impersonate" })}
               disabled={client.status !== "active"}
-              className="px-4 py-2 text-sm font-semibold text-blue-800 bg-blue-200 rounded-lg hover:bg-blue-300 shadow-sm transition disabled:opacity-40"
+              className="px-4 py-2 text-sm font-semibold rounded-lg transition disabled:opacity-40 border border-white/40 text-white hover:bg-white/10"
             >
               Impersonate
             </button>
-            <button
-              onClick={() => setConfirmAction({ type: "toggleStatus" })}
-              className={`px-4 py-2 text-sm font-semibold rounded-lg shadow-sm transition ${
-                client.status === "active"
-                  ? "text-amber-800 bg-amber-200 hover:bg-amber-300"
-                  : "text-emerald-800 bg-emerald-200 hover:bg-emerald-300"
-              }`}
-            >
-              {client.status === "active" ? "Deactivate" : "Activate"}
-            </button>
+            {client.status === "inactive" && (
+              <button
+                onClick={() => setConfirmAction({ type: "activate" })}
+                className="px-4 py-2 text-sm font-semibold text-emerald-800 bg-emerald-200 rounded-lg hover:bg-emerald-300 shadow-sm transition"
+              >
+                Activate
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -939,42 +926,136 @@ export default function SuperAdminClientDetailPage() {
             </div>
           </div>
         )}
+
+        {/* Danger Zone — destructive actions live here, away from the safe
+            actions in the header. Each opens a TypedConfirmModal that
+            requires typing the company name to confirm. */}
+        <div
+          className="rounded-xl border-2 overflow-hidden"
+          style={{
+            background: "linear-gradient(180deg, #FFFCFB, var(--coral-tint))",
+            borderColor: "var(--coral-soft)",
+          }}
+        >
+          <div className="px-6 py-4 border-b" style={{ borderColor: "var(--coral-soft)" }}>
+            <h2 className="text-lg font-semibold" style={{ color: "var(--coral)" }}>
+              Danger Zone
+            </h2>
+            <p className="text-xs mt-0.5" style={{ color: "var(--ink-3)" }}>
+              These actions are destructive and require typing the company name to confirm.
+            </p>
+          </div>
+          <div className="divide-y" style={{ borderColor: "var(--coral-soft)" }}>
+            <div className="flex items-center justify-between px-6 py-4 gap-4">
+              <div>
+                <p className="text-sm font-medium" style={{ color: "var(--ink)" }}>
+                  Reset client
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: "var(--ink-3)" }}>
+                  Wipes admin interviews, generated prompt, all survey rounds, sessions, and alerts.
+                  Board members are preserved. Admin re-does onboarding.
+                </p>
+              </div>
+              <button
+                onClick={() => setConfirmAction({ type: "reset" })}
+                disabled={resetting}
+                className="flex-shrink-0 px-4 py-2 text-sm font-semibold rounded-lg transition disabled:opacity-50 bg-white"
+                style={{ color: "var(--coral)", border: "1px solid var(--coral-soft)" }}
+              >
+                {resetting ? "Resetting..." : "Reset"}
+              </button>
+            </div>
+
+            {client.status === "active" && (
+              <div className="flex items-center justify-between px-6 py-4 gap-4">
+                <div>
+                  <p className="text-sm font-medium" style={{ color: "var(--ink)" }}>
+                    Deactivate tenant
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--ink-3)" }}>
+                    Disables the account. Admins lose login access. Survey rounds stop. Data is
+                    retained and can be re-enabled.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setConfirmAction({ type: "deactivate" })}
+                  className="flex-shrink-0 px-4 py-2 text-sm font-semibold rounded-lg transition bg-white"
+                  style={{ color: "var(--coral)", border: "1px solid var(--coral-soft)" }}
+                >
+                  Deactivate
+                </button>
+              </div>
+            )}
+
+            {client.status === "pending" && (
+              <div className="flex items-center justify-between px-6 py-4 gap-4">
+                <div>
+                  <p className="text-sm font-medium" style={{ color: "var(--ink)" }}>
+                    Delete pending signup
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--ink-3)" }}>
+                    Permanently removes this pending client and all associated records. Cannot be
+                    undone.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setConfirmAction({ type: "delete" })}
+                  className="flex-shrink-0 px-4 py-2 text-sm font-semibold text-white rounded-lg transition"
+                  style={{ backgroundColor: "var(--coral)" }}
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+      {/* Activate (inactive → active) is reversible; uses the lower-friction modal. */}
       <ConfirmModal
-        isOpen={confirmAction?.type === "toggleStatus"}
+        isOpen={confirmAction?.type === "activate"}
         onClose={() => setConfirmAction(null)}
         onConfirm={handleToggleStatus}
-        title={client.status === "active" ? "Deactivate Client" : "Activate Client"}
-        message={`${client.status === "active" ? "Deactivate" : "Activate"} ${client.company_name}?`}
-        confirmLabel={client.status === "active" ? "Deactivate" : "Activate"}
-        destructive={client.status === "active"}
+        title="Activate Client"
+        message={`Activate ${client.company_name}?`}
+        confirmLabel="Activate"
       />
+      {/* Impersonate is non-destructive but logs to audit trail; lower-friction modal. */}
       <ConfirmModal
         isOpen={confirmAction?.type === "impersonate"}
         onClose={() => setConfirmAction(null)}
         onConfirm={handleImpersonate}
         title="Impersonate Client"
-        message={`Impersonate ${client.company_name}? You will be logged in as their admin.`}
+        message={`Impersonate ${client.company_name}? You will be logged in as their admin and all actions will be logged to the audit trail.`}
         confirmLabel="Impersonate"
       />
-      <ConfirmModal
+      {/* Destructive actions — typed confirmation required. */}
+      <TypedConfirmModal
         isOpen={confirmAction?.type === "reset"}
         onClose={() => setConfirmAction(null)}
         onConfirm={handleReset}
-        title="Reset Client"
-        message={`RESET "${client.company_name}"?\n\nThis will delete:\n- Admin interviews & generated prompt\n- All survey rounds\n- All board member sessions & responses\n- Critical alerts\n\nBoard members will be preserved.\nAdmins will need to redo onboarding.\n\nThis cannot be undone.`}
-        confirmLabel="Reset"
-        destructive
+        title={`Reset ${client.company_name}`}
+        message={`This will delete:\n  • Admin interviews & generated prompt\n  • All survey rounds\n  • All board member sessions & responses\n  • Critical alerts\n\nBoard members will be preserved.\nAdmins will need to redo onboarding.\n\nThis cannot be undone.`}
+        confirmPhrase={client.company_name}
+        confirmLabel={resetting ? "Resetting..." : "Reset"}
         loading={resetting}
       />
-      <ConfirmModal
+      <TypedConfirmModal
+        isOpen={confirmAction?.type === "deactivate"}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={handleToggleStatus}
+        title={`Deactivate ${client.company_name}`}
+        message={`Admins will lose login access. Active survey rounds will stop accepting responses. All data is retained and the tenant can be re-activated later.`}
+        confirmPhrase={client.company_name}
+        confirmLabel="Deactivate"
+      />
+      <TypedConfirmModal
         isOpen={confirmAction?.type === "delete"}
         onClose={() => setConfirmAction(null)}
         onConfirm={handleDelete}
-        title="Delete Client"
-        message={`Permanently delete "${client.company_name}" and all associated data?\n\nThis cannot be undone.`}
+        title={`Delete ${client.company_name}`}
+        message={`Permanently delete this pending client and all associated data.\n\nThis cannot be undone.`}
+        confirmPhrase={client.company_name}
         confirmLabel="Delete"
-        destructive
       />
       <ConfirmModal
         isOpen={confirmAction?.type === "error"}
