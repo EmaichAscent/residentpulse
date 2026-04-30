@@ -20,7 +20,7 @@
     "test": "npm test --prefix client && npm test --prefix server",
     "test:client": "npm test --prefix client",
     "test:server": "npm test --prefix server",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "lint-staged": {
     "*.{js,jsx}": [
