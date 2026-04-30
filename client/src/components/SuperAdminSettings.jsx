@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import ConfirmModal from "./ConfirmModal";
+import TypedConfirmModal from "./TypedConfirmModal";
 
 const EMPTY_PLAN = {
   name: "",
@@ -737,14 +738,14 @@ export default function SuperAdminSettings() {
       </div>
 
       {/* ── Modals ── */}
-      <ConfirmModal
+      <TypedConfirmModal
         isOpen={!!deletePlanTarget}
         onClose={() => setDeletePlanTarget(null)}
         onConfirm={deletePlan}
-        title="Delete Plan"
-        message={`Delete "${deletePlanTarget?.display_name}"?\n\nThis plan has ${deletePlanTarget?.client_count || 0} client(s). Plans with active clients cannot be deleted.`}
+        title={`Delete plan "${deletePlanTarget?.display_name || ""}"`}
+        message={`This plan has ${deletePlanTarget?.client_count || 0} client(s). Plans with active clients cannot be deleted.\n\nThis cannot be undone.`}
+        confirmPhrase={deletePlanTarget?.display_name || ""}
         confirmLabel="Delete"
-        destructive
       />
       <ConfirmModal
         isOpen={!!deleteVersionTarget}
