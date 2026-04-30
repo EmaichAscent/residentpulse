@@ -83,6 +83,7 @@ export default function AdminPage() {
 
   const TABS = [
     { path: "home", label: "Home" },
+    { path: "actions", label: "Actions" },
     { path: "rounds", label: "Rounds" },
     { path: "trends", label: "Trends" },
     { path: "communities", label: "Communities" },
