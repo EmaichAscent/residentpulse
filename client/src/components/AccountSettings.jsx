@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import AdminUserList from "./AdminUserList";
 import AddAdminUserModal from "./AddAdminUserModal";
 import ConfirmModal from "./ConfirmModal";
+import TypedConfirmModal from "./TypedConfirmModal";
 
 export default function AccountSettings() {
   const [client, setClient] = useState(null);
@@ -1302,17 +1303,17 @@ export default function AccountSettings() {
         onClose={() => setShowAddUserModal(false)}
         onAdd={loadData}
       />
-      <ConfirmModal
+      <TypedConfirmModal
         isOpen={!!removeAdminTarget}
         onClose={() => setRemoveAdminTarget(null)}
         onConfirm={async () => {
           await handleRemoveUser(removeAdminTarget);
           setRemoveAdminTarget(null);
         }}
-        title="Remove Admin User"
-        message="Are you sure you want to remove this admin user?"
+        title="Remove admin user"
+        message={`This admin will lose access to the account immediately. They can be re-invited later.`}
+        confirmPhrase={removeAdminTarget?.email || ""}
         confirmLabel="Remove"
-        destructive
       />
       <ConfirmModal
         isOpen={!!cadenceConfirm}
