@@ -267,6 +267,27 @@ export default function TrendsView() {
 
   return (
     <div className="space-y-6">
+      {/* Page header — Fraunces serif to match Home/Actions */}
+      <div data-testid="trends-header">
+        <p
+          className="text-[11px] font-semibold uppercase tracking-wider mb-1"
+          style={{ color: "var(--ink-4)", letterSpacing: "0.12em" }}
+        >
+          {concludedRounds.length} concluded rounds · what's getting better, what's getting worse
+        </p>
+        <h1
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 32,
+            fontWeight: 500,
+            letterSpacing: "-0.02em",
+            color: "var(--ink)",
+          }}
+        >
+          Trends
+        </h1>
+      </div>
+
       {/* NPS Over Time */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">
@@ -398,7 +419,7 @@ export default function TrendsView() {
                   <button
                     onClick={() => setShowAllManagers(!showAllManagers)}
                     className="text-xs font-medium hover:underline"
-                    style={{ color: "var(--cam-blue)" }}
+                    style={{ color: "var(--pulse-deep)" }}
                   >
                     {showAllManagers ? "Show Top/Bottom 5" : `Show All ${allManagers.length}`}
                   </button>
@@ -687,7 +708,7 @@ export default function TrendsView() {
                   <button
                     onClick={() => setShowAllTopics(!showAllTopics)}
                     className="text-xs font-medium hover:underline"
-                    style={{ color: "var(--cam-blue)" }}
+                    style={{ color: "var(--pulse-deep)" }}
                   >
                     {showAllTopics ? `Show Last ${TOPIC_LIMIT}` : `Show All ${topicTrends.length}`}
                   </button>
