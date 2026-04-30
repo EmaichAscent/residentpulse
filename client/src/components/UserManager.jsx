@@ -570,6 +570,27 @@ resident2@example.com,Jane,Smith,Oak Hills`;
 
   return (
     <div className="space-y-6">
+      {/* Page header — Fraunces serif to match Home/Actions/Trends */}
+      <div data-testid="members-header">
+        <p
+          className="text-[11px] font-semibold uppercase tracking-wider mb-1"
+          style={{ color: "var(--ink-4)", letterSpacing: "0.12em" }}
+        >
+          {users.length} members across the portfolio · roster + status
+        </p>
+        <h1
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 32,
+            fontWeight: 500,
+            letterSpacing: "-0.02em",
+            color: "var(--ink)",
+          }}
+        >
+          Board members
+        </h1>
+      </div>
+
       {/* Search Bar with Import and Add Buttons */}
       <div>
         <div className="flex gap-3">
@@ -601,7 +622,7 @@ resident2@example.com,Jane,Smith,Oak Hills`;
           </a>
           <label
             className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg cursor-pointer transition hover:opacity-90 disabled:opacity-50 whitespace-nowrap"
-            style={{ backgroundColor: "var(--cam-blue)" }}
+            style={{ backgroundColor: "var(--pulse)" }}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -635,7 +656,7 @@ resident2@example.com,Jane,Smith,Oak Hills`;
               setFormError("");
             }}
             className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 whitespace-nowrap"
-            style={{ backgroundColor: "var(--cam-blue)" }}
+            style={{ backgroundColor: "var(--pulse)" }}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -653,7 +674,7 @@ resident2@example.com,Jane,Smith,Oak Hills`;
           <button
             onClick={downloadSampleCSV}
             className="font-medium hover:underline"
-            style={{ color: "var(--cam-blue)" }}
+            style={{ color: "var(--pulse)" }}
           >
             Download sample CSV
           </button>
@@ -710,7 +731,7 @@ resident2@example.com,Jane,Smith,Oak Hills`;
               onClick={handleEnroll}
               disabled={enrolling}
               className="px-4 py-2 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
-              style={{ backgroundColor: "var(--cam-green)" }}
+              style={{ backgroundColor: "var(--pulse)" }}
             >
               {enrolling ? "Sending..." : "Send Invitation"}
             </button>
@@ -782,7 +803,7 @@ resident2@example.com,Jane,Smith,Oak Hills`;
                 type="submit"
                 disabled={saving}
                 className="px-5 py-2.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
-                style={{ backgroundColor: "var(--cam-blue)" }}
+                style={{ backgroundColor: "var(--pulse)" }}
               >
                 {saving ? "Saving..." : "Add User"}
               </button>
@@ -911,7 +932,7 @@ resident2@example.com,Jane,Smith,Oak Hills`;
                                 onClick={handleSaveEdit}
                                 disabled={editSaving}
                                 className="px-4 py-2 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
-                                style={{ backgroundColor: "var(--cam-blue)" }}
+                                style={{ backgroundColor: "var(--pulse)" }}
                               >
                                 {editSaving ? "Saving..." : "Save"}
                               </button>
@@ -983,7 +1004,7 @@ resident2@example.com,Jane,Smith,Oak Hills`;
                                   onClick={() => handleResend(u.id)}
                                   disabled={resending === u.id}
                                   className="text-xs font-medium hover:underline disabled:opacity-50"
-                                  style={{ color: "var(--cam-blue)" }}
+                                  style={{ color: "var(--pulse)" }}
                                 >
                                   {resending === u.id ? "Sending..." : "Resend"}
                                 </button>
@@ -998,7 +1019,7 @@ resident2@example.com,Jane,Smith,Oak Hills`;
                                   onClick={() => handleResend(u.id)}
                                   disabled={resending === u.id}
                                   className="text-xs font-medium hover:underline disabled:opacity-50"
-                                  style={{ color: "var(--cam-blue)" }}
+                                  style={{ color: "var(--pulse)" }}
                                 >
                                   {resending === u.id ? "Sending..." : "Resend"}
                                 </button>
@@ -1221,7 +1242,7 @@ function InactiveMembers({ onReactivate }) {
                             onClick={() => handleReactivate(m.id)}
                             disabled={reactivating === m.id}
                             className="text-xs font-medium hover:underline disabled:opacity-50"
-                            style={{ color: "var(--cam-blue)" }}
+                            style={{ color: "var(--pulse)" }}
                           >
                             {reactivating === m.id ? "Reactivating..." : "Reactivate"}
                           </button>
