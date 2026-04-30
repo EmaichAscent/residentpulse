@@ -110,7 +110,9 @@ describe("AdminPage shell — Phase 3 PR4 left-rail design", () => {
 
   it("renders user-card with initials, name, and Sign out", async () => {
     renderShell();
-    await waitFor(() => expect(screen.getByTestId("user-card")).toBeInTheDocument());
+    // Wait for the user state to actually populate — the card mounts
+    // immediately with "Loading…" placeholder, so testID alone isn't enough.
+    await screen.findByText("Mike Hardy");
     const card = screen.getByTestId("user-card");
     expect(card).toHaveTextContent("MH"); // initials from first+last name
     expect(card).toHaveTextContent("Mike Hardy");
