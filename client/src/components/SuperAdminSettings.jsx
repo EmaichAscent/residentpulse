@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import ConfirmModal from "./ConfirmModal";
 import TypedConfirmModal from "./TypedConfirmModal";
+import PromptVersionHistory from "./PromptVersionHistory";
 
 const EMPTY_PLAN = {
   name: "",
@@ -600,6 +601,15 @@ export default function SuperAdminSettings() {
                 <span className="text-sm text-red-600 font-medium">{interviewError}</span>
               )}
             </div>
+            <PromptVersionHistory
+              key={interviewTab}
+              promptKey={interviewTab}
+              currentText={interviewPrompts[interviewTab] || ""}
+              onLoadVersion={(text) =>
+                setInterviewPrompts({ ...interviewPrompts, [interviewTab]: text })
+              }
+              onRestored={loadInterviewPrompts}
+            />
           </>
         )}
       </div>

@@ -109,7 +109,7 @@ async function initializeSchema() {
       )
     `);
 
-    // Create prompt_versions table (version history for system prompt)
+    // Create prompt_versions table (version history for editable system prompts)
     await client.query(`
       CREATE TABLE IF NOT EXISTS prompt_versions (
         id SERIAL PRIMARY KEY,
@@ -118,6 +118,19 @@ async function initializeSchema() {
         created_by TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Phase 2 PR2: extend versioning to all four prompts (board interview,
+    // client onboarding, re-interview, supplement generator). Existing rows
+    // default to 'system_prompt' since that was the only prompt versioned
+    // before this migration.
+    await client.query(`
+      ALTER TABLE prompt_versions
+      ADD COLUMN IF NOT EXISTS prompt_key TEXT NOT NULL DEFAULT 'system_prompt'
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_prompt_versions_key_created
+      ON prompt_versions (prompt_key, created_at DESC)
     `);
 
     // Create users table (board members)
