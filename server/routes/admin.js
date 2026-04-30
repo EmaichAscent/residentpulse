@@ -1463,19 +1463,15 @@ router.post("/sessions/:id/finalize", async (req, res) => {
       return res.status(400).json({ error: "Session is already completed" });
     }
 
-    // Check it has enough data to finalize
-    const messageCount = await db.get(
-      "SELECT COUNT(*) as count FROM messages WHERE session_id = ? AND role = 'user'",
-      [sessionId]
-    );
-    if (!messageCount || messageCount.count < 2) {
-      return res.status(400).json({ error: "Session does not have enough conversation data to finalize" });
+    if (session.nps_score == null) {
+      return res.status(400).json({ error: "Session has no NPS score and cannot be finalized" });
     }
 
     // Mark complete
     await db.run("UPDATE sessions SET completed = TRUE WHERE id = ? AND is_test = ?", [sessionId, req.isTestMode]);
 
-    // Generate summary synchronously so admin sees the result
+    // Generate summary synchronously so admin sees the result.
+    // Returns null if there's no transcript — that's fine, the NPS still counts.
     const summary = await generateSummary(sessionId);
 
     await logActivity({

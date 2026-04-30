@@ -178,9 +178,13 @@ export default function RoundDashboard() {
       });
       if (res.ok) {
         await loadDashboard();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        alert(body.error || "Failed to finalize this response. Please try again or contact support.");
       }
     } catch (err) {
       console.error("Failed to finalize session:", err);
+      alert("Network error while finalizing. Please check your connection and try again.");
     } finally {
       setFinalizing(null);
     }
