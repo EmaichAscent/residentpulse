@@ -4,7 +4,7 @@ import ConfirmModal from "./ConfirmModal";
 
 function AutocompleteInput({ value, onChange, options, placeholder, className }) {
   const [open, setOpen] = useState(false);
-  const [focused, setFocused] = useState(false);
+  const [, setFocused] = useState(false);
   const wrapperRef = useRef(null);
 
   const filtered = useMemo(() => {
@@ -26,8 +26,14 @@ function AutocompleteInput({ value, onChange, options, placeholder, className })
       <input
         type="text"
         value={value}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
-        onFocus={() => { setFocused(true); setOpen(true); }}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => {
+          setFocused(true);
+          setOpen(true);
+        }}
         onBlur={() => setFocused(false)}
         placeholder={placeholder}
         className={className}
@@ -39,7 +45,10 @@ function AutocompleteInput({ value, onChange, options, placeholder, className })
               key={opt}
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { onChange(opt); setOpen(false); }}
+              onClick={() => {
+                onChange(opt);
+                setOpen(false);
+              }}
               className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition"
             >
               {opt}
@@ -55,14 +64,22 @@ function TrendArrow({ sessions, email }) {
   const userSessions = useMemo(() => {
     if (!sessions || !email) return [];
     return sessions
-      .filter((s) => s.email?.toLowerCase() === email.toLowerCase() && s.nps_score !== null && s.nps_score !== undefined)
+      .filter(
+        (s) =>
+          s.email?.toLowerCase() === email.toLowerCase() &&
+          s.nps_score !== null &&
+          s.nps_score !== undefined
+      )
       .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
   }, [sessions, email]);
 
   if (userSessions.length < 2) {
     // Gray dash — one or no responses
     return (
-      <span className="text-gray-400" title={userSessions.length === 0 ? "No responses" : "1 response"}>
+      <span
+        className="text-gray-400"
+        title={userSessions.length === 0 ? "No responses" : "1 response"}
+      >
         —
       </span>
     );
@@ -74,8 +91,17 @@ function TrendArrow({ sessions, email }) {
   if (latest > prev) {
     return (
       <span className="text-green-600" title={`${prev} → ${latest}`}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 inline">
-          <path fillRule="evenodd" d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z" clipRule="evenodd" />
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className="w-5 h-5 inline"
+        >
+          <path
+            fillRule="evenodd"
+            d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z"
+            clipRule="evenodd"
+          />
         </svg>
       </span>
     );
@@ -84,8 +110,17 @@ function TrendArrow({ sessions, email }) {
   if (latest < prev) {
     return (
       <span className="text-red-600" title={`${prev} → ${latest}`}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 inline">
-          <path fillRule="evenodd" d="M10 3a.75.75 0 01.75.75v10.638l3.96-4.158a.75.75 0 111.08 1.04l-5.25 5.5a.75.75 0 01-1.08 0l-5.25-5.5a.75.75 0 111.08-1.04l3.96 4.158V3.75A.75.75 0 0110 3z" clipRule="evenodd" />
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className="w-5 h-5 inline"
+        >
+          <path
+            fillRule="evenodd"
+            d="M10 3a.75.75 0 01.75.75v10.638l3.96-4.158a.75.75 0 111.08 1.04l-5.25 5.5a.75.75 0 01-1.08 0l-5.25-5.5a.75.75 0 111.08-1.04l3.96 4.158V3.75A.75.75 0 0110 3z"
+            clipRule="evenodd"
+          />
         </svg>
       </span>
     );
@@ -101,22 +136,40 @@ function TrendArrow({ sessions, email }) {
 
 function NpsBadge({ nps }) {
   if (nps == null) return <span className="text-xs text-gray-300">—</span>;
-  if (nps >= 9) return <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">Promoter</span>;
-  if (nps >= 7) return <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-700">Passive</span>;
-  return <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700">Detractor</span>;
+  if (nps >= 9)
+    return (
+      <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">
+        Promoter
+      </span>
+    );
+  if (nps >= 7)
+    return (
+      <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-700">
+        Passive
+      </span>
+    );
+  return (
+    <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700">
+      Detractor
+    </span>
+  );
 }
 
 function NpsSparkline({ history }) {
-  if (!history || history.length === 0) return <p className="text-xs text-gray-400 italic">No survey history</p>;
+  if (!history || history.length === 0)
+    return <p className="text-xs text-gray-400 italic">No survey history</p>;
 
-  const maxRound = Math.max(...history.map(h => h.round));
-  const minRound = Math.min(...history.map(h => h.round));
+  const maxRound = Math.max(...history.map((h) => h.round));
+  const minRound = Math.min(...history.map((h) => h.round));
   const width = 280;
   const height = 60;
   const pad = 20;
 
-  const points = history.map((h, i) => {
-    const x = history.length === 1 ? width / 2 : pad + ((h.round - minRound) / (maxRound - minRound || 1)) * (width - pad * 2);
+  const points = history.map((h) => {
+    const x =
+      history.length === 1
+        ? width / 2
+        : pad + ((h.round - minRound) / (maxRound - minRound || 1)) * (width - pad * 2);
     const y = pad + ((10 - h.nps) / 10) * (height - pad * 2);
     return { x, y, nps: h.nps, round: h.round };
   });
@@ -135,11 +188,20 @@ function NpsSparkline({ history }) {
         {/* Dots */}
         {points.map((p, i) => (
           <g key={i}>
-            <circle cx={p.x} cy={p.y} r={4}
+            <circle
+              cx={p.x}
+              cy={p.y}
+              r={4}
               fill={p.nps >= 9 ? "#1AB06E" : p.nps >= 7 ? "#F59E0B" : "#EF4444"}
-              stroke="#fff" strokeWidth={1.5}
+              stroke="#fff"
+              strokeWidth={1.5}
             />
-            <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize={10} fontWeight={600}
+            <text
+              x={p.x}
+              y={p.y - 8}
+              textAnchor="middle"
+              fontSize={10}
+              fontWeight={600}
               fill={p.nps >= 9 ? "#1AB06E" : p.nps >= 7 ? "#F59E0B" : "#EF4444"}
             >
               {p.nps}
@@ -148,7 +210,14 @@ function NpsSparkline({ history }) {
         ))}
         {/* Round labels */}
         {points.map((p, i) => (
-          <text key={`r${i}`} x={p.x} y={height - 4} textAnchor="middle" fontSize={9} fill="#9CA3AF">
+          <text
+            key={`r${i}`}
+            x={p.x}
+            y={height - 4}
+            textAnchor="middle"
+            fontSize={9}
+            fill="#9CA3AF"
+          >
             R{p.round}
           </text>
         ))}
@@ -156,10 +225,15 @@ function NpsSparkline({ history }) {
       <div className="text-xs text-gray-500">
         {history.length} round{history.length !== 1 ? "s" : ""}
         {history.length >= 2 && (
-          <span className={`ml-2 font-semibold ${
-            history[history.length - 1].nps > history[0].nps ? "text-green-600" :
-            history[history.length - 1].nps < history[0].nps ? "text-red-600" : "text-gray-500"
-          }`}>
+          <span
+            className={`ml-2 font-semibold ${
+              history[history.length - 1].nps > history[0].nps
+                ? "text-green-600"
+                : history[history.length - 1].nps < history[0].nps
+                  ? "text-red-600"
+                  : "text-gray-500"
+            }`}
+          >
             {history[0].nps} → {history[history.length - 1].nps}
           </span>
         )}
@@ -181,7 +255,13 @@ export default function UserManager() {
   const PAGE_SIZE = 50;
   const [expandedUser, setExpandedUser] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ email: "", first_name: "", last_name: "", community_name: "", management_company: "" });
+  const [form, setForm] = useState({
+    email: "",
+    first_name: "",
+    last_name: "",
+    community_name: "",
+    management_company: "",
+  });
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -227,21 +307,21 @@ export default function UserManager() {
 
   const fetchCommunityNames = () => {
     fetch("/api/admin/communities", { credentials: "include" })
-      .then((r) => r.ok ? r.json() : [])
+      .then((r) => (r.ok ? r.json() : []))
       .then((data) => setCommunityNames(data.map((c) => c.community_name).filter(Boolean)))
       .catch(() => {});
   };
 
   const fetchLocationNames = () => {
     fetch("/api/admin/locations", { credentials: "include" })
-      .then((r) => r.ok ? r.json() : [])
+      .then((r) => (r.ok ? r.json() : []))
       .then((data) => setLocationNames(data.map((l) => l.name).filter(Boolean)))
       .catch(() => {});
   };
 
   const fetchSessions = () => {
     fetch("/api/admin/sessions", { credentials: "include" })
-      .then((r) => r.ok ? r.json() : [])
+      .then((r) => (r.ok ? r.json() : []))
       .then((data) => setSessions(data))
       .catch(() => {});
   };
@@ -300,7 +380,13 @@ export default function UserManager() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setUsers((prev) => [data, ...prev]);
-      setForm({ email: "", first_name: "", last_name: "", community_name: "", management_company: "" });
+      setForm({
+        email: "",
+        first_name: "",
+        last_name: "",
+        community_name: "",
+        management_company: "",
+      });
       setShowForm(false);
     } catch (err) {
       setFormError(err.message);
@@ -359,7 +445,11 @@ export default function UserManager() {
       setUsers((prev) => prev.map((u) => (u.id === editingId ? userData : u)));
       setEditingId(null);
       if (emailChanged && activeRound) {
-        setEnrollPrompt({ userId: userData.id, name: `${userData.first_name || ""} ${userData.last_name || ""}`.trim() || userData.email, roundNumber: activeRound.round_number });
+        setEnrollPrompt({
+          userId: userData.id,
+          name: `${userData.first_name || ""} ${userData.last_name || ""}`.trim() || userData.email,
+          roundNumber: activeRound.round_number,
+        });
       }
     } catch (err) {
       setEditError(err.message);
@@ -460,7 +550,10 @@ resident2@example.com,Jane,Smith,Oak Hills`;
   }, [users, search, sortKey, sortDir]);
 
   // Show email delivery column if any user has delivery data (from any round)
-  const hasDeliveryData = useMemo(() => users.some((u) => u.invite_status || u.delivery_status), [users]);
+  const hasDeliveryData = useMemo(
+    () => users.some((u) => u.invite_status || u.delivery_status),
+    [users]
+  );
 
   // Unique community names for autocomplete (merged from board members + communities table)
   const communityOptions = useMemo(() => {
@@ -469,7 +562,7 @@ resident2@example.com,Jane,Smith,Oak Hills`;
     return [...names].sort();
   }, [users, communityNames]);
 
-  const locationOptions = useMemo(() => {
+  const _locationOptions = useMemo(() => {
     const names = new Set(users.map((u) => u.management_company).filter(Boolean));
     locationNames.forEach((n) => names.add(n));
     return [...names].sort();
@@ -483,7 +576,10 @@ resident2@example.com,Jane,Smith,Oak Hills`;
           <input
             type="text"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             placeholder="Search members..."
             className="input-field-sm flex-1"
           />
@@ -492,30 +588,61 @@ resident2@example.com,Jane,Smith,Oak Hills`;
             className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold rounded-lg transition hover:opacity-90 whitespace-nowrap bg-gray-100 text-gray-700 hover:bg-gray-200"
             download
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="w-5 h-5"
+            >
               <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
               <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
             </svg>
             Export
           </a>
-          <label className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg cursor-pointer transition hover:opacity-90 disabled:opacity-50 whitespace-nowrap" style={{ backgroundColor: "var(--cam-blue)" }}>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+          <label
+            className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg cursor-pointer transition hover:opacity-90 disabled:opacity-50 whitespace-nowrap"
+            style={{ backgroundColor: "var(--cam-blue)" }}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="w-5 h-5"
+            >
               <path d="M9.25 13.25a.75.75 0 001.5 0V4.636l2.955 3.129a.75.75 0 001.09-1.03l-4.25-4.5a.75.75 0 00-1.09 0l-4.25 4.5a.75.75 0 101.09 1.03L9.25 4.636v8.614z" />
               <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
             </svg>
             {uploading ? "Uploading..." : "Import"}
-            <input type="file" accept=".csv" onChange={handleUpload} disabled={uploading} className="hidden" />
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleUpload}
+              disabled={uploading}
+              className="hidden"
+            />
           </label>
           <button
             onClick={() => {
-              if (!showForm) setForm({ email: "", first_name: "", last_name: "", community_name: "", management_company: companyName || "" });
+              if (!showForm)
+                setForm({
+                  email: "",
+                  first_name: "",
+                  last_name: "",
+                  community_name: "",
+                  management_company: companyName || "",
+                });
               setShowForm(!showForm);
               setFormError("");
             }}
             className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 whitespace-nowrap"
             style={{ backgroundColor: "var(--cam-blue)" }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="w-5 h-5"
+            >
               <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
             </svg>
             Add Member
@@ -537,22 +664,33 @@ resident2@example.com,Jane,Smith,Oak Hills`;
       {actionError && (
         <div className="p-3 rounded-lg border bg-red-50 border-red-200 flex items-center justify-between">
           <p className="text-red-700 text-sm">{actionError}</p>
-          <button onClick={() => setActionError("")} className="text-red-400 hover:text-red-600 text-sm ml-4">Dismiss</button>
+          <button
+            onClick={() => setActionError("")}
+            className="text-red-400 hover:text-red-600 text-sm ml-4"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
       {/* Import Result */}
       {result && (
-        <div className={`p-4 rounded-lg border ${result.error ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}>
+        <div
+          className={`p-4 rounded-lg border ${result.error ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}
+        >
           {result.error ? (
             <p className="text-red-700 text-sm">{result.error}</p>
           ) : (
             <div className="text-sm text-green-800">
               <p className="font-semibold">Import complete</p>
-              <p>{result.created} created, {result.updated} updated ({result.total} total)</p>
+              <p>
+                {result.created} created, {result.updated} updated ({result.total} total)
+              </p>
               {result.errors?.length > 0 && (
                 <div className="mt-2 text-red-600">
-                  {result.errors.map((e, i) => <p key={i}>{e}</p>)}
+                  {result.errors.map((e, i) => (
+                    <p key={i}>{e}</p>
+                  ))}
                 </div>
               )}
             </div>
@@ -564,7 +702,8 @@ resident2@example.com,Jane,Smith,Oak Hills`;
       {enrollPrompt && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between gap-4">
           <p className="text-sm text-amber-800">
-            Email updated. Enroll <strong>{enrollPrompt.name}</strong> in the current round (Round {enrollPrompt.roundNumber})?
+            Email updated. Enroll <strong>{enrollPrompt.name}</strong> in the current round (Round{" "}
+            {enrollPrompt.roundNumber})?
           </p>
           <div className="flex gap-2 flex-shrink-0">
             <button
@@ -588,7 +727,9 @@ resident2@example.com,Jane,Smith,Oak Hills`;
       {/* Add User Form */}
       {showForm && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Add New Member</p>
+          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">
+            Add New Member
+          </p>
           <form onSubmit={handleAddUser} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -613,7 +754,9 @@ resident2@example.com,Jane,Smith,Oak Hills`;
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Email <span className="text-red-400">*</span></label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Email <span className="text-red-400">*</span>
+              </label>
               <input
                 type="email"
                 value={form.email}
@@ -645,7 +788,10 @@ resident2@example.com,Jane,Smith,Oak Hills`;
               </button>
               <button
                 type="button"
-                onClick={() => { setShowForm(false); setFormError(""); }}
+                onClick={() => {
+                  setShowForm(false);
+                  setFormError("");
+                }}
                 className="px-5 py-2.5 text-sm font-medium text-gray-500 hover:text-gray-700 transition"
               >
                 Cancel
@@ -660,228 +806,275 @@ resident2@example.com,Jane,Smith,Oak Hills`;
         <p className="text-gray-400 text-center py-10">Loading users...</p>
       ) : filtered.length === 0 ? (
         <p className="text-gray-500 text-center py-10 text-lg">
-          {users.length === 0 ? "No users yet. Import a CSV to get started." : "No users match your search."}
+          {users.length === 0
+            ? "No users yet. Import a CSV to get started."
+            : "No users match your search."}
         </p>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[700px]">
-            <thead>
-              <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                <th className="px-5 py-3 w-8">Trend</th>
-                <th className="px-5 py-3 w-24">NPS</th>
-                {[
-                  { key: "name", label: "Name" },
-                  { key: "email", label: "Email" },
-                  { key: "community_name", label: "Community" },
-                ].map((col) => (
-                  <th key={col.key} className="px-5 py-3">
-                    <button
-                      onClick={() => toggleSort(col.key)}
-                      className="inline-flex items-center gap-1 hover:text-gray-600 transition"
-                    >
-                      {col.label}
-                      {sortKey === col.key && (
-                        <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>
-                      )}
-                    </button>
-                  </th>
-                ))}
-                {hasDeliveryData && <th className="px-5 py-3 w-24">Email</th>}
-                <th className="px-5 py-3 w-20"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((u) => (
-                editingId === u.id ? (
-                  <React.Fragment key={u.id}>
-                  <tr className="bg-blue-50">
-                    <td className="px-5 py-3 text-center">
-                      <TrendArrow sessions={sessions} email={u.email} />
-                    </td>
-                    <td className="px-5 py-2" colSpan={hasDeliveryData ? 6 : 5}>
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">First Name</label>
-                            <input
-                              type="text"
-                              value={editForm.first_name}
-                              onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
-                              placeholder="First name"
-                              className="input-field-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Last Name</label>
-                            <input
-                              type="text"
-                              value={editForm.last_name}
-                              onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-                              placeholder="Last name"
-                              className="input-field-sm"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1">Email <span className="text-red-400">*</span></label>
-                          <input
-                            type="email"
-                            value={editForm.email}
-                            onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                            placeholder="Email (required)"
-                            className="input-field-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1">Community</label>
-                          <AutocompleteInput
-                            value={editForm.community_name}
-                            onChange={(v) => setEditForm({ ...editForm, community_name: v })}
-                            options={communityOptions}
-                            placeholder="Community name"
-                            className="input-field-sm"
-                          />
-                        </div>
-                        {editError && <p className="text-red-600 text-sm">{editError}</p>}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={handleSaveEdit}
-                            disabled={editSaving}
-                            className="px-4 py-2 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
-                            style={{ backgroundColor: "var(--cam-blue)" }}
-                          >
-                            {editSaving ? "Saving..." : "Save"}
-                          </button>
-                          <button
-                            onClick={cancelEdit}
-                            className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3"></td>
-                  </tr>
-                  </React.Fragment>
-                ) : (
-                  <React.Fragment key={u.id}>
-                  <tr className={`hover:bg-gray-50 transition ${expandedUser === u.id ? "bg-blue-50/30" : ""}`}>
-                    <td className="px-5 py-3 text-center">
-                      <TrendArrow sessions={sessions} email={u.email} />
-                    </td>
-                    <td className="px-5 py-3">
-                      <NpsBadge nps={u.latest_nps} />
-                    </td>
-                    <td className="px-5 py-3">
+            <table className="w-full text-sm min-w-[700px]">
+              <thead>
+                <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                  <th className="px-5 py-3 w-8">Trend</th>
+                  <th className="px-5 py-3 w-24">NPS</th>
+                  {[
+                    { key: "name", label: "Name" },
+                    { key: "email", label: "Email" },
+                    { key: "community_name", label: "Community" },
+                  ].map((col) => (
+                    <th key={col.key} className="px-5 py-3">
                       <button
-                        onClick={() => setExpandedUser(expandedUser === u.id ? null : u.id)}
-                        className="text-gray-900 hover:underline text-left"
-                        title={u.nps_history?.length > 0 ? "Click to see NPS history" : ""}
+                        onClick={() => toggleSort(col.key)}
+                        className="inline-flex items-center gap-1 hover:text-gray-600 transition"
                       >
-                        {u.first_name || u.last_name
-                          ? `${u.first_name || ""} ${u.last_name || ""}`.trim()
-                          : "—"}
-                        {u.nps_history?.length > 0 && (
-                          <svg className={`inline-block w-3 h-3 ml-1 text-gray-400 transition-transform ${expandedUser === u.id ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
+                        {col.label}
+                        {sortKey === col.key && (
+                          <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>
                         )}
                       </button>
-                    </td>
-                    <td className="px-5 py-3 text-gray-700">{u.email}</td>
-                    <td className="px-5 py-3 text-gray-500">{u.community_name || "—"}</td>
-                    {hasDeliveryData && (
-                      <td className="px-5 py-3">
-                        {u.delivery_status === "delivered" ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-green-700">
-                            <span className="w-2 h-2 rounded-full bg-green-500" />Delivered
-                          </span>
-                        ) : u.delivery_status === "bounced" ? (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 text-xs text-red-700">
-                              <span className="w-2 h-2 rounded-full bg-red-500" />Bounced
-                            </span>
-                            <button
-                              onClick={() => handleResend(u.id)}
-                              disabled={resending === u.id}
-                              className="text-xs font-medium hover:underline disabled:opacity-50"
-                              style={{ color: "var(--cam-blue)" }}
-                            >
-                              {resending === u.id ? "Sending..." : "Resend"}
-                            </button>
+                    </th>
+                  ))}
+                  {hasDeliveryData && <th className="px-5 py-3 w-24">Email</th>}
+                  <th className="px-5 py-3 w-20"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((u) =>
+                  editingId === u.id ? (
+                    <React.Fragment key={u.id}>
+                      <tr className="bg-blue-50">
+                        <td className="px-5 py-3 text-center">
+                          <TrendArrow sessions={sessions} email={u.email} />
+                        </td>
+                        <td className="px-5 py-2" colSpan={hasDeliveryData ? 6 : 5}>
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">
+                                  First Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editForm.first_name}
+                                  onChange={(e) =>
+                                    setEditForm({ ...editForm, first_name: e.target.value })
+                                  }
+                                  placeholder="First name"
+                                  className="input-field-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">
+                                  Last Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editForm.last_name}
+                                  onChange={(e) =>
+                                    setEditForm({ ...editForm, last_name: e.target.value })
+                                  }
+                                  placeholder="Last name"
+                                  className="input-field-sm"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">
+                                Email <span className="text-red-400">*</span>
+                              </label>
+                              <input
+                                type="email"
+                                value={editForm.email}
+                                onChange={(e) =>
+                                  setEditForm({ ...editForm, email: e.target.value })
+                                }
+                                placeholder="Email (required)"
+                                className="input-field-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">
+                                Community
+                              </label>
+                              <AutocompleteInput
+                                value={editForm.community_name}
+                                onChange={(v) => setEditForm({ ...editForm, community_name: v })}
+                                options={communityOptions}
+                                placeholder="Community name"
+                                className="input-field-sm"
+                              />
+                            </div>
+                            {editError && <p className="text-red-600 text-sm">{editError}</p>}
+                            <div className="flex gap-2">
+                              <button
+                                onClick={handleSaveEdit}
+                                disabled={editSaving}
+                                className="px-4 py-2 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
+                                style={{ backgroundColor: "var(--cam-blue)" }}
+                              >
+                                {editSaving ? "Saving..." : "Save"}
+                              </button>
+                              <button
+                                onClick={cancelEdit}
+                                className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition"
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
-                        ) : u.delivery_status === "complained" ? (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 text-xs text-red-700">
-                              <span className="w-2 h-2 rounded-full bg-red-500" />Complained
-                            </span>
-                            <button
-                              onClick={() => handleResend(u.id)}
-                              disabled={resending === u.id}
-                              className="text-xs font-medium hover:underline disabled:opacity-50"
-                              style={{ color: "var(--cam-blue)" }}
-                            >
-                              {resending === u.id ? "Sending..." : "Resend"}
-                            </button>
-                          </div>
-                        ) : u.invite_status === "sent" ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-amber-700">
-                            <span className="w-2 h-2 rounded-full bg-amber-400" />Sent
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs text-gray-400">
-                            <span className="w-2 h-2 rounded-full bg-gray-300" />Not invited
-                          </span>
-                        )}
-                      </td>
-                    )}
-                    <td className="px-5 py-3">
-                      <div className="flex gap-1">
-                        {isTestMode && (
+                        </td>
+                        <td className="px-5 py-3"></td>
+                      </tr>
+                    </React.Fragment>
+                  ) : (
+                    <React.Fragment key={u.id}>
+                      <tr
+                        className={`hover:bg-gray-50 transition ${expandedUser === u.id ? "bg-blue-50/30" : ""}`}
+                      >
+                        <td className="px-5 py-3 text-center">
+                          <TrendArrow sessions={sessions} email={u.email} />
+                        </td>
+                        <td className="px-5 py-3">
+                          <NpsBadge nps={u.latest_nps} />
+                        </td>
+                        <td className="px-5 py-3">
                           <button
-                            onClick={() => handleOpenSurvey(u.id)}
-                            disabled={surveyLinkLoading === u.id}
-                            className="px-2 py-0.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition disabled:opacity-50 whitespace-nowrap"
-                            title="Open survey as this member in a new tab"
+                            onClick={() => setExpandedUser(expandedUser === u.id ? null : u.id)}
+                            className="text-gray-900 hover:underline text-left"
+                            title={u.nps_history?.length > 0 ? "Click to see NPS history" : ""}
                           >
-                            {surveyLinkLoading === u.id ? "Opening..." : "Take Survey"}
+                            {u.first_name || u.last_name
+                              ? `${u.first_name || ""} ${u.last_name || ""}`.trim()
+                              : "—"}
+                            {u.nps_history?.length > 0 && (
+                              <svg
+                                className={`inline-block w-3 h-3 ml-1 text-gray-400 transition-transform ${expandedUser === u.id ? "rotate-180" : ""}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 9l-7 7-7-7"
+                                />
+                              </svg>
+                            )}
                           </button>
+                        </td>
+                        <td className="px-5 py-3 text-gray-700">{u.email}</td>
+                        <td className="px-5 py-3 text-gray-500">{u.community_name || "—"}</td>
+                        {hasDeliveryData && (
+                          <td className="px-5 py-3">
+                            {u.delivery_status === "delivered" ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-700">
+                                <span className="w-2 h-2 rounded-full bg-green-500" />
+                                Delivered
+                              </span>
+                            ) : u.delivery_status === "bounced" ? (
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1 text-xs text-red-700">
+                                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                                  Bounced
+                                </span>
+                                <button
+                                  onClick={() => handleResend(u.id)}
+                                  disabled={resending === u.id}
+                                  className="text-xs font-medium hover:underline disabled:opacity-50"
+                                  style={{ color: "var(--cam-blue)" }}
+                                >
+                                  {resending === u.id ? "Sending..." : "Resend"}
+                                </button>
+                              </div>
+                            ) : u.delivery_status === "complained" ? (
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1 text-xs text-red-700">
+                                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                                  Complained
+                                </span>
+                                <button
+                                  onClick={() => handleResend(u.id)}
+                                  disabled={resending === u.id}
+                                  className="text-xs font-medium hover:underline disabled:opacity-50"
+                                  style={{ color: "var(--cam-blue)" }}
+                                >
+                                  {resending === u.id ? "Sending..." : "Resend"}
+                                </button>
+                              </div>
+                            ) : u.invite_status === "sent" ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+                                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                                Sent
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                                <span className="w-2 h-2 rounded-full bg-gray-300" />
+                                Not invited
+                              </span>
+                            )}
+                          </td>
                         )}
-                        <button
-                          onClick={() => startEdit(u)}
-                          className="p-1 text-gray-300 hover:text-blue-500 transition"
-                          title="Edit user"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                            <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => setDeactivateTarget(u)}
-                          className="p-1 text-gray-300 hover:text-red-500 transition"
-                          title="Remove from future surveys"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                            <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.519.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {expandedUser === u.id && u.nps_history?.length > 0 && (
-                    <tr key={`${u.id}-sparkline`} className="bg-blue-50/30">
-                      <td colSpan={hasDeliveryData ? 7 : 6} className="px-8 py-3">
-                        <NpsSparkline history={u.nps_history} />
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-                )
-              ))}
-            </tbody>
-          </table>
+                        <td className="px-5 py-3">
+                          <div className="flex gap-1">
+                            {isTestMode && (
+                              <button
+                                onClick={() => handleOpenSurvey(u.id)}
+                                disabled={surveyLinkLoading === u.id}
+                                className="px-2 py-0.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100 transition disabled:opacity-50 whitespace-nowrap"
+                                title="Open survey as this member in a new tab"
+                              >
+                                {surveyLinkLoading === u.id ? "Opening..." : "Take Survey"}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => startEdit(u)}
+                              className="p-1 text-gray-300 hover:text-blue-500 transition"
+                              title="Edit user"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                                className="w-4 h-4"
+                              >
+                                <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => setDeactivateTarget(u)}
+                              className="p-1 text-gray-300 hover:text-red-500 transition"
+                              title="Remove from future surveys"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                                className="w-4 h-4"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.519.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {expandedUser === u.id && u.nps_history?.length > 0 && (
+                        <tr key={`${u.id}-sparkline`} className="bg-blue-50/30">
+                          <td colSpan={hasDeliveryData ? 7 : 6} className="px-8 py-3">
+                            <NpsSparkline history={u.nps_history} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                )}
+              </tbody>
+            </table>
           </div>
           <div className="px-5 py-3 bg-gray-50 flex items-center justify-between text-xs text-gray-400">
             <span>
@@ -901,7 +1094,9 @@ resident2@example.com,Jane,Smith,Oak Hills`;
                   Page {page} of {Math.ceil(filtered.length / PAGE_SIZE)}
                 </span>
                 <button
-                  onClick={() => setPage(Math.min(Math.ceil(filtered.length / PAGE_SIZE), page + 1))}
+                  onClick={() =>
+                    setPage(Math.min(Math.ceil(filtered.length / PAGE_SIZE), page + 1))
+                  }
                   disabled={page >= Math.ceil(filtered.length / PAGE_SIZE)}
                   className="px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
                 >
@@ -919,8 +1114,9 @@ resident2@example.com,Jane,Smith,Oak Hills`;
       {/* Info Banner */}
       <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
         <p className="text-sm text-blue-800">
-          Survey invitations are sent automatically when you launch a survey round from the Dashboard.
-          Keep your board member list up to date so everyone is included in the next round.
+          Survey invitations are sent automatically when you launch a survey round from the
+          Dashboard. Keep your board member list up to date so everyone is included in the next
+          round.
         </p>
       </div>
       <ConfirmModal
@@ -928,7 +1124,11 @@ resident2@example.com,Jane,Smith,Oak Hills`;
         onClose={() => setDeactivateTarget(null)}
         onConfirm={() => handleDelete(deactivateTarget?.id)}
         title="Remove Member"
-        message={deactivateTarget ? `Remove ${deactivateTarget.email} from future surveys? Their past survey responses will be preserved.` : ""}
+        message={
+          deactivateTarget
+            ? `Remove ${deactivateTarget.email} from future surveys? Their past survey responses will be preserved.`
+            : ""
+        }
         confirmLabel="Remove"
         destructive
       />
@@ -979,7 +1179,9 @@ function InactiveMembers({ onReactivate }) {
       >
         <svg
           className={`w-4 h-4 transition-transform ${open ? "rotate-90" : ""}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
@@ -995,37 +1197,39 @@ function InactiveMembers({ onReactivate }) {
           ) : (
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[600px]">
-                <thead>
-                  <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                    <th className="px-5 py-3">Name</th>
-                    <th className="px-5 py-3">Email</th>
-                    <th className="px-5 py-3">Community</th>
-                    <th className="px-5 py-3 w-28"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {members.map((m) => (
-                    <tr key={m.id} className="text-gray-400">
-                      <td className="px-5 py-3">
-                        {m.first_name || m.last_name ? `${m.first_name || ""} ${m.last_name || ""}`.trim() : "—"}
-                      </td>
-                      <td className="px-5 py-3">{m.email}</td>
-                      <td className="px-5 py-3">{m.community_name || "—"}</td>
-                      <td className="px-5 py-3">
-                        <button
-                          onClick={() => handleReactivate(m.id)}
-                          disabled={reactivating === m.id}
-                          className="text-xs font-medium hover:underline disabled:opacity-50"
-                          style={{ color: "var(--cam-blue)" }}
-                        >
-                          {reactivating === m.id ? "Reactivating..." : "Reactivate"}
-                        </button>
-                      </td>
+                <table className="w-full text-sm min-w-[600px]">
+                  <thead>
+                    <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                      <th className="px-5 py-3">Name</th>
+                      <th className="px-5 py-3">Email</th>
+                      <th className="px-5 py-3">Community</th>
+                      <th className="px-5 py-3 w-28"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {members.map((m) => (
+                      <tr key={m.id} className="text-gray-400">
+                        <td className="px-5 py-3">
+                          {m.first_name || m.last_name
+                            ? `${m.first_name || ""} ${m.last_name || ""}`.trim()
+                            : "—"}
+                        </td>
+                        <td className="px-5 py-3">{m.email}</td>
+                        <td className="px-5 py-3">{m.community_name || "—"}</td>
+                        <td className="px-5 py-3">
+                          <button
+                            onClick={() => handleReactivate(m.id)}
+                            disabled={reactivating === m.id}
+                            className="text-xs font-medium hover:underline disabled:opacity-50"
+                            style={{ color: "var(--cam-blue)" }}
+                          >
+                            {reactivating === m.id ? "Reactivating..." : "Reactivate"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

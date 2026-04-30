@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+coverage
+client/dist
+DESIGN
+docs
+*.min.js
+*.sqlite-backup
+*.db
+package-lock.json

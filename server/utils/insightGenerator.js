@@ -7,7 +7,9 @@ const MODEL = "claude-sonnet-4-5-20250929";
 /** Resilient JSON parser — handles truncated or wrapped JSON from LLM responses */
 function safeParseJSON(text, fallback) {
   // Try direct parse
-  try { return JSON.parse(text); } catch {}
+  try {
+    return JSON.parse(text);
+  } catch {}
   // Try extracting JSON object
   try {
     const objMatch = text.match(/\{[\s\S]*\}/);
@@ -20,7 +22,10 @@ function safeParseJSON(text, fallback) {
   } catch {}
   // Try fixing truncated JSON by closing open brackets
   try {
-    let fixed = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    let fixed = text
+      .replace(/```json\s*/g, "")
+      .replace(/```\s*/g, "")
+      .trim();
     const opens = (fixed.match(/\{/g) || []).length;
     const closes = (fixed.match(/\}/g) || []).length;
     for (let i = 0; i < opens - closes; i++) fixed += "}";
@@ -32,46 +37,14 @@ function safeParseJSON(text, fallback) {
   logger.warn(`Failed to parse JSON from LLM response (${text.length} chars)`);
   return fallback;
 }
-const CHUNK_MODEL = "claude-haiku-4-5-20251001"; // Faster model for chunk analysis
+// CHUNK_MODEL retained as reference; not currently used (synthesis uses MODEL).
+// eslint-disable-next-line no-unused-vars
+const CHUNK_MODEL = "claude-haiku-4-5-20251001";
 
-// Domain-specific stop words to exclude from word cloud
-const STOP_WORDS = new Set([
-  // English common
-  "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
-  "by", "from", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
-  "do", "does", "did", "will", "would", "could", "should", "may", "might", "can", "shall",
-  "not", "no", "nor", "so", "if", "than", "that", "this", "these", "those", "it", "its",
-  "i", "me", "my", "we", "us", "our", "you", "your", "he", "she", "they", "them", "their",
-  "what", "which", "who", "whom", "when", "where", "why", "how", "all", "each", "every",
-  "both", "few", "more", "most", "other", "some", "such", "very", "just", "also", "about",
-  "up", "out", "into", "over", "after", "before", "between", "under", "again", "then",
-  "here", "there", "once", "during", "while", "too", "only", "own", "same", "as", "any",
-  "well", "really", "much", "still", "even", "back", "get", "got", "go", "going", "went",
-  "come", "came", "make", "made", "take", "took", "know", "think", "thing", "things",
-  "said", "say", "like", "don", "doesn", "didn", "won", "wouldn", "couldn", "shouldn",
-  "isn", "aren", "wasn", "weren", "hasn", "haven", "hadn", "let", "one", "two", "lot",
-  "something", "anything", "everything", "nothing", "someone", "anyone", "everyone",
-  "yeah", "yes", "okay", "sure", "right", "good", "great", "bad", "need", "want",
-  "time", "way", "been", "because", "since", "through", "down", "around",
-  // Conversational fillers
-  "feel", "felt", "keep", "keeps", "kept", "seems", "seem", "see", "always", "never",
-  "probably", "actually", "definitely", "basically", "especially", "recently", "usually",
-  "kind", "able", "try", "trying", "tried", "done", "put", "give", "given", "gave",
-  "told", "tell", "asked", "ask", "look", "looking", "looked", "hope", "hoping",
-  "hear", "heard", "thought", "believe", "guess", "mean", "means", "new", "old",
-  "big", "small", "long", "many", "first", "last", "next", "another", "enough",
-  "little", "bit", "start", "started", "end", "already", "often", "per",
-  // Generic nouns
-  "area", "areas", "issue", "issues", "people", "place", "part", "point",
-  "year", "years", "month", "months", "week", "weeks", "work", "day", "days",
-  "number", "fact", "case", "example", "situation", "matter", "side",
-  // Domain-specific (too generic for property management context)
-  "management", "board", "property", "community", "association", "hoa", "condo",
-  "company", "manager", "member", "members", "resident", "residents", "building",
-  "score", "nps", "survey", "interview", "feedback",
-  "service", "services", "maintenance", "meeting", "meetings", "email", "phone",
-  "staff", "office", "unit", "units", "fee", "fees"
-]);
+// Pure helpers extracted to wordFrequencies.js so they can be unit-tested
+// without dragging in db.js's module-load side effects.
+import { STOP_WORDS } from "./wordFrequencies.js";
+export { computeLiveWordFrequencies } from "./wordFrequencies.js";
 
 /**
  * Generate AI insights for a concluded survey round.
@@ -123,15 +96,15 @@ export async function generateRoundInsights(roundId, clientId) {
 
   // Compute overall NPS stats (from ALL sessions, not just a sample)
   const npsScores = sessions.filter((s) => s.nps_score != null).map((s) => s.nps_score);
-  const avgNps = npsScores.length > 0
-    ? (npsScores.reduce((a, b) => a + b, 0) / npsScores.length).toFixed(1)
-    : "N/A";
+  const avgNps =
+    npsScores.length > 0
+      ? (npsScores.reduce((a, b) => a + b, 0) / npsScores.length).toFixed(1)
+      : "N/A";
   const promoters = npsScores.filter((s) => s >= 9).length;
   const passives = npsScores.filter((s) => s >= 7 && s <= 8).length;
   const detractors = npsScores.filter((s) => s <= 6).length;
-  const npsScore = npsScores.length > 0
-    ? Math.round(((promoters - detractors) / npsScores.length) * 100)
-    : "N/A";
+  const npsScore =
+    npsScores.length > 0 ? Math.round(((promoters - detractors) / npsScores.length) * 100) : "N/A";
 
   // Fetch critical alerts for this round (all statuses)
   const criticalAlerts = await db.all(
@@ -147,12 +120,15 @@ export async function generateRoundInsights(roundId, clientId) {
 
   let alertContext = "";
   if (criticalAlerts.length > 0) {
-    alertContext = "\n\n--- CRITICAL ALERTS FLAGGED DURING THIS ROUND ---\n\n" +
-      criticalAlerts.map((a) => {
-        const name = [a.first_name, a.last_name].filter(Boolean).join(" ") || "Unknown";
-        const status = a.solved ? "solved" : a.dismissed ? "dismissed" : "active";
-        return `- [${a.alert_type?.replace(/_/g, " ")}] from ${name} at ${a.community_name || "Unknown"}: ${a.description} (Status: ${status})`;
-      }).join("\n");
+    alertContext =
+      "\n\n--- CRITICAL ALERTS FLAGGED DURING THIS ROUND ---\n\n" +
+      criticalAlerts
+        .map((a) => {
+          const name = [a.first_name, a.last_name].filter(Boolean).join(" ") || "Unknown";
+          const status = a.solved ? "solved" : a.dismissed ? "dismissed" : "active";
+          return `- [${a.alert_type?.replace(/_/g, " ")}] from ${name} at ${a.community_name || "Unknown"}: ${a.description} (Status: ${status})`;
+        })
+        .join("\n");
   }
 
   const companyHeader = `Company: ${client?.company_name || "Unknown"}
@@ -174,6 +150,7 @@ ${prevRound?.insights_json ? `\nPrevious Round Context: Insights were generated 
   logger.info(`Insights: analyzing ${sessions.length} sessions in ${chunks.length} chunk(s)`);
 
   let chunkSummaries;
+  let synthesis;
 
   if (chunks.length <= 1) {
     // Small round — single chunk, direct analysis (no map-reduce needed)
@@ -199,13 +176,13 @@ ${sessionContext}${alertContext}`;
 
     // Synthesis pass: combine the 3 outputs into a coherent final result
     chunkSummaries = null; // flag to skip map-reduce synthesis
-    var synthesis = await runSynthesis(baseContext, findings, actions, callouts);
+    synthesis = await runSynthesis(baseContext, findings, actions, callouts);
   } else {
     // Large round — MAP phase: analyze each chunk in parallel
     const chunkFns = chunks.map((chunk, idx) => async () => {
-      const chunkPromoters = chunk.filter(s => s.nps_score >= 9).length;
-      const chunkPassives = chunk.filter(s => s.nps_score >= 7 && s.nps_score <= 8).length;
-      const chunkDetractors = chunk.filter(s => s.nps_score <= 6).length;
+      const chunkPromoters = chunk.filter((s) => s.nps_score >= 9).length;
+      const chunkPassives = chunk.filter((s) => s.nps_score >= 7 && s.nps_score <= 8).length;
+      const chunkDetractors = chunk.filter((s) => s.nps_score <= 6).length;
 
       const chunkContext = chunk
         .map((s, i) => {
@@ -248,22 +225,34 @@ Only output valid JSON, no other text.`;
       });
 
       const text = response.content[0].text.trim();
-      return safeParseJSON(text, { positive_themes: [], negative_themes: [], notable_feedback: [], community_patterns: [] });
+      return safeParseJSON(text, {
+        positive_themes: [],
+        negative_themes: [],
+        notable_feedback: [],
+        community_patterns: [],
+      });
     });
 
     // Process chunks sequentially with delay to avoid rate limiting
     chunkSummaries = [];
     let failedChunks = 0;
     for (let ci = 0; ci < chunkFns.length; ci++) {
-      if (ci > 0) await new Promise(r => setTimeout(r, 2000)); // 2s delay between chunks
+      if (ci > 0) await new Promise((r) => setTimeout(r, 2000)); // 2s delay between chunks
       try {
         const result = await chunkFns[ci]();
         chunkSummaries.push(result);
         logger.info(`Insights: chunk ${chunkSummaries.length}/${chunks.length} complete`);
       } catch (chunkErr) {
         failedChunks++;
-        logger.error(`Insights: chunk ${chunkSummaries.length + 1} failed: ${chunkErr.message} (status: ${chunkErr.status || 'unknown'})`);
-        chunkSummaries.push({ positive_themes: [], negative_themes: [], notable_feedback: [], community_patterns: [] });
+        logger.error(
+          `Insights: chunk ${chunkSummaries.length + 1} failed: ${chunkErr.message} (status: ${chunkErr.status || "unknown"})`
+        );
+        chunkSummaries.push({
+          positive_themes: [],
+          negative_themes: [],
+          notable_feedback: [],
+          community_patterns: [],
+        });
       }
     }
 
@@ -286,18 +275,24 @@ Only output valid JSON, no other text.`;
       return failedJson;
     }
 
-    logger.info(`Insights: ${chunkSummaries.length} chunk analyses complete (${failedChunks} failed), running synthesis`);
+    logger.info(
+      `Insights: ${chunkSummaries.length} chunk analyses complete (${failedChunks} failed), running synthesis`
+    );
 
     // REDUCE phase: synthesize all chunk analyses into final insights
     const synthesisContext = `${companyHeader}${alertContext}
 
 --- CHUNK ANALYSIS RESULTS (${chunkSummaries.length} batches covering all ${sessions.length} respondents) ---
 
-${chunkSummaries.map((cs, i) => `BATCH ${i + 1}:
+${chunkSummaries
+  .map(
+    (cs, i) => `BATCH ${i + 1}:
 Positive Themes: ${JSON.stringify(cs.positive_themes || [])}
 Negative Themes: ${JSON.stringify(cs.negative_themes || [])}
 Notable Feedback: ${JSON.stringify(cs.notable_feedback || [])}
-Community Patterns: ${JSON.stringify(cs.community_patterns || [])}`).join("\n\n")}`;
+Community Patterns: ${JSON.stringify(cs.community_patterns || [])}`
+  )
+  .join("\n\n")}`;
 
     // Run the 3 analysis passes on the combined chunk summaries
     const [findings, actions, callouts] = await Promise.all([
@@ -307,7 +302,7 @@ Community Patterns: ${JSON.stringify(cs.community_patterns || [])}`).join("\n\n"
     ]);
 
     // Final synthesis
-    var synthesis = await runSynthesis(synthesisContext, findings, actions, callouts);
+    synthesis = await runSynthesis(synthesisContext, findings, actions, callouts);
   }
 
   // Store insights
@@ -471,36 +466,12 @@ export async function generateWordFrequencies(roundId, clientId) {
     .slice(0, 40)
     .map(([word, count]) => ({ word, count }));
 
-  await db.run(
-    "UPDATE survey_rounds SET word_frequencies = ? WHERE id = ?",
-    [JSON.stringify(sorted), roundId]
-  );
+  await db.run("UPDATE survey_rounds SET word_frequencies = ? WHERE id = ?", [
+    JSON.stringify(sorted),
+    roundId,
+  ]);
 
   return sorted;
-}
-
-/**
- * Compute word frequencies on-the-fly for an active round (not stored).
- */
-export function computeLiveWordFrequencies(messages) {
-  const wordCounts = {};
-  for (const msg of messages) {
-    const words = (msg.content || "")
-      .toLowerCase()
-      .replace(/[^a-z\s'-]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
-
-    for (const word of words) {
-      wordCounts[word] = (wordCounts[word] || 0) + 1;
-    }
-  }
-
-  return Object.entries(wordCounts)
-    .filter(([, count]) => count > 1)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 40)
-    .map(([word, count]) => ({ word, count }));
 }
 
 /**
