@@ -34,6 +34,7 @@ import {
   LEGACY_SYSTEM_PROMPT_V0,
   LEGACY_SYSTEM_PROMPT_V05,
   LEGACY_SYSTEM_PROMPT_V09,
+  V2_SYSTEM_PROMPT_V20,
   V2_SYSTEM_PROMPT,
   V2_INTERVIEW_INITIAL,
   V2_PROMPT_GENERATION,
@@ -53,11 +54,17 @@ const MIGRATIONS = [
   {
     key: "system_prompt",
     label: "Board interview",
+    // Match against every known historical default. V2_SYSTEM_PROMPT_V20
+    // was the value seeded by the original 2026-04-30 migration; rows
+    // still holding it should be upgraded to V2.1 (current
+    // V2_SYSTEM_PROMPT) which adds the explicit forbidden-first-sentence
+    // openers list and the gold-standard post-NPS opener example.
     matches: [
       V1_SYSTEM_PROMPT,
       LEGACY_SYSTEM_PROMPT_V0,
       LEGACY_SYSTEM_PROMPT_V05,
       LEGACY_SYSTEM_PROMPT_V09,
+      V2_SYSTEM_PROMPT_V20,
     ],
     to: V2_SYSTEM_PROMPT,
   },
