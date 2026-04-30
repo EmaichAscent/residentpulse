@@ -38,7 +38,7 @@ console.log("🔄 Starting data migration from SQLite to PostgreSQL...\n");
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
 
 // Initialize SQLite
@@ -78,14 +78,26 @@ async function migrate() {
         `INSERT INTO clients (id, company_name, address_line1, address_line2, city, state, zip, phone_number, status, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          ON CONFLICT (id) DO NOTHING`,
-        [c.id, c.company_name, c.address_line1, c.address_line2, c.city, c.state, c.zip, c.phone_number, c.status, c.created_at, c.updated_at]
+        [
+          c.id,
+          c.company_name,
+          c.address_line1,
+          c.address_line2,
+          c.city,
+          c.state,
+          c.zip,
+          c.phone_number,
+          c.status,
+          c.created_at,
+          c.updated_at,
+        ]
       );
     }
     console.log(`   ✓ Migrated ${clients.length} clients`);
 
     // Update sequence
     if (clients.length > 0) {
-      const maxId = Math.max(...clients.map(c => c.id));
+      const maxId = Math.max(...clients.map((c) => c.id));
       await client.query(`SELECT setval('clients_id_seq', $1)`, [maxId]);
     }
 
@@ -103,7 +115,7 @@ async function migrate() {
     console.log(`   ✓ Migrated ${admins.length} superadmins`);
 
     if (admins.length > 0) {
-      const maxId = Math.max(...admins.map(a => a.id));
+      const maxId = Math.max(...admins.map((a) => a.id));
       await client.query(`SELECT setval('admins_id_seq', $1)`, [maxId]);
     }
 
@@ -121,7 +133,7 @@ async function migrate() {
     console.log(`   ✓ Migrated ${clientAdmins.length} client admins`);
 
     if (clientAdmins.length > 0) {
-      const maxId = Math.max(...clientAdmins.map(ca => ca.id));
+      const maxId = Math.max(...clientAdmins.map((ca) => ca.id));
       await client.query(`SELECT setval('client_admins_id_seq', $1)`, [maxId]);
     }
 
@@ -133,13 +145,22 @@ async function migrate() {
         `INSERT INTO users (id, client_id, first_name, last_name, email, community_name, management_company, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (id) DO NOTHING`,
-        [u.id, u.client_id, u.first_name, u.last_name, u.email, u.community_name, u.management_company, u.updated_at]
+        [
+          u.id,
+          u.client_id,
+          u.first_name,
+          u.last_name,
+          u.email,
+          u.community_name,
+          u.management_company,
+          u.updated_at,
+        ]
       );
     }
     console.log(`   ✓ Migrated ${users.length} board members`);
 
     if (users.length > 0) {
-      const maxId = Math.max(...users.map(u => u.id));
+      const maxId = Math.max(...users.map((u) => u.id));
       await client.query(`SELECT setval('users_id_seq', $1)`, [maxId]);
     }
 
@@ -151,13 +172,24 @@ async function migrate() {
         `INSERT INTO sessions (id, email, nps_score, created_at, completed, summary, community_name, management_company, user_id, client_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (id) DO NOTHING`,
-        [s.id, s.email, s.nps_score, s.created_at, s.completed === 1, s.summary, s.community_name, s.management_company, s.user_id, s.client_id]
+        [
+          s.id,
+          s.email,
+          s.nps_score,
+          s.created_at,
+          s.completed === 1,
+          s.summary,
+          s.community_name,
+          s.management_company,
+          s.user_id,
+          s.client_id,
+        ]
       );
     }
     console.log(`   ✓ Migrated ${sessions.length} sessions`);
 
     if (sessions.length > 0) {
-      const maxId = Math.max(...sessions.map(s => s.id));
+      const maxId = Math.max(...sessions.map((s) => s.id));
       await client.query(`SELECT setval('sessions_id_seq', $1)`, [maxId]);
     }
 
@@ -175,7 +207,7 @@ async function migrate() {
     console.log(`   ✓ Migrated ${messages.length} messages`);
 
     if (messages.length > 0) {
-      const maxId = Math.max(...messages.map(m => m.id));
+      const maxId = Math.max(...messages.map((m) => m.id));
       await client.query(`SELECT setval('messages_id_seq', $1)`, [maxId]);
     }
 
@@ -184,7 +216,6 @@ async function migrate() {
     const settings = sqliteAll("SELECT * FROM settings");
     for (const setting of settings) {
       // SQLite settings table might not have id column, so handle both cases
-      const id = setting.id || null;
       await client.query(
         `INSERT INTO settings (key, value, client_id)
          VALUES ($1, $2, $3)
@@ -202,7 +233,6 @@ async function migrate() {
     console.log("2. Backup your SQLite database (residentpulse.db) to a safe location");
     console.log("3. Test your application with the new PostgreSQL database");
     console.log("4. Once confirmed working, you can archive the old SQLite db file");
-
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("\n❌ Migration failed:", err.message);
