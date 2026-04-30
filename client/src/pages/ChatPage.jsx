@@ -7,12 +7,43 @@ import { buildWelcomeMessage } from "../utils/chatWelcome";
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const synth = window.speechSynthesis;
 
+/**
+ * Resident chat — Polished variant per design handoff §5.8.
+ *
+ * Phase 3 PR8 rebuild. Material differences from the previous shape:
+ *
+ *  Trust gate
+ *    A short "Sounds good →" engagement step before the NPS picker.
+ *    The first AI bubble names a real CM (or "your team at {company}"),
+ *    sets honest timing ("about 5 minutes"), and states the privacy
+ *    contract: management company sees only a summary, not the
+ *    transcript. The user explicitly opts in.
+ *
+ *  Two AI bubbles in sequence
+ *    Trust contract bubble + a separate, plain "On a scale of 0 to 10..."
+ *    bubble that introduces the NPS picker. The picker itself is the
+ *    minimalist outlined-circle scale (NpsScale.jsx) with auto-advance
+ *    and no Submit Score button.
+ *
+ *  Header
+ *    Small logo/avatar, two-line title (company / "{community} · check-in
+ *    for {firstName}"), and a "✓ Confidential" pill on the right that
+ *    underlines the privacy contract.
+ *
+ *  Progress bar
+ *    Thin pulse-green stripe at the top that grows with conversation
+ *    turns. 0% during trust gate, 10% on NPS-shown, 25% post-NPS, +6% per
+ *    AI/user turn capped at 95%, 100% on completion.
+ *
+ *  Resume behavior
+ *    A session that already has an NPS score skips the trust gate (the
+ *    resident has already past that point); messages render normally.
+ */
 export default function ChatPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const {
     sessionId,
-    email,
     firstName,
     community,
     company,
@@ -26,13 +57,15 @@ export default function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [trustAccepted, setTrustAccepted] = useState(false);
   const [npsSubmitted, setNpsSubmitted] = useState(false);
   const [npsScore, setNpsScore] = useState(null);
   const [completed, setCompleted] = useState(false);
   const [listening, setListening] = useState(false);
   const [speechEnabled, setSpeechEnabled] = useState(!!synth);
   const [speaking, setSpeaking] = useState(false);
-  const [reviewResponse, setReviewResponse] = useState(null); // 'yes', 'no', or null
+  const [reviewResponse, setReviewResponse] = useState(null);
+  const [communityManagerName, setCommunityManagerName] = useState(null);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -44,14 +77,16 @@ export default function ChatPage() {
       return;
     }
 
-    // Load session data and previous messages (for resumed sessions)
     const loadSession = async () => {
       try {
         const res = await fetch(`/api/sessions/${sessionId}`);
         const data = await res.json();
         if (!res.ok) return;
 
-        // Set messages if any exist
+        if (data.session?.community_manager_name) {
+          setCommunityManagerName(data.session.community_manager_name);
+        }
+
         if (data.messages && data.messages.length > 0) {
           setMessages(
             data.messages.map((m) => ({
@@ -62,12 +97,16 @@ export default function ChatPage() {
           );
         }
 
-        // Set state based on session data
-        if (data.session.nps_score !== null) {
+        // Resume behavior: if NPS is already submitted, jump straight to
+        // the conversation view (skip trust gate + NPS).
+        if (data.session?.nps_score !== null && data.session?.nps_score !== undefined) {
+          setTrustAccepted(true);
           setNpsSubmitted(true);
           setNpsScore(data.session.nps_score);
         }
-        if (data.session.completed) {
+        if (data.session?.completed) {
+          setTrustAccepted(true);
+          setNpsSubmitted(true);
           setCompleted(true);
         }
       } catch (err) {
@@ -80,7 +119,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, loading, trustAccepted, npsSubmitted]);
 
   // Auto-resize textarea
   const autoResize = useCallback(() => {
@@ -95,13 +134,11 @@ export default function ChatPage() {
     autoResize();
   }, [input, autoResize]);
 
-  // Stop speaking helper
   const stopSpeaking = useCallback(() => {
     if (synth) synth.cancel();
     setSpeaking(false);
   }, []);
 
-  // Speak text using browser Speech Synthesis
   const speakText = useCallback(
     (text) => {
       if (!synth || !speechEnabled) return;
@@ -109,7 +146,6 @@ export default function ChatPage() {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
-      // Prefer a natural-sounding voice
       const voices = synth.getVoices();
       const preferred =
         voices.find((v) => v.name.includes("Google") && v.lang.startsWith("en")) ||
@@ -124,7 +160,7 @@ export default function ChatPage() {
     [speechEnabled]
   );
 
-  // Auto-speak new AI messages
+  // Auto-speak new AI messages (post-NPS only, so pre-NPS bubbles don't read aloud)
   useEffect(() => {
     if (!speechEnabled || messages.length === 0) return;
     const lastIndex = messages.length - 1;
@@ -174,18 +210,20 @@ export default function ChatPage() {
     }
   };
 
+  const handleAcceptTrust = () => {
+    setTrustAccepted(true);
+  };
+
   const handleNpsSelect = async (score) => {
     setNpsSubmitted(true);
     setNpsScore(score);
 
-    // Save NPS score to session
     await fetch(`/api/sessions/${sessionId}/nps`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nps_score: score }),
     });
 
-    // Send NPS as first message to start conversation
     sendMessage(`My NPS score is ${score} out of 10.`);
   };
 
@@ -199,7 +237,6 @@ export default function ChatPage() {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
-      // Refocus immediately to prevent blur
       setTimeout(() => textareaRef.current?.focus(), 0);
     }
   };
@@ -207,14 +244,12 @@ export default function ChatPage() {
   const handleEndChat = async () => {
     setCompleted(true);
     stopSpeaking();
-    // Stop mic if listening
     if (listening) recognitionRef.current?.stop();
 
     await fetch(`/api/sessions/${sessionId}/complete`, {
       method: "PATCH",
     });
 
-    // Fetch review response for CTA display
     if (googleReviewUrl) {
       try {
         const res = await fetch(`/api/sessions/${sessionId}`);
@@ -228,7 +263,6 @@ export default function ChatPage() {
     }
   };
 
-  // Speech recognition
   const toggleListening = () => {
     if (listening) {
       recognitionRef.current?.stop();
@@ -259,81 +293,133 @@ export default function ChatPage() {
     recognition.onend = () => setListening(false);
     recognition.onerror = () => setListening(false);
 
-    finalTranscript = input; // preserve any existing text
+    finalTranscript = input;
     recognition.start();
     setListening(true);
   };
 
   if (!sessionId) return null;
 
-  // Build personalized welcome message via testable helper.
+  // Welcome message — built fresh from props + fetched CM name. Pure
+  // helper, fully unit-tested in chatWelcome.test.js.
   const welcomeContent = buildWelcomeMessage({
     firstName,
     company,
     community,
-    hasSynth: !!synth,
-    hasSpeechRecognition: !!SpeechRecognition,
+    communityManagerName,
   });
+
+  // Hardcoded NPS prompt (rendered as a second AI bubble after the
+  // user clicks Sounds good →). Naming the company keeps the framing
+  // concrete; it's what the V2 system prompt would say if it generated
+  // this turn — but rendering it client-side gives us deterministic
+  // copy for the entry experience.
+  const npsPrompt = `On a scale of 0 to 10, how likely are you to recommend ${
+    company || "your management company"
+  } to another HOA board?`;
+
+  // Progress bar percent.
+  // 0%   → trust-gate shown but not accepted
+  // 10%  → trust accepted, NPS shown but not picked
+  // 25%  → NPS picked, conversation begins
+  // +6%  per assistant message after NPS, capped at 95%
+  // 100% → session complete
+  const progressPercent = (() => {
+    if (completed) return 100;
+    if (!trustAccepted) return 0;
+    if (!npsSubmitted) return 10;
+    const aiTurns = messages.filter((m) => m.role === "assistant").length;
+    return Math.min(95, 25 + aiTurns * 6);
+  })();
+
+  // Header subtitle: "{community} · check-in for {firstName}"
+  const headerSubtitle = (() => {
+    const parts = [];
+    if (community) parts.push(community);
+    parts.push(`check-in for ${firstName || "you"}`);
+    return parts.join(" · ");
+  })();
 
   return (
     <div
-      className="flex flex-col h-screen"
+      className="flex flex-col min-h-screen items-center justify-center px-4 py-6"
       style={{
         background: "linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%)",
       }}
     >
       <div
-        className="flex flex-col h-full max-w-2xl mx-auto w-full"
-        style={{ boxShadow: "var(--shadow-lg)" }}
+        className="flex flex-col w-full max-w-2xl rounded-2xl overflow-hidden bg-white"
+        style={{
+          boxShadow: "var(--shadow-lg)",
+          border: "1px solid var(--line)",
+          maxHeight: "min(900px, 100vh - 48px)",
+          minHeight: 600,
+        }}
+        data-testid="chat-card"
       >
-        {/* Header — Polished variant: brand left, identity right, Confidential pill */}
+        {/* Progress bar (1.5px high stripe) */}
         <div
-          className="bg-white px-5 py-4 flex-shrink-0 flex items-center justify-between"
+          className="h-[2px] flex-shrink-0 relative overflow-hidden"
+          style={{ backgroundColor: "var(--paper-3)" }}
+          aria-hidden="true"
+        >
+          <div
+            className="h-full transition-all duration-500"
+            style={{
+              width: `${progressPercent}%`,
+              backgroundColor: "var(--pulse)",
+            }}
+            data-testid="progress-bar"
+          />
+        </div>
+
+        {/* Header — Polished variant: avatar + 2-line title + Confidential pill */}
+        <div
+          className="bg-white px-5 py-4 flex-shrink-0 flex items-center justify-between gap-3"
           style={{ borderBottom: "1px solid var(--line)" }}
+          data-testid="chat-header"
         >
           <div className="flex items-center gap-3 min-w-0">
-            {hasLogo && clientId ? (
-              <img
-                src={`/api/sessions/logo/${clientId}`}
-                alt={companyName || "Company logo"}
-                className="h-10 max-w-[140px] object-contain"
-                onError={(e) => {
-                  e.target.style.display = "none";
-                  e.target.nextElementSibling.style.display = "block";
-                }}
-              />
-            ) : null}
-            <div style={hasLogo && clientId ? { display: "none" } : {}}>
-              <h1
-                className="font-semibold"
-                style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: 18,
-                  color: "var(--ink)",
-                }}
+            <BrandAvatar hasLogo={hasLogo} clientId={clientId} companyName={companyName} />
+            <div className="min-w-0">
+              <p
+                className="text-sm font-semibold truncate"
+                style={{ color: "var(--ink)" }}
+                title={company || ""}
               >
-                ResidentPulse
-              </h1>
+                {company || "ResidentPulse"}
+              </p>
+              <p
+                className="text-xs truncate"
+                style={{ color: "var(--ink-3)" }}
+                title={headerSubtitle}
+              >
+                {headerSubtitle}
+              </p>
             </div>
           </div>
-          <div className="text-right min-w-0">
-            <p className="text-sm truncate" style={{ color: "var(--ink-2)" }} title={email}>
-              {email}
-            </p>
-            {company && (
-              <p className="text-xs truncate" style={{ color: "var(--ink-3)" }} title={company}>
-                {company}
-              </p>
-            )}
-            {community && (
-              <p className="text-xs truncate" style={{ color: "var(--ink-4)" }} title={community}>
-                {community}
-              </p>
-            )}
+          <div
+            className="flex-shrink-0 flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full"
+            style={{ color: "var(--pulse-deep)", backgroundColor: "var(--pulse-tint)" }}
+            title="Your responses are private. The management company sees a summary, not the transcript."
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Confidential
           </div>
         </div>
 
-        {/* Mock survey banner — uses plum (AI/system signal) */}
+        {/* Mock survey banner */}
         {isMock && (
           <div
             className="px-5 py-2 flex-shrink-0"
@@ -350,37 +436,83 @@ export default function ChatPage() {
 
         {/* Messages */}
         <div
-          className="flex-1 overflow-y-auto px-5 py-6"
+          className="flex-1 overflow-y-auto px-5 py-5"
           style={{
             background: "linear-gradient(180deg, var(--paper-2) 0%, var(--paper) 100%)",
           }}
         >
-          {/* Initial greeting + NPS */}
-          {!npsSubmitted && (
+          {/* Phase 1: Trust gate — welcome bubble + Sounds good button */}
+          {!trustAccepted && (
             <>
               <ChatBubble role="assistant" content={welcomeContent} />
-              <div className="ml-10">
+              <div className="ml-10 mt-3" data-testid="trust-gate-actions">
+                <button
+                  onClick={handleAcceptTrust}
+                  className="text-sm font-semibold px-4 py-2 rounded-full text-white transition hover:opacity-90"
+                  style={{ backgroundColor: "var(--pulse)" }}
+                >
+                  Sounds good →
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Phase 2: Trust accepted, NPS pending — show welcome + NPS prompt + scale */}
+          {trustAccepted && !npsSubmitted && (
+            <>
+              <ChatBubble role="assistant" content={welcomeContent} />
+              <ChatBubble role="assistant" content={npsPrompt} />
+              <div className="ml-10 mt-3">
                 <NpsScale onSelect={handleNpsSelect} />
               </div>
             </>
           )}
 
+          {/* Phase 3+: conversation */}
           {messages.map((msg, i) => (
             <ChatBubble key={i} role={msg.role} content={msg.content} timestamp={msg.timestamp} />
           ))}
 
           {loading && (
             <div className="flex justify-start mb-4">
-              <img
-                src="/camascent-chat-icon.png"
-                alt="CAM Ascent"
-                className="w-8 h-8 rounded-full object-contain bg-white border border-gray-200 mr-2 mt-1 flex-shrink-0"
-              />
-              <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-5 py-4 shadow-sm">
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center mr-2 mt-1 flex-shrink-0"
+                style={{ backgroundColor: "var(--pulse)" }}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 12h4l2-7 4 14 2-7h6" />
+                </svg>
+              </div>
+              <div
+                className="rounded-2xl rounded-bl-md px-5 py-4"
+                style={{
+                  backgroundColor: "white",
+                  border: "1px solid var(--line)",
+                  boxShadow: "var(--shadow-sm)",
+                }}
+              >
                 <div className="flex space-x-2">
-                  <div className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce" />
-                  <div className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.15s]" />
-                  <div className="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.3s]" />
+                  <div
+                    className="w-2.5 h-2.5 rounded-full animate-bounce"
+                    style={{ backgroundColor: "var(--ink-4)" }}
+                  />
+                  <div
+                    className="w-2.5 h-2.5 rounded-full animate-bounce [animation-delay:0.15s]"
+                    style={{ backgroundColor: "var(--ink-4)" }}
+                  />
+                  <div
+                    className="w-2.5 h-2.5 rounded-full animate-bounce [animation-delay:0.3s]"
+                    style={{ backgroundColor: "var(--ink-4)" }}
+                  />
                 </div>
               </div>
             </div>
@@ -388,11 +520,10 @@ export default function ChatPage() {
 
           {completed && (
             <div className="text-center py-6">
-              <p className="text-lg" style={{ color: "var(--ink-3)" }}>
-                Session complete. Thank you for your feedback!
+              <p className="text-base" style={{ color: "var(--ink-2)" }}>
+                Thanks for sharing your feedback.
               </p>
 
-              {/* Google Review CTA — only for promoters (NPS 9-10) */}
               {googleReviewUrl && npsScore >= 9 && reviewResponse !== "no" && (
                 <a
                   href={googleReviewUrl}
@@ -423,7 +554,8 @@ export default function ChatPage() {
                     href={googleReviewUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-gray-400 hover:text-gray-600 underline transition"
+                    className="text-sm hover:underline transition"
+                    style={{ color: "var(--ink-4)" }}
                   >
                     Changed your mind? We'd be grateful for a review.
                   </a>
@@ -433,7 +565,12 @@ export default function ChatPage() {
               {isMock && (
                 <button
                   onClick={() => navigate(`/superadmin/clients/${clientId}`)}
-                  className="mt-3 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100"
+                  className="mt-3 px-4 py-2 text-sm font-medium rounded-lg border"
+                  style={{
+                    color: "var(--plum)",
+                    backgroundColor: "var(--plum-tint)",
+                    borderColor: "var(--plum-soft)",
+                  }}
                 >
                   Return to Client Detail
                 </button>
@@ -444,28 +581,41 @@ export default function ChatPage() {
           <div ref={bottomRef} />
         </div>
 
-        {/* Powered by footer */}
-        <div className="bg-gray-50 border-t px-5 py-2 flex-shrink-0 flex items-center justify-center gap-2">
-          <span className="text-xs text-gray-400">Powered by</span>
-          <span className="text-xs font-semibold text-gray-500">ResidentPulse</span>
-          <span className="text-xs text-gray-300">|</span>
-          <img src="/CAMAscent.png" alt="CAM Ascent" className="h-5 object-contain" />
+        {/* Footer */}
+        <div
+          className="flex-shrink-0 flex items-center justify-center gap-2 px-5 py-2"
+          style={{ borderTop: "1px solid var(--line)", backgroundColor: "var(--paper-2)" }}
+        >
+          <span className="text-[11px]" style={{ color: "var(--ink-4)" }}>
+            Powered by
+          </span>
+          <span className="text-[11px] font-semibold" style={{ color: "var(--ink-3)" }}>
+            ResidentPulse
+          </span>
+          <span className="text-[11px]" style={{ color: "var(--ink-5)" }}>
+            |
+          </span>
+          <img src="/CAMAscent.png" alt="CAM Ascent" className="h-4 object-contain opacity-70" />
         </div>
 
-        {/* Bottom bar: input + end chat */}
+        {/* Bottom bar: input + end chat (only after NPS picked) */}
         {npsSubmitted && !completed && (
-          <div className="bg-white border-t flex-shrink-0">
+          <div className="bg-white flex-shrink-0" style={{ borderTop: "1px solid var(--line)" }}>
             <form onSubmit={handleSubmit} className="px-5 py-4 flex gap-3 items-end">
               <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Type your response..."
+                placeholder="Type your response…"
                 disabled={loading}
                 rows={2}
-                className="input-field flex-1 disabled:bg-gray-50 resize-none"
-                style={{ maxHeight: 150 }}
+                className="flex-1 px-4 py-3 text-base rounded-xl outline-none resize-none disabled:bg-gray-50 transition"
+                style={{
+                  border: "1.5px solid var(--line-2)",
+                  maxHeight: 150,
+                  color: "var(--ink)",
+                }}
                 autoFocus
               />
               {synth && (
@@ -475,18 +625,16 @@ export default function ChatPage() {
                     if (speechEnabled) stopSpeaking();
                     setSpeechEnabled((prev) => !prev);
                   }}
-                  className={`p-4 rounded-xl transition ${
+                  className="p-3 rounded-xl transition"
+                  style={
                     speechEnabled
-                      ? speaking
-                        ? "bg-[color:var(--pulse-tint)] hover:opacity-90"
-                        : "bg-[color:var(--pulse-tint)] hover:opacity-90"
-                      : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                  }`}
-                  style={speechEnabled ? { color: "var(--pulse-deep)" } : undefined}
+                      ? { backgroundColor: "var(--pulse-tint)", color: "var(--pulse-deep)" }
+                      : { backgroundColor: "var(--paper-3)", color: "var(--ink-4)" }
+                  }
                   title={
                     speechEnabled
                       ? speaking
-                        ? "AI is speaking... (click to disable)"
+                        ? "AI is speaking… (click to disable)"
                         : "AI voice on (click to disable)"
                       : "Enable AI voice"
                   }
@@ -497,7 +645,7 @@ export default function ChatPage() {
                         xmlns="http://www.w3.org/2000/svg"
                         viewBox="0 0 24 24"
                         fill="currentColor"
-                        className="w-6 h-6"
+                        className="w-5 h-5"
                       >
                         <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM18.584 5.106a.75.75 0 011.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 01-1.06-1.06 8.25 8.25 0 000-11.668.75.75 0 010-1.06z" />
                         <path d="M15.932 7.757a.75.75 0 011.061 0 6 6 0 010 8.486.75.75 0 01-1.06-1.061 4.5 4.5 0 000-6.364.75.75 0 010-1.06z" />
@@ -507,14 +655,14 @@ export default function ChatPage() {
                         xmlns="http://www.w3.org/2000/svg"
                         viewBox="0 0 24 24"
                         fill="currentColor"
-                        className="w-6 h-6"
+                        className="w-5 h-5"
                       >
                         <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM17.78 9.22a.75.75 0 10-1.06 1.06L18.44 12l-1.72 1.72a.75.75 0 001.06 1.06l1.72-1.72 1.72 1.72a.75.75 0 101.06-1.06L20.56 12l1.72-1.72a.75.75 0 00-1.06-1.06l-1.72 1.72-1.72-1.72z" />
                       </svg>
                     )}
                     {speaking && (
                       <span
-                        className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-pulse"
+                        className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full animate-pulse"
                         style={{ backgroundColor: "var(--pulse)" }}
                       />
                     )}
@@ -525,11 +673,12 @@ export default function ChatPage() {
                 <button
                   type="button"
                   onClick={toggleListening}
-                  className={`p-4 rounded-xl transition ${
+                  className="p-3 rounded-xl transition"
+                  style={
                     listening
-                      ? "bg-red-100 text-red-600 hover:bg-red-200"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
+                      ? { backgroundColor: "var(--coral-tint)", color: "var(--coral)" }
+                      : { backgroundColor: "var(--paper-3)", color: "var(--ink-4)" }
+                  }
                   title={listening ? "Stop recording" : "Start voice input"}
                 >
                   <div className="relative">
@@ -537,14 +686,17 @@ export default function ChatPage() {
                       xmlns="http://www.w3.org/2000/svg"
                       viewBox="0 0 24 24"
                       fill="currentColor"
-                      className="w-6 h-6"
+                      className="w-5 h-5"
                     >
                       <path d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
                       <path d="M6 11a1 1 0 10-2 0 8 8 0 0016 0 1 1 0 10-2 0 6 6 0 01-12 0z" />
                       <path d="M11 19.93A8.01 8.01 0 014 12a1 1 0 112 0 6 6 0 0012 0 1 1 0 112 0 8.01 8.01 0 01-7 7.93V22a1 1 0 11-2 0v-2.07z" />
                     </svg>
                     {listening && (
-                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                      <span
+                        className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full animate-pulse"
+                        style={{ backgroundColor: "var(--coral)" }}
+                      />
                     )}
                   </div>
                 </button>
@@ -552,19 +704,17 @@ export default function ChatPage() {
               <button
                 type="submit"
                 disabled={loading || !input.trim()}
-                className="px-6 py-4 text-lg font-semibold text-white rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-5 py-3 text-sm font-semibold text-white rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ backgroundColor: "var(--pulse)" }}
               >
                 Send
               </button>
             </form>
-            {/* End Chat — subtle text link (V2 voice: don't proactively
-                emphasize the exit ramp; keep it accessible but quiet) */}
             <div className="px-5 pb-3 text-center">
               <button
                 onClick={handleEndChat}
                 disabled={loading}
-                className="text-xs font-medium hover:underline transition disabled:opacity-50"
+                className="text-xs hover:underline transition disabled:opacity-50"
                 style={{ color: "var(--ink-4)" }}
               >
                 End chat early
@@ -573,6 +723,44 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * BrandAvatar — small square logo block in the header.
+ * Falls back to a pulse-green pulse-mark when no client logo is set.
+ */
+function BrandAvatar({ hasLogo, clientId, companyName }) {
+  const [loaded, setLoaded] = useState(true);
+  if (hasLogo && clientId && loaded) {
+    return (
+      <img
+        src={`/api/sessions/logo/${clientId}`}
+        alt={companyName || "Company logo"}
+        className="h-9 w-9 object-contain rounded bg-white p-0.5"
+        style={{ border: "1px solid var(--line)" }}
+        onError={() => setLoaded(false)}
+      />
+    );
+  }
+  return (
+    <div
+      className="h-9 w-9 rounded flex items-center justify-center text-white flex-shrink-0"
+      style={{ background: "linear-gradient(135deg, var(--pulse), var(--pulse-deep))" }}
+    >
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="white"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 12h4l2-7 4 14 2-7h6" />
+      </svg>
     </div>
   );
 }

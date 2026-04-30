@@ -20,10 +20,17 @@ router.get("/logo/:clientId", async (req, res) => {
   res.send(buffer);
 });
 
-// Get session details including messages
+// Get session details including messages and the community manager name
+// (so the chat welcome can personalize: "Sarah at Zee Best asked me to check in").
 router.get("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const session = await db.get("SELECT * FROM sessions WHERE id = ?", [id]);
+  const session = await db.get(
+    `SELECT s.*, c.community_manager_name
+     FROM sessions s
+     LEFT JOIN communities c ON c.id = s.community_id
+     WHERE s.id = ?`,
+    [id]
+  );
   if (!session) return res.status(404).json({ error: "Session not found" });
 
   const messages = await db.all(
