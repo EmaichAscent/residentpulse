@@ -40,11 +40,20 @@ function LocationAutocomplete({ value, onChange, locations, onCreateLocation, cl
       <input
         type="text"
         value={text}
-        onChange={(e) => { setText(e.target.value); onChange(""); setOpen(true); }}
+        onChange={(e) => {
+          setText(e.target.value);
+          onChange("");
+          setOpen(true);
+        }}
         onFocus={() => setOpen(true)}
         placeholder="Location"
         className={className}
-        onKeyDown={(e) => { if (e.key === "Enter" && text.trim() && !exactMatch) { e.preventDefault(); handleCreate(); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && text.trim() && !exactMatch) {
+            e.preventDefault();
+            handleCreate();
+          }
+        }}
       />
       {open && (filtered.length > 0 || (text.trim() && !exactMatch)) && (
         <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
@@ -53,7 +62,11 @@ function LocationAutocomplete({ value, onChange, locations, onCreateLocation, cl
               key={l.id}
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { onChange(String(l.id)); setText(l.name); setOpen(false); }}
+              onClick={() => {
+                onChange(String(l.id));
+                setText(l.name);
+                setOpen(false);
+              }}
               className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition"
             >
               {l.name}
@@ -100,11 +113,20 @@ export default function CommunityManager() {
 
   // New location input
   const [newLocationName, setNewLocationName] = useState("");
-  const [creatingLocation, setCreatingLocation] = useState(false);
+  const [, setCreatingLocation] = useState(false);
 
   // Add form state
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "", contract_renewal_date: "", contract_month_to_month: false, location_id: "" });
+  const [form, setForm] = useState({
+    community_name: "",
+    contract_value: "",
+    community_manager_name: "",
+    property_type: "",
+    number_of_units: "",
+    contract_renewal_date: "",
+    contract_month_to_month: false,
+    location_id: "",
+  });
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -164,7 +186,9 @@ export default function CommunityManager() {
 
   // --- Filter: deactivation + search ---
   const deactivatedCount = communities.filter((c) => c.status === "deactivated").length;
-  const visibleCommunities = showDeactivated ? communities : communities.filter((c) => c.status !== "deactivated");
+  const visibleCommunities = showDeactivated
+    ? communities
+    : communities.filter((c) => c.status !== "deactivated");
   const filtered = search.trim()
     ? visibleCommunities.filter((c) => {
         const q = search.toLowerCase();
@@ -208,7 +232,16 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setCommunities((prev) => [...prev, { ...data, member_count: 0 }]);
-      setForm({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "", contract_renewal_date: "", contract_month_to_month: false, location_id: "" });
+      setForm({
+        community_name: "",
+        contract_value: "",
+        community_manager_name: "",
+        property_type: "",
+        number_of_units: "",
+        contract_renewal_date: "",
+        contract_month_to_month: false,
+        location_id: "",
+      });
       setShowForm(false);
     } catch (err) {
       setFormError(err.message);
@@ -230,7 +263,10 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
     formData.append("file", file);
 
     try {
-      const res = await fetch("/api/admin/communities/import/preview", { method: "POST", body: formData });
+      const res = await fetch("/api/admin/communities/import/preview", {
+        method: "POST",
+        body: formData,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setPreview(data);
@@ -289,7 +325,9 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setCommunities((prev) => prev.map((c) => (c.id === editingId ? { ...data, member_count: c.member_count } : c)));
+      setCommunities((prev) =>
+        prev.map((c) => (c.id === editingId ? { ...data, member_count: c.member_count } : c))
+      );
       setEditingId(null);
     } catch {
       // silently fail
@@ -307,7 +345,11 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
       setCommunities((prev) =>
         prev.map((comm) =>
           comm.id === c.id
-            ? { ...comm, status: data.status, deactivated_at: data.status === "deactivated" ? new Date().toISOString() : null }
+            ? {
+                ...comm,
+                status: data.status,
+                deactivated_at: data.status === "deactivated" ? new Date().toISOString() : null,
+              }
             : comm
         )
       );
@@ -344,7 +386,10 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
           <input
             type="text"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             placeholder="Search communities..."
             className="input-field-sm flex-1"
           />
@@ -353,7 +398,12 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
             download
             className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-gray-600 border border-gray-300 rounded-lg transition hover:bg-gray-50 whitespace-nowrap"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="w-5 h-5"
+            >
               <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
               <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
             </svg>
@@ -363,23 +413,48 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
             className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg cursor-pointer transition hover:opacity-90 whitespace-nowrap"
             style={{ backgroundColor: "var(--cam-blue)" }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="w-5 h-5"
+            >
               <path d="M9.25 13.25a.75.75 0 001.5 0V4.636l2.955 3.129a.75.75 0 001.09-1.03l-4.25-4.5a.75.75 0 00-1.09 0l-4.25 4.5a.75.75 0 101.09 1.03L9.25 4.636v8.614z" />
               <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
             </svg>
             {uploading ? "Uploading..." : "Import"}
-            <input type="file" accept=".csv" onChange={handleUpload} disabled={uploading} className="hidden" />
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleUpload}
+              disabled={uploading}
+              className="hidden"
+            />
           </label>
           <button
             onClick={() => {
-              if (!showForm) setForm({ community_name: "", contract_value: "", community_manager_name: "", property_type: "", number_of_units: "", contract_renewal_date: "", contract_month_to_month: false });
+              if (!showForm)
+                setForm({
+                  community_name: "",
+                  contract_value: "",
+                  community_manager_name: "",
+                  property_type: "",
+                  number_of_units: "",
+                  contract_renewal_date: "",
+                  contract_month_to_month: false,
+                });
               setShowForm(!showForm);
               setFormError("");
             }}
             className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 whitespace-nowrap"
             style={{ backgroundColor: "var(--cam-blue)" }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="w-5 h-5"
+            >
               <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
             </svg>
             Add Community
@@ -397,8 +472,13 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
           </label>
         )}
         <p className="text-xs text-gray-500 mt-2">
-          Import community data to unlock revenue-at-risk analysis, manager performance, and property type insights.{" "}
-          <button onClick={downloadSampleCSV} className="font-medium hover:underline" style={{ color: "var(--cam-blue)" }}>
+          Import community data to unlock revenue-at-risk analysis, manager performance, and
+          property type insights.{" "}
+          <button
+            onClick={downloadSampleCSV}
+            className="font-medium hover:underline"
+            style={{ color: "var(--cam-blue)" }}
+          >
             Download sample CSV
           </button>
         </p>
@@ -406,16 +486,24 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
 
       {/* Import Result */}
       {result && (
-        <div className={`p-4 rounded-lg border ${result.error ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}>
+        <div
+          className={`p-4 rounded-lg border ${result.error ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}
+        >
           {result.error ? (
             <p className="text-red-700 text-sm">{result.error}</p>
           ) : (
             <div className="text-sm text-green-800">
               <p className="font-semibold">Import complete</p>
-              <p>{result.created} created, {result.updated} updated. {result.matched_members > 0 && `${result.matched_members} board member(s) auto-linked.`}</p>
+              <p>
+                {result.created} created, {result.updated} updated.{" "}
+                {result.matched_members > 0 &&
+                  `${result.matched_members} board member(s) auto-linked.`}
+              </p>
               {result.errors?.length > 0 && (
                 <div className="mt-2 text-red-600">
-                  {result.errors.map((e, i) => <p key={i}>{e}</p>)}
+                  {result.errors.map((e, i) => (
+                    <p key={i}>{e}</p>
+                  ))}
                 </div>
               )}
             </div>
@@ -430,13 +518,17 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
 
           {preview.matched.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-2">Matched ({preview.matched.length})</p>
+              <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-2">
+                Matched ({preview.matched.length})
+              </p>
               <div className="max-h-60 overflow-y-auto">
                 {preview.matched.map((m, i) => (
                   <div key={i} className="flex items-center gap-2 py-1.5 text-sm">
                     <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                     <span className="font-medium">{m.community_name}</span>
-                    <span className="text-gray-400">{"\u2014"} {m.member_count} board member{m.member_count !== 1 ? "s" : ""}</span>
+                    <span className="text-gray-400">
+                      {"\u2014"} {m.member_count} board member{m.member_count !== 1 ? "s" : ""}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -445,7 +537,9 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
 
           {preview.unmatched.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">No exact match ({preview.unmatched.length})</p>
+              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">
+                No exact match ({preview.unmatched.length})
+              </p>
               <div className="max-h-60 overflow-y-auto">
                 {preview.unmatched.map((u, i) => (
                   <div key={i} className="py-1.5 text-sm">
@@ -453,9 +547,13 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
                       <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
                       <span className="font-medium">{u.community_name}</span>
                       {u.suggestions.length > 0 ? (
-                        <span className="text-gray-400">{"\u2014"} similar: {u.suggestions.map((s) => s.name).join(", ")}</span>
+                        <span className="text-gray-400">
+                          {"\u2014"} similar: {u.suggestions.map((s) => s.name).join(", ")}
+                        </span>
                       ) : (
-                        <span className="text-gray-400">{"\u2014"} new community (no board members yet)</span>
+                        <span className="text-gray-400">
+                          {"\u2014"} new community (no board members yet)
+                        </span>
                       )}
                     </div>
                   </div>
@@ -466,7 +564,9 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
 
           {preview.errors?.length > 0 && (
             <div className="text-xs text-red-600">
-              {preview.errors.map((e, i) => <p key={i}>{e}</p>)}
+              {preview.errors.map((e, i) => (
+                <p key={i}>{e}</p>
+              ))}
             </div>
           )}
 
@@ -477,10 +577,15 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
               className="px-5 py-2 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
               style={{ backgroundColor: "var(--cam-blue)" }}
             >
-              {uploading ? "Importing..." : `Import ${preview.matched.length + preview.unmatched.length} Communities`}
+              {uploading
+                ? "Importing..."
+                : `Import ${preview.matched.length + preview.unmatched.length} Communities`}
             </button>
             <button
-              onClick={() => { setPreview(null); setPreviewFile(null); }}
+              onClick={() => {
+                setPreview(null);
+                setPreviewFile(null);
+              }}
               className="px-5 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition"
             >
               Cancel
@@ -492,7 +597,9 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
       {/* Add Community Form */}
       {showForm && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Add New Community</p>
+          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">
+            Add New Community
+          </p>
           <form onSubmit={handleAdd} className="space-y-3">
             <input
               type="text"
@@ -526,7 +633,9 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
               >
                 <option value="">Property type...</option>
                 {PROPERTY_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
                 ))}
               </select>
               <input
@@ -561,7 +670,13 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
                 <input
                   type="checkbox"
                   checked={form.contract_month_to_month}
-                  onChange={(e) => setForm({ ...form, contract_month_to_month: e.target.checked, contract_renewal_date: e.target.checked ? "" : form.contract_renewal_date })}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      contract_month_to_month: e.target.checked,
+                      contract_renewal_date: e.target.checked ? "" : form.contract_renewal_date,
+                    })
+                  }
                   className="rounded border-gray-300"
                 />
                 Month-to-month
@@ -579,7 +694,10 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
               </button>
               <button
                 type="button"
-                onClick={() => { setShowForm(false); setFormError(""); }}
+                onClick={() => {
+                  setShowForm(false);
+                  setFormError("");
+                }}
                 className="px-5 py-2.5 text-sm font-medium text-gray-500 hover:text-gray-700 transition"
               >
                 Cancel
@@ -594,163 +712,233 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
         <p className="text-gray-400 text-center py-10">Loading communities...</p>
       ) : filtered.length === 0 ? (
         <p className="text-gray-500 text-center py-10 text-lg">
-          {communities.length === 0 ? "No communities yet. Import a CSV or add one manually." : "No communities match your search."}
+          {communities.length === 0
+            ? "No communities yet. Import a CSV or add one manually."
+            : "No communities match your search."}
         </p>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                <th className="px-3 py-3">Community</th>
-                <th className="px-3 py-3">Location</th>
-                <th className="px-3 py-3">Value</th>
-                <th className="px-3 py-3">Manager</th>
-                <th className="px-3 py-3">Type</th>
-                <th className="px-3 py-3 text-center">Units</th>
-                <th className="px-3 py-3">Renewal</th>
-                <th className="px-3 py-3 text-center">Members</th>
-                <th className="px-3 py-3 w-16"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((c) =>
-                editingId === c.id ? (
-                  <tr key={c.id} className="bg-blue-50">
-                    <td className="px-5 py-2" colSpan={8}>
-                      <div className="grid grid-cols-6 gap-2 py-1">
-                        <input
-                          type="text"
-                          value={editForm.community_name}
-                          onChange={(e) => setEditForm({ ...editForm, community_name: e.target.value })}
-                          placeholder="Community name"
-                          className="input-field-sm"
-                        />
-                        <LocationAutocomplete
-                          value={editForm.location_id}
-                          onChange={(v) => setEditForm({ ...editForm, location_id: v })}
-                          locations={locations}
-                          onCreateLocation={handleCreateLocation}
-                          className="input-field-sm"
-                        />
-                        <input
-                          type="number"
-                          value={editForm.contract_value}
-                          onChange={(e) => setEditForm({ ...editForm, contract_value: e.target.value })}
-                          placeholder="Contract value"
-                          className="input-field-sm"
-                        />
-                        <input
-                          type="text"
-                          value={editForm.community_manager_name}
-                          onChange={(e) => setEditForm({ ...editForm, community_manager_name: e.target.value })}
-                          placeholder="Manager name"
-                          className="input-field-sm"
-                        />
-                        <select
-                          value={editForm.property_type}
-                          onChange={(e) => setEditForm({ ...editForm, property_type: e.target.value })}
-                          className="input-field-sm"
-                        >
-                          <option value="">Type...</option>
-                          {PROPERTY_TYPES.map((t) => (
-                            <option key={t.value} value={t.value}>{t.label}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          value={editForm.number_of_units}
-                          onChange={(e) => setEditForm({ ...editForm, number_of_units: e.target.value })}
-                          placeholder="Units"
-                          className="input-field-sm"
-                        />
-                      </div>
-                      <div className="grid grid-cols-5 gap-2 mt-2">
-                        <input
-                          type="date"
-                          value={editForm.contract_renewal_date}
-                          onChange={(e) => setEditForm({ ...editForm, contract_renewal_date: e.target.value })}
-                          className="input-field-sm"
-                          disabled={editForm.contract_month_to_month}
-                          title="Contract renewal date"
-                        />
-                        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none col-span-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                  <th className="px-3 py-3">Community</th>
+                  <th className="px-3 py-3">Location</th>
+                  <th className="px-3 py-3">Value</th>
+                  <th className="px-3 py-3">Manager</th>
+                  <th className="px-3 py-3">Type</th>
+                  <th className="px-3 py-3 text-center">Units</th>
+                  <th className="px-3 py-3">Renewal</th>
+                  <th className="px-3 py-3 text-center">Members</th>
+                  <th className="px-3 py-3 w-16"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((c) =>
+                  editingId === c.id ? (
+                    <tr key={c.id} className="bg-blue-50">
+                      <td className="px-5 py-2" colSpan={8}>
+                        <div className="grid grid-cols-6 gap-2 py-1">
                           <input
-                            type="checkbox"
-                            checked={editForm.contract_month_to_month}
-                            onChange={(e) => setEditForm({ ...editForm, contract_month_to_month: e.target.checked, contract_renewal_date: e.target.checked ? "" : editForm.contract_renewal_date })}
-                            className="rounded border-gray-300"
+                            type="text"
+                            value={editForm.community_name}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, community_name: e.target.value })
+                            }
+                            placeholder="Community name"
+                            className="input-field-sm"
                           />
-                          Month-to-month
-                        </label>
-                      </div>
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          onClick={handleSaveEdit}
-                          disabled={editSaving}
-                          className="px-4 py-1.5 text-xs font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
-                          style={{ backgroundColor: "var(--cam-blue)" }}
-                        >
-                          {editSaving ? "Saving..." : "Save"}
-                        </button>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="px-4 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </td>
-                    <td></td>
-                  </tr>
-                ) : (
-                  <tr key={c.id} className={`hover:bg-gray-50 transition ${c.status === "deactivated" ? "opacity-50" : ""}`}>
-                    <td className="px-3 py-3 font-medium text-gray-900">
-                      {c.community_name}
-                      {c.status === "deactivated" && (
-                        <span className="ml-2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 uppercase">Inactive</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-gray-500">{c.location_name || "\u2014"}</td>
-                    <td className="px-3 py-3 text-gray-700">{formatCurrency(c.contract_value)}</td>
-                    <td className="px-3 py-3 text-gray-500">{c.community_manager_name || "\u2014"}</td>
-                    <td className="px-3 py-3 text-gray-500">{formatPropertyType(c.property_type)}</td>
-                    <td className="px-3 py-3 text-gray-500 text-center">{c.number_of_units || "\u2014"}</td>
-                    <td className="px-3 py-3 text-gray-500">{formatRenewal(c)}</td>
-                    <td className="px-3 py-3 text-gray-500 text-center">{c.member_count || 0}</td>
-                    <td className="px-3 py-3">
-                      <div className="flex gap-1">
-                        <button onClick={() => startEdit(c)} className="p-1 text-gray-300 hover:text-blue-500 transition" title="Edit community">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                            <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
-                          </svg>
-                        </button>
-                        {c.status === "deactivated" ? (
-                          <button onClick={() => setToggleTarget(c)} className="p-1 text-gray-300 hover:text-green-500 transition" title="Reactivate community">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                              <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H4.598a.75.75 0 00-.75.75v3.634a.75.75 0 001.5 0v-2.033l.312.311a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm-10.624-2.85a5.5 5.5 0 019.201-2.465l.312.31H11.77a.75.75 0 000 1.5h3.634a.75.75 0 00.75-.75V3.535a.75.75 0 00-1.5 0v2.033l-.312-.31A7 7 0 002.63 8.387a.75.75 0 001.449.39z" clipRule="evenodd" />
-                            </svg>
+                          <LocationAutocomplete
+                            value={editForm.location_id}
+                            onChange={(v) => setEditForm({ ...editForm, location_id: v })}
+                            locations={locations}
+                            onCreateLocation={handleCreateLocation}
+                            className="input-field-sm"
+                          />
+                          <input
+                            type="number"
+                            value={editForm.contract_value}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, contract_value: e.target.value })
+                            }
+                            placeholder="Contract value"
+                            className="input-field-sm"
+                          />
+                          <input
+                            type="text"
+                            value={editForm.community_manager_name}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, community_manager_name: e.target.value })
+                            }
+                            placeholder="Manager name"
+                            className="input-field-sm"
+                          />
+                          <select
+                            value={editForm.property_type}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, property_type: e.target.value })
+                            }
+                            className="input-field-sm"
+                          >
+                            <option value="">Type...</option>
+                            {PROPERTY_TYPES.map((t) => (
+                              <option key={t.value} value={t.value}>
+                                {t.label}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            value={editForm.number_of_units}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, number_of_units: e.target.value })
+                            }
+                            placeholder="Units"
+                            className="input-field-sm"
+                          />
+                        </div>
+                        <div className="grid grid-cols-5 gap-2 mt-2">
+                          <input
+                            type="date"
+                            value={editForm.contract_renewal_date}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, contract_renewal_date: e.target.value })
+                            }
+                            className="input-field-sm"
+                            disabled={editForm.contract_month_to_month}
+                            title="Contract renewal date"
+                          />
+                          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none col-span-4">
+                            <input
+                              type="checkbox"
+                              checked={editForm.contract_month_to_month}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  contract_month_to_month: e.target.checked,
+                                  contract_renewal_date: e.target.checked
+                                    ? ""
+                                    : editForm.contract_renewal_date,
+                                })
+                              }
+                              className="rounded border-gray-300"
+                            />
+                            Month-to-month
+                          </label>
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={handleSaveEdit}
+                            disabled={editSaving}
+                            className="px-4 py-1.5 text-xs font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
+                            style={{ backgroundColor: "var(--cam-blue)" }}
+                          >
+                            {editSaving ? "Saving..." : "Save"}
                           </button>
-                        ) : (
-                          <button onClick={() => setToggleTarget(c)} className="p-1 text-gray-300 hover:text-red-500 transition" title="Deactivate community">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                              <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-                            </svg>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="px-4 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition"
+                          >
+                            Cancel
                           </button>
+                        </div>
+                      </td>
+                      <td></td>
+                    </tr>
+                  ) : (
+                    <tr
+                      key={c.id}
+                      className={`hover:bg-gray-50 transition ${c.status === "deactivated" ? "opacity-50" : ""}`}
+                    >
+                      <td className="px-3 py-3 font-medium text-gray-900">
+                        {c.community_name}
+                        {c.status === "deactivated" && (
+                          <span className="ml-2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 uppercase">
+                            Inactive
+                          </span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              )}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="px-3 py-3 text-gray-500">{c.location_name || "\u2014"}</td>
+                      <td className="px-3 py-3 text-gray-700">
+                        {formatCurrency(c.contract_value)}
+                      </td>
+                      <td className="px-3 py-3 text-gray-500">
+                        {c.community_manager_name || "\u2014"}
+                      </td>
+                      <td className="px-3 py-3 text-gray-500">
+                        {formatPropertyType(c.property_type)}
+                      </td>
+                      <td className="px-3 py-3 text-gray-500 text-center">
+                        {c.number_of_units || "\u2014"}
+                      </td>
+                      <td className="px-3 py-3 text-gray-500">{formatRenewal(c)}</td>
+                      <td className="px-3 py-3 text-gray-500 text-center">{c.member_count || 0}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => startEdit(c)}
+                            className="p-1 text-gray-300 hover:text-blue-500 transition"
+                            title="Edit community"
+                          >
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                              className="w-4 h-4"
+                            >
+                              <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+                            </svg>
+                          </button>
+                          {c.status === "deactivated" ? (
+                            <button
+                              onClick={() => setToggleTarget(c)}
+                              className="p-1 text-gray-300 hover:text-green-500 transition"
+                              title="Reactivate community"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                                className="w-4 h-4"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H4.598a.75.75 0 00-.75.75v3.634a.75.75 0 001.5 0v-2.033l.312.311a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm-10.624-2.85a5.5 5.5 0 019.201-2.465l.312.31H11.77a.75.75 0 000 1.5h3.634a.75.75 0 00.75-.75V3.535a.75.75 0 00-1.5 0v2.033l-.312-.31A7 7 0 002.63 8.387a.75.75 0 001.449.39z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setToggleTarget(c)}
+                              className="p-1 text-gray-300 hover:text-red-500 transition"
+                              title="Deactivate community"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                                className="w-4 h-4"
+                              >
+                                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
           </div>
           <div className="px-5 py-3 bg-gray-50 flex items-center justify-between text-xs text-gray-400">
             <span>
               {filtered.length} communit{filtered.length !== 1 ? "ies" : "y"}
               {search.trim() && ` (${visibleCommunities.length} shown)`}
-              {deactivatedCount > 0 && !showDeactivated && ` \u00b7 ${deactivatedCount} deactivated hidden`}
+              {deactivatedCount > 0 &&
+                !showDeactivated &&
+                ` \u00b7 ${deactivatedCount} deactivated hidden`}
             </span>
             {filtered.length > PAGE_SIZE && (
               <div className="flex items-center gap-2">
@@ -765,7 +953,9 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
                   Page {page} of {Math.ceil(filtered.length / PAGE_SIZE)}
                 </span>
                 <button
-                  onClick={() => setPage(Math.min(Math.ceil(filtered.length / PAGE_SIZE), page + 1))}
+                  onClick={() =>
+                    setPage(Math.min(Math.ceil(filtered.length / PAGE_SIZE), page + 1))
+                  }
                   disabled={page >= Math.ceil(filtered.length / PAGE_SIZE)}
                   className="px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
                 >
@@ -780,18 +970,23 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
       {/* Info Banner */}
       <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
         <p className="text-sm text-blue-800">
-          Community data enriches your dashboards with revenue-at-risk analysis, manager performance comparisons, and property type insights.
-          Board members are automatically linked to communities by matching community names.
+          Community data enriches your dashboards with revenue-at-risk analysis, manager performance
+          comparisons, and property type insights. Board members are automatically linked to
+          communities by matching community names.
         </p>
       </div>
       <ConfirmModal
         isOpen={!!toggleTarget}
         onClose={() => setToggleTarget(null)}
         onConfirm={() => handleToggleStatus(toggleTarget)}
-        title={toggleTarget?.status !== "deactivated" ? "Deactivate Community" : "Reactivate Community"}
-        message={toggleTarget?.status !== "deactivated"
-          ? `Deactivate "${toggleTarget?.community_name}"? Members won't be contacted in future rounds.`
-          : `Reactivate "${toggleTarget?.community_name}"? Members will be included in future rounds.`}
+        title={
+          toggleTarget?.status !== "deactivated" ? "Deactivate Community" : "Reactivate Community"
+        }
+        message={
+          toggleTarget?.status !== "deactivated"
+            ? `Deactivate "${toggleTarget?.community_name}"? Members won't be contacted in future rounds.`
+            : `Reactivate "${toggleTarget?.community_name}"? Members will be included in future rounds.`
+        }
         confirmLabel={toggleTarget?.status !== "deactivated" ? "Deactivate" : "Reactivate"}
         destructive={toggleTarget?.status !== "deactivated"}
       />

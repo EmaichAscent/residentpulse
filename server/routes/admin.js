@@ -6,7 +6,13 @@ import { hashPassword, generatePassword, comparePassword } from "../utils/passwo
 import { sendInvitation, sendNewAdminEmail } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
 import { generateSummary } from "../utils/summaryGenerator.js";
-import { isZohoConfigured, createCheckoutSession, updateSubscriptionHostedPage, cancelSubscription, reactivateSubscription } from "../utils/zohoService.js";
+import {
+  isZohoConfigured,
+  createCheckoutSession,
+  updateSubscriptionHostedPage,
+  cancelSubscription,
+  reactivateSubscription,
+} from "../utils/zohoService.js";
 import logger from "../utils/logger.js";
 
 const router = Router();
@@ -48,15 +54,17 @@ router.get("/responses/:id/messages", async (req, res) => {
   const id = Number(req.params.id);
 
   // Verify session belongs to this client
-  const session = await db.get("SELECT id FROM sessions WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
+  const session = await db.get(
+    "SELECT id FROM sessions WHERE id = ? AND client_id = ? AND is_test = ?",
+    [id, req.clientId, req.isTestMode]
+  );
   if (!session) {
     return res.status(404).json({ error: "Session not found" });
   }
 
-  const messages = await db.all(
-    "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at",
-    [id]
-  );
+  const messages = await db.all("SELECT * FROM messages WHERE session_id = ? ORDER BY created_at", [
+    id,
+  ]);
   res.json(messages);
 });
 
@@ -65,12 +73,18 @@ router.delete("/responses/:id", async (req, res) => {
   const id = Number(req.params.id);
 
   // Verify session belongs to this client
-  const session = await db.get("SELECT id FROM sessions WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
+  const session = await db.get(
+    "SELECT id FROM sessions WHERE id = ? AND client_id = ? AND is_test = ?",
+    [id, req.clientId, req.isTestMode]
+  );
   if (!session) {
     return res.status(404).json({ error: "Session not found" });
   }
 
-  await db.run("DELETE FROM critical_alerts WHERE source_message_id IN (SELECT id FROM messages WHERE session_id = ?)", [id]);
+  await db.run(
+    "DELETE FROM critical_alerts WHERE source_message_id IN (SELECT id FROM messages WHERE session_id = ?)",
+    [id]
+  );
   await db.run("DELETE FROM messages WHERE session_id = ?", [id]);
   await db.run("DELETE FROM sessions WHERE id = ? AND is_test = ?", [id, req.isTestMode]);
   res.json({ ok: true });
@@ -87,10 +101,9 @@ router.get("/mode", async (req, res) => {
     "SELECT current_mode, first_live_switch_confirmed FROM client_admins WHERE id = ?",
     [req.userId]
   );
-  const client = await db.get(
-    "SELECT test_mode_activated_at FROM clients WHERE id = ?",
-    [req.clientId]
-  );
+  const client = await db.get("SELECT test_mode_activated_at FROM clients WHERE id = ?", [
+    req.clientId,
+  ]);
   res.json({
     mode: admin?.current_mode || "live",
     test_mode_activated: !!client?.test_mode_activated_at,
@@ -112,14 +125,15 @@ router.post("/mode", async (req, res) => {
     "SELECT current_mode, first_live_switch_confirmed FROM client_admins WHERE id = ?",
     [req.userId]
   );
-  const client = await db.get(
-    "SELECT test_mode_activated_at FROM clients WHERE id = ?",
-    [req.clientId]
-  );
+  const client = await db.get("SELECT test_mode_activated_at FROM clients WHERE id = ?", [
+    req.clientId,
+  ]);
 
   // First time switching to test: auto-create sandbox data
   if (mode === "test" && !client.test_mode_activated_at) {
-    await db.run("UPDATE clients SET test_mode_activated_at = CURRENT_TIMESTAMP WHERE id = ?", [req.clientId]);
+    await db.run("UPDATE clients SET test_mode_activated_at = CURRENT_TIMESTAMP WHERE id = ?", [
+      req.clientId,
+    ]);
 
     // Create test community
     const communityResult = await db.run(
@@ -157,10 +171,13 @@ router.post("/mode", async (req, res) => {
     if (!confirm) {
       return res.json({
         requires_confirmation: true,
-        message: "Switching to Live Mode. Your test data stays in test mode — live mode starts fresh with your real members and communities.",
+        message:
+          "Switching to Live Mode. Your test data stays in test mode — live mode starts fresh with your real members and communities.",
       });
     }
-    await db.run("UPDATE client_admins SET first_live_switch_confirmed = TRUE WHERE id = ?", [req.userId]);
+    await db.run("UPDATE client_admins SET first_live_switch_confirmed = TRUE WHERE id = ?", [
+      req.userId,
+    ]);
   }
 
   // Update mode
@@ -255,7 +272,7 @@ router.get("/account", async (req, res) => {
     subscription: subscription || null,
     usage: {
       member_count: memberCount?.count || 0,
-      survey_rounds_used: surveyRoundsCount
+      survey_rounds_used: surveyRoundsCount,
     },
     google_review_enabled: reviewEnabled?.value === "true",
     google_review_url: reviewUrl?.value || "",
@@ -274,7 +291,16 @@ router.put("/account", async (req, res) => {
 
   await db.run(
     "UPDATE clients SET company_name = ?, address_line1 = ?, address_line2 = ?, city = ?, state = ?, zip = ?, phone_number = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    [company_name, address_line1 || null, address_line2 || null, city || null, state || null, zip || null, phone_number || null, req.clientId]
+    [
+      company_name,
+      address_line1 || null,
+      address_line2 || null,
+      city || null,
+      state || null,
+      zip || null,
+      phone_number || null,
+      req.clientId,
+    ]
   );
 
   res.json({ ok: true });
@@ -342,7 +368,10 @@ router.put("/account/detractor-threshold", async (req, res) => {
     }
 
     if (value === 0) {
-      await db.run("DELETE FROM settings WHERE key = 'detractor_alert_threshold' AND client_id = ?", [req.clientId]);
+      await db.run(
+        "DELETE FROM settings WHERE key = 'detractor_alert_threshold' AND client_id = ?",
+        [req.clientId]
+      );
     } else {
       await db.run(
         `INSERT INTO settings (key, value, client_id) VALUES ('detractor_alert_threshold', $1, $2)
@@ -381,7 +410,9 @@ router.post("/account/logo", async (req, res) => {
   if (width && height) {
     const ratio = width / height;
     if (ratio < 0.8) {
-      return res.status(400).json({ error: "Portrait logos are not supported. Please use a landscape or square image." });
+      return res.status(400).json({
+        error: "Portrait logos are not supported. Please use a landscape or square image.",
+      });
     }
     if (ratio > 3) {
       return res.status(400).json({ error: "Logo is too wide. Maximum aspect ratio is 3:1." });
@@ -398,7 +429,9 @@ router.post("/account/logo", async (req, res) => {
 
 // Serve client logo as image
 router.get("/account/logo", async (req, res) => {
-  const client = await db.get("SELECT logo_base64, logo_mime_type FROM clients WHERE id = ?", [req.clientId]);
+  const client = await db.get("SELECT logo_base64, logo_mime_type FROM clients WHERE id = ?", [
+    req.clientId,
+  ]);
   if (!client?.logo_base64) {
     return res.status(404).json({ error: "No logo uploaded" });
   }
@@ -437,15 +470,18 @@ router.patch("/account/cadence", async (req, res) => {
 
   if (subscription && survey_cadence > subscription.survey_rounds_per_year) {
     return res.status(403).json({
-      error: "Your plan only supports up to " + subscription.survey_rounds_per_year + " survey rounds per year. Please upgrade to increase cadence."
+      error:
+        "Your plan only supports up to " +
+        subscription.survey_rounds_per_year +
+        " survey rounds per year. Please upgrade to increase cadence.",
     });
   }
 
   // Update cadence
-  await db.run(
-    "UPDATE client_subscriptions SET survey_cadence = ? WHERE client_id = ?",
-    [survey_cadence, req.clientId]
-  );
+  await db.run("UPDATE client_subscriptions SET survey_cadence = ? WHERE client_id = ?", [
+    survey_cadence,
+    req.clientId,
+  ]);
 
   // Recalculate planned rounds — always ensure `survey_cadence` planned rounds exist
   const intervalMonths = survey_cadence === 4 ? 3 : 6;
@@ -464,9 +500,7 @@ router.patch("/account/cadence", async (req, res) => {
     [req.clientId, req.isTestMode]
   );
 
-  const baseDate = lastRound
-    ? new Date(lastRound.closes_at || lastRound.launched_at)
-    : new Date();
+  const baseDate = lastRound ? new Date(lastRound.closes_at || lastRound.launched_at) : new Date();
   const maxRoundNum = lastRound ? lastRound.round_number : 0;
   const now = new Date();
 
@@ -474,9 +508,8 @@ router.patch("/account/cadence", async (req, res) => {
   for (let i = 0; i < survey_cadence; i++) {
     const nextDate = new Date(baseDate);
     nextDate.setMonth(nextDate.getMonth() + intervalMonths * (i + 1));
-    const finalDate = nextDate <= now
-      ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i + 1))
-      : nextDate;
+    const finalDate =
+      nextDate <= now ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 * (i + 1)) : nextDate;
 
     await db.run(
       "INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test) VALUES (?, ?, ?, 'planned', ?)",
@@ -490,7 +523,11 @@ router.patch("/account/cadence", async (req, res) => {
   );
 
   const nextDateStr = nextPlanned
-    ? new Date(nextPlanned.scheduled_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    ? new Date(nextPlanned.scheduled_date).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
     : null;
 
   const message = nextDateStr
@@ -543,7 +580,9 @@ router.post("/account/subscription/change-plan", async (req, res) => {
   }
 
   if (!isZohoConfigured()) {
-    return res.status(502).json({ error: "Payment system is not configured. Please contact support." });
+    return res
+      .status(502)
+      .json({ error: "Payment system is not configured. Please contact support." });
   }
 
   const baseUrl = (process.env.SURVEY_BASE_URL || "http://localhost:5173").replace(/\/$/, "");
@@ -553,7 +592,10 @@ router.post("/account/subscription/change-plan", async (req, res) => {
     // Free → Paid: create new subscription checkout
     if (currentSub.plan_name === "free" && isPaidTarget) {
       const client = await db.get("SELECT * FROM clients WHERE id = ?", [req.clientId]);
-      const admin = await db.get("SELECT email, first_name, last_name FROM client_admins WHERE client_id = ? LIMIT 1", [req.clientId]);
+      const admin = await db.get(
+        "SELECT email, first_name, last_name FROM client_admins WHERE client_id = ? LIMIT 1",
+        [req.clientId]
+      );
 
       const result = await createCheckoutSession({
         planCode: targetPlan.zoho_plan_code,
@@ -594,18 +636,29 @@ router.post("/account/subscription/change-plan", async (req, res) => {
       );
 
       await logActivity({
-        actorType: "client_admin", actorId: req.userId, actorEmail: req.userEmail,
+        actorType: "client_admin",
+        actorId: req.userId,
+        actorEmail: req.userEmail,
         action: "subscription_downgrade_to_free",
-        entityType: "client", entityId: req.clientId, clientId: req.clientId,
+        entityType: "client",
+        entityId: req.clientId,
+        clientId: req.clientId,
       });
 
-      return res.json({ ok: true, message: "Your subscription will downgrade to Free at the end of your billing period." });
+      return res.json({
+        ok: true,
+        message: "Your subscription will downgrade to Free at the end of your billing period.",
+      });
     }
 
-    return res.status(400).json({ error: "Unable to process plan change. Please contact support." });
+    return res
+      .status(400)
+      .json({ error: "Unable to process plan change. Please contact support." });
   } catch (err) {
     logger.error({ err }, "Plan change error");
-    return res.status(502).json({ error: "Payment system error. Please try again or contact support." });
+    return res
+      .status(502)
+      .json({ error: "Payment system error. Please try again or contact support." });
   }
 });
 
@@ -632,7 +685,9 @@ router.post("/account/subscription/cancel", async (req, res) => {
   }
 
   if (!sub.zoho_subscription_id) {
-    return res.status(400).json({ error: "No billing subscription found. Please contact support." });
+    return res
+      .status(400)
+      .json({ error: "No billing subscription found. Please contact support." });
   }
 
   try {
@@ -644,15 +699,25 @@ router.post("/account/subscription/cancel", async (req, res) => {
     );
 
     await logActivity({
-      actorType: "client_admin", actorId: req.userId, actorEmail: req.userEmail,
+      actorType: "client_admin",
+      actorId: req.userId,
+      actorEmail: req.userEmail,
       action: "subscription_cancel_scheduled",
-      entityType: "client", entityId: req.clientId, clientId: req.clientId,
+      entityType: "client",
+      entityId: req.clientId,
+      clientId: req.clientId,
     });
 
-    res.json({ ok: true, message: "Your subscription will be cancelled at the end of your billing period. You'll be downgraded to the Free plan." });
+    res.json({
+      ok: true,
+      message:
+        "Your subscription will be cancelled at the end of your billing period. You'll be downgraded to the Free plan.",
+    });
   } catch (err) {
     logger.error({ err }, "Cancel subscription error");
-    res.status(502).json({ error: "Failed to cancel subscription. Please try again or contact support." });
+    res
+      .status(502)
+      .json({ error: "Failed to cancel subscription. Please try again or contact support." });
   }
 });
 
@@ -668,7 +733,9 @@ router.post("/account/subscription/reactivate", async (req, res) => {
   }
 
   if (!sub.zoho_subscription_id) {
-    return res.status(400).json({ error: "No billing subscription found. Please contact support." });
+    return res
+      .status(400)
+      .json({ error: "No billing subscription found. Please contact support." });
   }
 
   try {
@@ -680,15 +747,21 @@ router.post("/account/subscription/reactivate", async (req, res) => {
     );
 
     await logActivity({
-      actorType: "client_admin", actorId: req.userId, actorEmail: req.userEmail,
+      actorType: "client_admin",
+      actorId: req.userId,
+      actorEmail: req.userEmail,
       action: "subscription_reactivated",
-      entityType: "client", entityId: req.clientId, clientId: req.clientId,
+      entityType: "client",
+      entityId: req.clientId,
+      clientId: req.clientId,
     });
 
     res.json({ ok: true, message: "Your subscription has been reactivated." });
   } catch (err) {
     logger.error({ err }, "Reactivate subscription error");
-    res.status(502).json({ error: "Failed to reactivate subscription. Please try again or contact support." });
+    res
+      .status(502)
+      .json({ error: "Failed to reactivate subscription. Please try again or contact support." });
   }
 });
 
@@ -700,7 +773,10 @@ router.delete("/account", async (req, res) => {
   }
 
   // Verify password
-  const admin = await db.get("SELECT password_hash FROM client_admins WHERE id = ? AND client_id = ?", [req.userId, req.clientId]);
+  const admin = await db.get(
+    "SELECT password_hash FROM client_admins WHERE id = ? AND client_id = ?",
+    [req.userId, req.clientId]
+  );
   if (!admin) return res.status(404).json({ error: "Admin user not found" });
 
   const valid = await comparePassword(password, admin.password_hash);
@@ -715,7 +791,7 @@ router.delete("/account", async (req, res) => {
     entityType: "client",
     entityId: req.clientId,
     clientId: req.clientId,
-    metadata: { reason: "self_service_deletion" }
+    metadata: { reason: "self_service_deletion" },
   });
 
   // Delete client — CASCADE rules handle cleanup of all child tables
@@ -776,7 +852,7 @@ router.get("/board-members", async (req, res) => {
   }
 
   // Attach history to each user
-  const enriched = users.map(u => ({
+  const enriched = users.map((u) => ({
     ...u,
     nps_history: historyByUser[u.id] || [],
   }));
@@ -831,9 +907,9 @@ router.get("/board-members/export", async (req, res) => {
   );
 
   const header = "first_name,last_name,email,community_name";
-  const rows = users.map(u =>
+  const rows = users.map((u) =>
     [u.first_name || "", u.last_name || "", u.email, u.community_name || ""]
-      .map(v => `"${(v || "").replace(/"/g, '""')}"`)
+      .map((v) => `"${(v || "").replace(/"/g, '""')}"`)
       .join(",")
   );
 
@@ -870,29 +946,63 @@ router.post("/board-members", async (req, res) => {
 
   // Check if email already exists for this client
   // Check if email exists (including inactive — reactivate if so)
-  const existing = await db.get("SELECT id, active FROM users WHERE email = ? AND client_id = ? AND is_test = ?", [cleanEmail, req.clientId, req.isTestMode]);
+  const existing = await db.get(
+    "SELECT id, active FROM users WHERE email = ? AND client_id = ? AND is_test = ?",
+    [cleanEmail, req.clientId, req.isTestMode]
+  );
   if (existing && existing.active) {
     return res.status(400).json({ error: "A board member with this email already exists" });
   }
 
   if (existing && !existing.active) {
     // Reactivate previously removed board member
-    const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name, req.isTestMode);
-    const canonicalLocation = await autoCreateLocationIfNeeded(req.clientId, management_company, req.isTestMode);
+    const canonicalCommunity = await autoCreateCommunityIfNeeded(
+      req.clientId,
+      community_name,
+      req.isTestMode
+    );
+    const canonicalLocation = await autoCreateLocationIfNeeded(
+      req.clientId,
+      management_company,
+      req.isTestMode
+    );
     await db.run(
       "UPDATE users SET active = TRUE, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
-      [first_name || null, last_name || null, canonicalCommunity || community_name || null, canonicalLocation || management_company || null, existing.id, req.isTestMode]
+      [
+        first_name || null,
+        last_name || null,
+        canonicalCommunity || community_name || null,
+        canonicalLocation || management_company || null,
+        existing.id,
+        req.isTestMode,
+      ]
     );
     await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
     const reactivated = await db.get("SELECT * FROM users WHERE id = ?", [existing.id]);
     return res.json(reactivated);
   }
 
-  const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name, req.isTestMode);
-  const canonicalLocation = await autoCreateLocationIfNeeded(req.clientId, management_company, req.isTestMode);
+  const canonicalCommunity = await autoCreateCommunityIfNeeded(
+    req.clientId,
+    community_name,
+    req.isTestMode
+  );
+  const canonicalLocation = await autoCreateLocationIfNeeded(
+    req.clientId,
+    management_company,
+    req.isTestMode
+  );
   const result = await db.run(
     "INSERT INTO users (client_id, email, first_name, last_name, community_name, management_company, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [req.clientId, cleanEmail, first_name || null, last_name || null, canonicalCommunity || community_name || null, canonicalLocation || management_company || null, req.isTestMode]
+    [
+      req.clientId,
+      cleanEmail,
+      first_name || null,
+      last_name || null,
+      canonicalCommunity || community_name || null,
+      canonicalLocation || management_company || null,
+      req.isTestMode,
+    ]
   );
 
   await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
@@ -910,7 +1020,11 @@ router.put("/board-members/:id", async (req, res) => {
   }
 
   // Verify the user belongs to this client
-  const user = await db.get("SELECT id FROM users WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
+  const user = await db.get("SELECT id FROM users WHERE id = ? AND client_id = ? AND is_test = ?", [
+    id,
+    req.clientId,
+    req.isTestMode,
+  ]);
   if (!user) {
     return res.status(404).json({ error: "Board member not found" });
   }
@@ -918,16 +1032,35 @@ router.put("/board-members/:id", async (req, res) => {
   const cleanEmail = email.toLowerCase().trim();
 
   // Check if email is already used by another user
-  const existing = await db.get("SELECT id FROM users WHERE email = ? AND client_id = ? AND id != ? AND is_test = ?", [cleanEmail, req.clientId, id, req.isTestMode]);
+  const existing = await db.get(
+    "SELECT id FROM users WHERE email = ? AND client_id = ? AND id != ? AND is_test = ?",
+    [cleanEmail, req.clientId, id, req.isTestMode]
+  );
   if (existing) {
     return res.status(400).json({ error: "A board member with this email already exists" });
   }
 
-  const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name, req.isTestMode);
-  const canonicalLocation = await autoCreateLocationIfNeeded(req.clientId, management_company, req.isTestMode);
+  const canonicalCommunity = await autoCreateCommunityIfNeeded(
+    req.clientId,
+    community_name,
+    req.isTestMode
+  );
+  const canonicalLocation = await autoCreateLocationIfNeeded(
+    req.clientId,
+    management_company,
+    req.isTestMode
+  );
   await db.run(
     "UPDATE users SET email = ?, first_name = ?, last_name = ?, community_name = ?, management_company = ?, updated_at = CURRENT_TIMESTAMP, community_id = NULL WHERE id = ? AND is_test = ?",
-    [cleanEmail, first_name || null, last_name || null, canonicalCommunity || community_name || null, canonicalLocation || management_company || null, id, req.isTestMode]
+    [
+      cleanEmail,
+      first_name || null,
+      last_name || null,
+      canonicalCommunity || community_name || null,
+      canonicalLocation || management_company || null,
+      id,
+      req.isTestMode,
+    ]
   );
 
   await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
@@ -941,12 +1074,19 @@ router.delete("/board-members/:id", async (req, res) => {
   const { id } = req.params;
 
   // Verify the user belongs to this client
-  const user = await db.get("SELECT id FROM users WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
+  const user = await db.get("SELECT id FROM users WHERE id = ? AND client_id = ? AND is_test = ?", [
+    id,
+    req.clientId,
+    req.isTestMode,
+  ]);
   if (!user) {
     return res.status(404).json({ error: "Board member not found" });
   }
 
-  await db.run("UPDATE users SET active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?", [id, req.isTestMode]);
+  await db.run(
+    "UPDATE users SET active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?",
+    [id, req.isTestMode]
+  );
   res.json({ ok: true });
 });
 
@@ -959,7 +1099,10 @@ router.post("/board-members/import", async (req, res) => {
 
     const file = req.files.file;
     const csv = file.data.toString("utf8");
-    const lines = csv.split("\n").map((l) => l.trim()).filter((l) => l);
+    const lines = csv
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l);
 
     if (lines.length < 2) {
       return res.status(400).json({ error: "CSV file is empty or invalid" });
@@ -975,7 +1118,10 @@ router.post("/board-members/import", async (req, res) => {
     const firstNameIndex = headers.indexOf("first_name");
     const lastNameIndex = headers.indexOf("last_name");
     const communityIndex = headers.indexOf("community_name");
-    const companyIndex = headers.indexOf("location") >= 0 ? headers.indexOf("location") : headers.indexOf("management_company");
+    const companyIndex =
+      headers.indexOf("location") >= 0
+        ? headers.indexOf("location")
+        : headers.indexOf("management_company");
 
     let created = 0;
     let updated = 0;
@@ -997,12 +1143,23 @@ router.post("/board-members/import", async (req, res) => {
 
       try {
         // Fuzzy-match community name to prevent duplicates
-        const canonicalCommunity = await autoCreateCommunityIfNeeded(req.clientId, community_name, req.isTestMode);
+        const canonicalCommunity = await autoCreateCommunityIfNeeded(
+          req.clientId,
+          community_name,
+          req.isTestMode
+        );
         const finalCommunity = canonicalCommunity || community_name;
-        const canonicalLocation = await autoCreateLocationIfNeeded(req.clientId, management_company, req.isTestMode);
+        const canonicalLocation = await autoCreateLocationIfNeeded(
+          req.clientId,
+          management_company,
+          req.isTestMode
+        );
         const finalLocation = canonicalLocation || management_company;
 
-        const existing = await db.get("SELECT id, active FROM users WHERE email = ? AND client_id = ? AND is_test = ?", [email, req.clientId, req.isTestMode]);
+        const existing = await db.get(
+          "SELECT id, active FROM users WHERE email = ? AND client_id = ? AND is_test = ?",
+          [email, req.clientId, req.isTestMode]
+        );
 
         if (existing) {
           await db.run(
@@ -1013,7 +1170,15 @@ router.post("/board-members/import", async (req, res) => {
         } else {
           await db.run(
             "INSERT INTO users (client_id, email, first_name, last_name, community_name, management_company, is_test) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [req.clientId, email, first_name, last_name, finalCommunity, finalLocation, req.isTestMode]
+            [
+              req.clientId,
+              email,
+              first_name,
+              last_name,
+              finalCommunity,
+              finalLocation,
+              req.isTestMode,
+            ]
           );
           created++;
         }
@@ -1029,7 +1194,7 @@ router.post("/board-members/import", async (req, res) => {
       created,
       updated,
       total: created + updated,
-      errors: errors.length > 0 ? errors : undefined
+      errors: errors.length > 0 ? errors : undefined,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1037,7 +1202,7 @@ router.post("/board-members/import", async (req, res) => {
 });
 
 // Helper function to add delay between email sends (rate limiting)
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Send survey invitations to selected board members
 router.post("/board-members/invite", async (req, res) => {
@@ -1079,7 +1244,7 @@ router.post("/board-members/invite", async (req, res) => {
 
       if (effectiveRounds > limit) {
         return res.status(403).json({
-          error: `Survey round limit reached (${limit} rounds/year). ${limit < subscription.survey_rounds_per_year ? "You can increase your cadence in Account settings." : "Please upgrade your plan."}`
+          error: `Survey round limit reached (${limit} rounds/year). ${limit < subscription.survey_rounds_per_year ? "You can increase your cadence in Account settings." : "Please upgrade your plan."}`,
         });
       }
     }
@@ -1105,7 +1270,7 @@ router.post("/board-members/invite", async (req, res) => {
           results.push({
             user_id: userId,
             status: "failed",
-            error: "User not found or does not belong to this client"
+            error: "User not found or does not belong to this client",
           });
           failedCount++;
           continue;
@@ -1132,10 +1297,9 @@ router.post("/board-members/invite", async (req, res) => {
         results.push({
           user_id: userId,
           email: user.email,
-          status: "sent"
+          status: "sent",
         });
         sentCount++;
-
       } catch (err) {
         logger.error({ err }, `Failed to send invitation to user ${userId}`);
 
@@ -1152,7 +1316,7 @@ router.post("/board-members/invite", async (req, res) => {
         results.push({
           user_id: userId,
           status: "failed",
-          error: err.message
+          error: err.message,
         });
         failedCount++;
       }
@@ -1167,9 +1331,8 @@ router.post("/board-members/invite", async (req, res) => {
     res.json({
       sent: sentCount,
       failed: failedCount,
-      results
+      results,
     });
-
   } catch (err) {
     logger.error({ err }, "Invitation endpoint error");
     res.status(500).json({ error: err.message });
@@ -1197,7 +1360,9 @@ router.post("/board-members/:id/survey-link", async (req, res) => {
     [req.clientId]
   );
   if (!round) {
-    return res.status(400).json({ error: "No active test round. Switch to test mode to create one." });
+    return res
+      .status(400)
+      .json({ error: "No active test round. Switch to test mode to create one." });
   }
 
   // Generate token (long expiry for test mode — 30 days)
@@ -1274,7 +1439,7 @@ router.post("/users", async (req, res) => {
   res.json({
     ok: true,
     email: cleanEmail,
-    message: "Admin user created. Login credentials have been sent to their email."
+    message: "Admin user created. Login credentials have been sent to their email.",
   });
 });
 
@@ -1283,15 +1448,19 @@ router.patch("/users/:id", async (req, res) => {
   const { id } = req.params;
   const { first_name, last_name } = req.body;
 
-  const user = await db.get("SELECT id FROM client_admins WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  const user = await db.get("SELECT id FROM client_admins WHERE id = ? AND client_id = ?", [
+    id,
+    req.clientId,
+  ]);
   if (!user) {
     return res.status(404).json({ error: "Admin user not found" });
   }
 
-  await db.run(
-    "UPDATE client_admins SET first_name = ?, last_name = ? WHERE id = ?",
-    [first_name || null, last_name || null, id]
-  );
+  await db.run("UPDATE client_admins SET first_name = ?, last_name = ? WHERE id = ?", [
+    first_name || null,
+    last_name || null,
+    id,
+  ]);
 
   res.json({ ok: true });
 });
@@ -1301,7 +1470,10 @@ router.delete("/users/:id", async (req, res) => {
   const { id } = req.params;
 
   // Verify the user belongs to this client
-  const user = await db.get("SELECT id FROM client_admins WHERE id = ? AND client_id = ?", [id, req.clientId]);
+  const user = await db.get("SELECT id FROM client_admins WHERE id = ? AND client_id = ?", [
+    id,
+    req.clientId,
+  ]);
   if (!user) {
     return res.status(404).json({ error: "Admin user not found" });
   }
@@ -1312,7 +1484,10 @@ router.delete("/users/:id", async (req, res) => {
   }
 
   // Check if this is the last admin for this client
-  const adminCount = await db.get("SELECT COUNT(*) as count FROM client_admins WHERE client_id = ?", [req.clientId]);
+  const adminCount = await db.get(
+    "SELECT COUNT(*) as count FROM client_admins WHERE client_id = ?",
+    [req.clientId]
+  );
   if (adminCount.count <= 1) {
     return res.status(400).json({ error: "Cannot remove the last admin user" });
   }
@@ -1401,7 +1576,7 @@ router.post("/alerts/:id/dismiss", async (req, res) => {
       entityType: "critical_alert",
       entityId: alertId,
       clientId: req.clientId,
-      metadata: { reason: reason || null }
+      metadata: { reason: reason || null },
     });
 
     res.json({ ok: true });
@@ -1436,7 +1611,7 @@ router.post("/alerts/:id/solve", async (req, res) => {
       entityType: "critical_alert",
       entityId: alertId,
       clientId: req.clientId,
-      metadata: { note: note || null }
+      metadata: { note: note || null },
     });
 
     res.json({ ok: true });
@@ -1468,7 +1643,10 @@ router.post("/sessions/:id/finalize", async (req, res) => {
     }
 
     // Mark complete
-    await db.run("UPDATE sessions SET completed = TRUE WHERE id = ? AND is_test = ?", [sessionId, req.isTestMode]);
+    await db.run("UPDATE sessions SET completed = TRUE WHERE id = ? AND is_test = ?", [
+      sessionId,
+      req.isTestMode,
+    ]);
 
     // Generate summary synchronously so admin sees the result.
     // Returns null if there's no transcript — that's fine, the NPS still counts.
@@ -1493,7 +1671,8 @@ router.post("/sessions/:id/finalize", async (req, res) => {
 
 // ============ Community Endpoints (Paid Tiers) ============
 
-// Helper: check if client is on a paid tier
+// Helper: check if client is on a paid tier (currently unused — retained for future endpoints)
+// eslint-disable-next-line no-unused-vars
 async function requirePaidTier(req, res) {
   const sub = await db.get(
     `SELECT sp.name as plan_name FROM client_subscriptions cs
@@ -1502,7 +1681,9 @@ async function requirePaidTier(req, res) {
     [req.clientId]
   );
   if (!sub || sub.plan_name === "free") {
-    res.status(403).json({ error: "This feature requires a paid plan. Please upgrade to access it." });
+    res
+      .status(403)
+      .json({ error: "This feature requires a paid plan. Please upgrade to access it." });
     return false;
   }
   return true;
@@ -1522,7 +1703,9 @@ async function checkCommunityLimit(req, res) {
     [req.clientId]
   );
   if ((count?.count || 0) >= 5) {
-    res.status(403).json({ error: "Free plan is limited to 5 communities. Upgrade your plan to add more." });
+    res
+      .status(403)
+      .json({ error: "Free plan is limited to 5 communities. Upgrade your plan to add more." });
     return false;
   }
   return true;
@@ -1530,15 +1713,17 @@ async function checkCommunityLimit(req, res) {
 
 // Helper: Levenshtein distance for fuzzy name matching
 function levenshtein(a, b) {
-  const m = a.length, n = b.length;
+  const m = a.length,
+    n = b.length;
   const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
   for (let i = 0; i <= m; i++) dp[i][0] = i;
   for (let j = 0; j <= n; j++) dp[0][j] = j;
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      dp[i][j] =
+        a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
     }
   }
   return dp[m][n];
@@ -1569,7 +1754,6 @@ async function autoCreateCommunityIfNeeded(clientId, communityName, isTestMode =
   for (const c of allCommunities) {
     const existingNorm = c.community_name.toLowerCase().trim();
     const dist = levenshtein(normalized, existingNorm);
-    const maxLen = Math.max(normalized.length, existingNorm.length);
     // Match if: Levenshtein ≤ 2, OR one is a substring of the other (for "Oak Ridge" vs "Oak Ridge HOA")
     if (dist <= 2 || existingNorm.includes(normalized) || normalized.includes(existingNorm)) {
       return c.community_name; // Use existing name as canonical
@@ -1577,10 +1761,11 @@ async function autoCreateCommunityIfNeeded(clientId, communityName, isTestMode =
   }
 
   // No match found — create new community
-  await db.run(
-    "INSERT INTO communities (client_id, community_name, is_test) VALUES (?, ?, ?)",
-    [clientId, trimmed, isTestMode]
-  );
+  await db.run("INSERT INTO communities (client_id, community_name, is_test) VALUES (?, ?, ?)", [
+    clientId,
+    trimmed,
+    isTestMode,
+  ]);
   return trimmed;
 }
 
@@ -1594,10 +1779,11 @@ async function autoCreateLocationIfNeeded(clientId, locationName, isTestMode = f
   );
   if (existing) return existing.name;
 
-  await db.run(
-    "INSERT INTO locations (client_id, name, is_test) VALUES (?, ?, ?)",
-    [clientId, trimmed, isTestMode]
-  );
+  await db.run("INSERT INTO locations (client_id, name, is_test) VALUES (?, ?, ?)", [
+    clientId,
+    trimmed,
+    isTestMode,
+  ]);
   return trimmed;
 }
 
@@ -1619,7 +1805,10 @@ async function autoLinkUsersToCommunities(clientId, isTestMode = false) {
 
 // Helper: parse CSV rows (reused for import and preview)
 function parseCommunityCSV(csv) {
-  const lines = csv.split("\n").map((l) => l.trim()).filter((l) => l);
+  const lines = csv
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l);
   if (lines.length < 2) return { error: "CSV file is empty or invalid", rows: [] };
 
   const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
@@ -1645,7 +1834,8 @@ function parseCommunityCSV(csv) {
       community_name: name,
       contract_value: contractIdx >= 0 ? parseFloat(values[contractIdx]) || null : null,
       community_manager_name: managerIdx >= 0 ? values[managerIdx] || null : null,
-      property_type: typeIdx >= 0 ? values[typeIdx]?.toLowerCase().replace(/\s+/g, "_") || null : null,
+      property_type:
+        typeIdx >= 0 ? values[typeIdx]?.toLowerCase().replace(/\s+/g, "_") || null : null,
       number_of_units: unitsIdx >= 0 ? parseInt(values[unitsIdx]) || null : null,
       location: locationIdx >= 0 ? values[locationIdx] || null : null,
     });
@@ -1678,7 +1868,8 @@ router.post("/locations", async (req, res) => {
       "SELECT id FROM locations WHERE LOWER(TRIM(name)) = ? AND client_id = ? AND is_test = ?",
       [name.trim().toLowerCase(), req.clientId, req.isTestMode]
     );
-    if (existing) return res.status(409).json({ error: "Location already exists", id: existing.id });
+    if (existing)
+      return res.status(409).json({ error: "Location already exists", id: existing.id });
 
     const result = await db.run(
       "INSERT INTO locations (client_id, name, is_test) VALUES (?, ?, ?)",
@@ -1696,16 +1887,25 @@ router.put("/locations/:id", async (req, res) => {
     const { name, google_review_url } = req.body;
     const id = Number(req.params.id);
 
-    const location = await db.get("SELECT id FROM locations WHERE id = ? AND client_id = ?", [id, req.clientId]);
+    const location = await db.get("SELECT id FROM locations WHERE id = ? AND client_id = ?", [
+      id,
+      req.clientId,
+    ]);
     if (!location) return res.status(404).json({ error: "Location not found" });
 
     if (name !== undefined) {
-      await db.run("UPDATE locations SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [name.trim(), id]);
+      await db.run("UPDATE locations SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [
+        name.trim(),
+        id,
+      ]);
     }
     if (google_review_url !== undefined) {
       let url = google_review_url?.trim() || null;
       if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
-      await db.run("UPDATE locations SET google_review_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [url, id]);
+      await db.run(
+        "UPDATE locations SET google_review_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [url, id]
+      );
     }
 
     res.json({ ok: true });
@@ -1718,7 +1918,10 @@ router.put("/locations/:id", async (req, res) => {
 router.delete("/locations/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
-    await db.run("UPDATE communities SET location_id = NULL WHERE location_id = ? AND client_id = ?", [id, req.clientId]);
+    await db.run(
+      "UPDATE communities SET location_id = NULL WHERE location_id = ? AND client_id = ?",
+      [id, req.clientId]
+    );
     await db.run("DELETE FROM locations WHERE id = ? AND client_id = ?", [id, req.clientId]);
     res.json({ ok: true });
   } catch (err) {
@@ -1799,15 +2002,28 @@ router.get("/communities/export", async (req, res) => {
   const escCSV = (val) => {
     if (val == null) return "";
     const s = String(val);
-    return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+    return s.includes(",") || s.includes('"') || s.includes("\n")
+      ? `"${s.replace(/"/g, '""')}"`
+      : s;
   };
 
-  const header = "community_name,location,contract_value,community_manager_name,property_type,number_of_units,contract_renewal_date,month_to_month,status,member_count";
-  const rows = communities.map(c =>
-    [c.community_name, c.location_name || "", c.contract_value || "", c.community_manager_name || "",
-     c.property_type || "", c.number_of_units || "", c.contract_renewal_date ? c.contract_renewal_date.split("T")[0] : "",
-     c.contract_month_to_month ? "yes" : "no", c.status || "active", c.member_count || 0
-    ].map(escCSV).join(",")
+  const header =
+    "community_name,location,contract_value,community_manager_name,property_type,number_of_units,contract_renewal_date,month_to_month,status,member_count";
+  const rows = communities.map((c) =>
+    [
+      c.community_name,
+      c.location_name || "",
+      c.contract_value || "",
+      c.community_manager_name || "",
+      c.property_type || "",
+      c.number_of_units || "",
+      c.contract_renewal_date ? c.contract_renewal_date.split("T")[0] : "",
+      c.contract_month_to_month ? "yes" : "no",
+      c.status || "active",
+      c.member_count || 0,
+    ]
+      .map(escCSV)
+      .join(",")
   );
 
   const csv = [header, ...rows].join("\n");
@@ -1821,8 +2037,18 @@ router.post("/communities", async (req, res) => {
   try {
     if (!(await checkCommunityLimit(req, res))) return;
 
-    const { community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month, location_id } = req.body;
-    if (!community_name?.trim()) return res.status(400).json({ error: "Community name is required" });
+    const {
+      community_name,
+      contract_value,
+      community_manager_name,
+      property_type,
+      number_of_units,
+      contract_renewal_date,
+      contract_month_to_month,
+      location_id,
+    } = req.body;
+    if (!community_name?.trim())
+      return res.status(400).json({ error: "Community name is required" });
 
     const validTypes = ["condo", "townhome", "single_family", "mixed", "other"];
     const propType = validTypes.includes(property_type) ? property_type : null;
@@ -1831,25 +2057,40 @@ router.post("/communities", async (req, res) => {
       "SELECT id, community_name FROM communities WHERE LOWER(TRIM(community_name)) = ? AND client_id = ? AND is_test = ?",
       [community_name.toLowerCase().trim(), req.clientId, req.isTestMode]
     );
-    if (existing) return res.status(400).json({ error: "A community with that name already exists" });
+    if (existing)
+      return res.status(400).json({ error: "A community with that name already exists" });
 
     // Fuzzy check: warn if a similar community exists
     const allCommunities = await db.all(
-      "SELECT community_name FROM communities WHERE client_id = ? AND is_test = ?", [req.clientId, req.isTestMode]
+      "SELECT community_name FROM communities WHERE client_id = ? AND is_test = ?",
+      [req.clientId, req.isTestMode]
     );
     const normalized = community_name.toLowerCase().trim();
     for (const c of allCommunities) {
       const existingNorm = c.community_name.toLowerCase().trim();
       const dist = levenshtein(normalized, existingNorm);
       if (dist <= 2 || existingNorm.includes(normalized) || normalized.includes(existingNorm)) {
-        return res.status(400).json({ error: `A similar community already exists: "${c.community_name}". Did you mean to update that one instead?` });
+        return res.status(400).json({
+          error: `A similar community already exists: "${c.community_name}". Did you mean to update that one instead?`,
+        });
       }
     }
 
     await db.run(
       `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month, location_id, is_test)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [req.clientId, community_name.trim(), contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false, location_id || null, req.isTestMode]
+      [
+        req.clientId,
+        community_name.trim(),
+        contract_value || null,
+        community_manager_name || null,
+        propType,
+        number_of_units || null,
+        contract_renewal_date || null,
+        contract_month_to_month || false,
+        location_id || null,
+        req.isTestMode,
+      ]
     );
 
     const created = await db.get(
@@ -1869,7 +2110,6 @@ router.post("/communities", async (req, res) => {
 // Preview community CSV import (no save)
 router.post("/communities/import/preview", async (req, res) => {
   try {
-
     if (!req.files || !req.files.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
@@ -1890,7 +2130,9 @@ router.post("/communities/import/preview", async (req, res) => {
       "SELECT community_name, COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE AND community_name IS NOT NULL AND is_test = ? GROUP BY community_name",
       [req.clientId, req.isTestMode]
     );
-    const countMap = Object.fromEntries(memberCounts.map((r) => [r.community_name.toLowerCase().trim(), r.count]));
+    const countMap = Object.fromEntries(
+      memberCounts.map((r) => [r.community_name.toLowerCase().trim(), r.count])
+    );
 
     const matched = [];
     const unmatched = [];
@@ -1909,7 +2151,12 @@ router.post("/communities/import/preview", async (req, res) => {
         // Find close matches via Levenshtein
         const suggestions = nameList
           .map((n) => ({ name: n, distance: levenshtein(normalized, n.toLowerCase().trim()) }))
-          .filter((s) => s.distance <= 3 || normalized.includes(s.name.toLowerCase().trim()) || s.name.toLowerCase().trim().includes(normalized))
+          .filter(
+            (s) =>
+              s.distance <= 3 ||
+              normalized.includes(s.name.toLowerCase().trim()) ||
+              s.name.toLowerCase().trim().includes(normalized)
+          )
           .sort((a, b) => a.distance - b.distance)
           .slice(0, 3)
           .map((s) => ({
@@ -1933,7 +2180,6 @@ router.post("/communities/import/preview", async (req, res) => {
 // Import communities from CSV
 router.post("/communities/import", async (req, res) => {
   try {
-
     if (!req.files || !req.files.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
@@ -1999,13 +2245,18 @@ router.post("/communities/import", async (req, res) => {
         // Fuzzy match if no exact match and no explicit remap from preview
         if (!existing && !nameMap[row.community_name]) {
           const allCommunities = await db.all(
-            "SELECT id, community_name FROM communities WHERE client_id = ? AND is_test = ?", [req.clientId, req.isTestMode]
+            "SELECT id, community_name FROM communities WHERE client_id = ? AND is_test = ?",
+            [req.clientId, req.isTestMode]
           );
           const normalized = finalName.toLowerCase().trim();
           for (const c of allCommunities) {
             const existingNorm = c.community_name.toLowerCase().trim();
             const dist = levenshtein(normalized, existingNorm);
-            if (dist <= 2 || existingNorm.includes(normalized) || normalized.includes(existingNorm)) {
+            if (
+              dist <= 2 ||
+              existingNorm.includes(normalized) ||
+              normalized.includes(existingNorm)
+            ) {
               existing = c;
               finalName = c.community_name;
               break;
@@ -2016,18 +2267,34 @@ router.post("/communities/import", async (req, res) => {
         if (existing) {
           await db.run(
             `UPDATE communities SET contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?${locationId ? ", location_id = " + locationId : ""}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?`,
-            [row.contract_value, row.community_manager_name, propType, row.number_of_units, existing.id, req.isTestMode]
+            [
+              row.contract_value,
+              row.community_manager_name,
+              propType,
+              row.number_of_units,
+              existing.id,
+              req.isTestMode,
+            ]
           );
           updated++;
         } else {
-          if (isFreeTier && (currentCommunityCount + created) >= 5) {
+          if (isFreeTier && currentCommunityCount + created >= 5) {
             errors.push(`${finalName}: Free plan limited to 5 communities, skipped`);
             continue;
           }
           await db.run(
             `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, location_id, is_test)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [req.clientId, finalName, row.contract_value, row.community_manager_name, propType, row.number_of_units, locationId, req.isTestMode]
+            [
+              req.clientId,
+              finalName,
+              row.contract_value,
+              row.community_manager_name,
+              propType,
+              row.number_of_units,
+              locationId,
+              req.isTestMode,
+            ]
           );
           created++;
         }
@@ -2039,7 +2306,13 @@ router.post("/communities/import", async (req, res) => {
     // Auto-link board members to communities
     const linked = await autoLinkUsersToCommunities(req.clientId, req.isTestMode);
 
-    res.json({ created, updated, matched_members: linked, total: created + updated, errors: errors.length > 0 ? errors : undefined });
+    res.json({
+      created,
+      updated,
+      matched_members: linked,
+      total: created + updated,
+      errors: errors.length > 0 ? errors : undefined,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2048,16 +2321,39 @@ router.post("/communities/import", async (req, res) => {
 // Update a community
 router.put("/communities/:id", async (req, res) => {
   const { id } = req.params;
-  const community = await db.get("SELECT id FROM communities WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
+  const community = await db.get(
+    "SELECT id FROM communities WHERE id = ? AND client_id = ? AND is_test = ?",
+    [id, req.clientId, req.isTestMode]
+  );
   if (!community) return res.status(404).json({ error: "Community not found" });
 
-  const { community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month, location_id } = req.body;
+  const {
+    community_name,
+    contract_value,
+    community_manager_name,
+    property_type,
+    number_of_units,
+    contract_renewal_date,
+    contract_month_to_month,
+    location_id,
+  } = req.body;
   const validTypes = ["condo", "townhome", "single_family", "mixed", "other"];
   const propType = validTypes.includes(property_type) ? property_type : null;
 
   await db.run(
     `UPDATE communities SET community_name = ?, contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, contract_renewal_date = ?, contract_month_to_month = ?, location_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?`,
-    [community_name, contract_value || null, community_manager_name || null, propType, number_of_units || null, contract_renewal_date || null, contract_month_to_month || false, location_id || null, id, req.isTestMode]
+    [
+      community_name,
+      contract_value || null,
+      community_manager_name || null,
+      propType,
+      number_of_units || null,
+      contract_renewal_date || null,
+      contract_month_to_month || false,
+      location_id || null,
+      id,
+      req.isTestMode,
+    ]
   );
 
   const updated = await db.get(
@@ -2070,7 +2366,10 @@ router.put("/communities/:id", async (req, res) => {
 // Deactivate/reactivate a community (toggle)
 router.delete("/communities/:id", async (req, res) => {
   const { id } = req.params;
-  const community = await db.get("SELECT id, status FROM communities WHERE id = ? AND client_id = ? AND is_test = ?", [id, req.clientId, req.isTestMode]);
+  const community = await db.get(
+    "SELECT id, status FROM communities WHERE id = ? AND client_id = ? AND is_test = ?",
+    [id, req.clientId, req.isTestMode]
+  );
   if (!community) return res.status(404).json({ error: "Community not found" });
 
   if (community.status === "deactivated") {
@@ -2102,7 +2401,8 @@ router.post("/help-chat", async (req, res) => {
     // Build conversation history for multi-turn
     const messages = [];
     if (history && Array.isArray(history)) {
-      for (const msg of history.slice(-6)) { // Keep last 6 messages for context
+      for (const msg of history.slice(-6)) {
+        // Keep last 6 messages for context
         messages.push({ role: msg.role, content: msg.content });
       }
     }
@@ -2111,7 +2411,7 @@ router.post("/help-chat", async (req, res) => {
     // Build knowledge base from help articles sent by the client
     let knowledgeBase = "";
     if (articles && Array.isArray(articles)) {
-      knowledgeBase = articles.map(a => `## ${a.title}\n${a.body}`).join("\n\n");
+      knowledgeBase = articles.map((a) => `## ${a.title}\n${a.body}`).join("\n\n");
     }
 
     const response = await createMessage({

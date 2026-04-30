@@ -16,7 +16,9 @@ export default function AdminPage() {
     checkAuth();
     // Check for client logo
     fetch("/api/admin/account/logo", { credentials: "include" })
-      .then(res => { if (res.ok) setLogoUrl("/api/admin/account/logo"); })
+      .then((res) => {
+        if (res.ok) setLogoUrl("/api/admin/account/logo");
+      })
       .catch(() => {});
   }, []);
 
@@ -65,7 +67,7 @@ export default function AdminPage() {
     try {
       await fetch("/api/superadmin/exit-impersonation", {
         method: "POST",
-        credentials: "include"
+        credentials: "include",
       });
       window.location.href = "/superadmin";
     } catch (err) {
@@ -73,7 +75,7 @@ export default function AdminPage() {
     }
   };
 
-  const handleModeChange = (newMode) => {
+  const handleModeChange = () => {
     window.location.reload();
   };
 
@@ -94,8 +96,8 @@ export default function AdminPage() {
         <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-3">
           <div className="max-w-4xl mx-auto flex justify-between items-center">
             <p className="text-sm text-yellow-800">
-              <span className="font-semibold">Viewing as: {user.company_name}</span>
-              {" "}(SuperAdmin Impersonation Mode)
+              <span className="font-semibold">Viewing as: {user.company_name}</span> (SuperAdmin
+              Impersonation Mode)
             </p>
             <button
               onClick={handleExitImpersonation}
@@ -112,7 +114,8 @@ export default function AdminPage() {
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
           <div className="max-w-4xl mx-auto flex justify-between items-center">
             <p className="text-sm text-amber-800">
-              <span className="font-semibold">Test Mode</span> — You're viewing sandbox data. No real emails will be sent.
+              <span className="font-semibold">Test Mode</span> — You're viewing sandbox data. No
+              real emails will be sent.
             </p>
             <button
               onClick={() => handleModeChange("live")}
@@ -133,17 +136,24 @@ export default function AdminPage() {
                 src={logoUrl}
                 alt={user?.company_name || "Company logo"}
                 className="h-10 max-w-[140px] object-contain rounded bg-white p-1"
-                onError={(e) => { e.target.style.display = "none"; }}
+                onError={(e) => {
+                  e.target.style.display = "none";
+                }}
               />
             )}
             <div>
               <h1 className="text-2xl font-bold text-white">ResidentPulse Admin</h1>
-              <p className="text-lg text-white/90 font-medium">{user?.company_name || "Loading..."}</p>
+              <p className="text-lg text-white/90 font-medium">
+                {user?.company_name || "Loading..."}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <TestModeToggle user={user} onModeChange={handleModeChange} />
-            <button onClick={handleLogout} className="px-4 py-2 text-sm font-semibold text-white border border-white/40 rounded-lg transition hover:bg-white/10">
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 text-sm font-semibold text-white border border-white/40 rounded-lg transition hover:bg-white/10"
+            >
               Logout
             </button>
           </div>
@@ -151,38 +161,41 @@ export default function AdminPage() {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Tabs */}
+        <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1">
+          {TABS.map((t) => (
+            <button
+              key={t.path}
+              onClick={() => navigate(`/admin/${t.path}`)}
+              className={`flex-1 py-3 text-sm font-medium rounded-lg transition relative ${
+                activeTab === t.path ? "text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
+              }`}
+              style={activeTab === t.path ? { backgroundColor: "var(--cam-green)" } : {}}
+            >
+              {t.label}
+              {t.path === "members" && bounceCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-red-500 rounded-full">
+                  {bounceCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1">
-        {TABS.map((t) => (
-          <button
-            key={t.path}
-            onClick={() => navigate(`/admin/${t.path}`)}
-            className={`flex-1 py-3 text-sm font-medium rounded-lg transition relative ${
-              activeTab === t.path ? "text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
-            }`}
-            style={activeTab === t.path ? { backgroundColor: "var(--cam-green)" } : {}}
-          >
-            {t.label}
-            {t.path === "members" && bounceCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-red-500 rounded-full">
-                {bounceCount}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Child routes render here */}
-      <Outlet context={{ user, isPaidTier }} />
+        {/* Child routes render here */}
+        <Outlet context={{ user, isPaidTier }} />
       </div>
       {/* Footer */}
       <footer className="max-w-4xl mx-auto px-4 py-6 mt-8 border-t border-gray-200">
         <div className="flex items-center justify-between text-xs text-gray-400">
           <span>&copy; {new Date().getFullYear()} CAM Ascent, LLC</span>
           <div className="flex gap-4">
-            <a href="/legal/terms-of-service.html" target="_blank" className="hover:text-gray-600">Terms of Service</a>
-            <a href="/legal/privacy-policy.html" target="_blank" className="hover:text-gray-600">Privacy Policy</a>
+            <a href="/legal/terms-of-service.html" target="_blank" className="hover:text-gray-600">
+              Terms of Service
+            </a>
+            <a href="/legal/privacy-policy.html" target="_blank" className="hover:text-gray-600">
+              Privacy Policy
+            </a>
           </div>
         </div>
       </footer>

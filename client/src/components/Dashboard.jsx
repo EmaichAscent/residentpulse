@@ -1,7 +1,15 @@
 import { useState, useMemo } from "react";
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Cell,
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
 } from "recharts";
 import SurveySchedule from "./SurveySchedule";
 
@@ -63,7 +71,8 @@ export default function Dashboard({ sessions, user, onNavigate }) {
 
   // NPS calculation
   const nps = useMemo(() => {
-    if (scored.length === 0) return { score: 0, promoters: 0, passives: 0, detractors: 0, total: 0 };
+    if (scored.length === 0)
+      return { score: 0, promoters: 0, passives: 0, detractors: 0, total: 0 };
     const promoters = scored.filter((s) => s.nps_score >= 9).length;
     const passives = scored.filter((s) => s.nps_score >= 7 && s.nps_score <= 8).length;
     const detractors = scored.filter((s) => s.nps_score <= 6).length;
@@ -73,7 +82,10 @@ export default function Dashboard({ sessions, user, onNavigate }) {
 
   // Stats
   const stats = useMemo(() => {
-    const avg = scored.length > 0 ? (scored.reduce((sum, s) => sum + s.nps_score, 0) / scored.length).toFixed(1) : "—";
+    const avg =
+      scored.length > 0
+        ? (scored.reduce((sum, s) => sum + s.nps_score, 0) / scored.length).toFixed(1)
+        : "—";
     const completed = filtered.filter((s) => s.completed).length;
     const rate = filtered.length > 0 ? Math.round((completed / filtered.length) * 100) : 0;
     return { total: filtered.length, avg, completed, rate };
@@ -115,8 +127,12 @@ export default function Dashboard({ sessions, user, onNavigate }) {
         const scores = Object.values(byUser).map((s) => s.nps_score);
         const promoters = scores.filter((s) => s >= 9).length;
         const detractors = scores.filter((s) => s <= 6).length;
-        const nps = scores.length > 0 ? Math.round(((promoters - detractors) / scores.length) * 100) : 0;
-        const label = new Date(weekStart + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        const nps =
+          scores.length > 0 ? Math.round(((promoters - detractors) / scores.length) * 100) : 0;
+        const label = new Date(weekStart + "T00:00:00").toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        });
 
         return { date: weekStart, label, nps, count: scores.length };
       })
@@ -156,7 +172,11 @@ export default function Dashboard({ sessions, user, onNavigate }) {
     if (!user) return [];
     return user.scores.map((s, i) => {
       const d = new Date(s.date.replace(" ", "T"));
-      const label = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+      const label = d.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
       return { label, score: s.score, index: i + 1 };
     });
   }, [userScores, selectedUser]);
@@ -177,7 +197,9 @@ export default function Dashboard({ sessions, user, onNavigate }) {
         .map((s) => s.id);
 
       if (sessionIds.length === 0) {
-        throw new Error("No completed surveys with summaries found. Users need to complete full surveys before insights can be generated.");
+        throw new Error(
+          "No completed surveys with summaries found. Users need to complete full surveys before insights can be generated."
+        );
       }
 
       const res = await fetch("/api/admin/insights", {
@@ -202,16 +224,16 @@ export default function Dashboard({ sessions, user, onNavigate }) {
     try {
       // Convert markdown to HTML for rich text copy
       const htmlContent = insights
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\n/g, '<br>');
+        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\n/g, "<br>");
 
       // Create plain text version without markdown
-      const plainText = insights.replace(/\*\*/g, '');
+      const plainText = insights.replace(/\*\*/g, "");
 
       // Copy both HTML and plain text versions
       const clipboardItem = new ClipboardItem({
-        'text/html': new Blob([htmlContent], { type: 'text/html' }),
-        'text/plain': new Blob([plainText], { type: 'text/plain' })
+        "text/html": new Blob([htmlContent], { type: "text/html" }),
+        "text/plain": new Blob([plainText], { type: "text/plain" }),
       });
 
       await navigator.clipboard.write([clipboardItem]);
@@ -220,12 +242,12 @@ export default function Dashboard({ sessions, user, onNavigate }) {
     } catch (err) {
       // Fallback to plain text if rich text copy fails
       try {
-        const plainText = insights.replace(/\*\*/g, '');
+        const plainText = insights.replace(/\*\*/g, "");
         await navigator.clipboard.writeText(plainText);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       } catch (fallbackErr) {
-        console.error('Failed to copy:', fallbackErr);
+        console.error("Failed to copy:", fallbackErr);
       }
     }
   };
@@ -234,8 +256,12 @@ export default function Dashboard({ sessions, user, onNavigate }) {
   const parseBoldText = (text) => {
     const parts = text.split(/(\*\*.*?\*\*)/g);
     return parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={i} className="font-semibold text-gray-900">{part.slice(2, -2)}</strong>;
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return (
+          <strong key={i} className="font-semibold text-gray-900">
+            {part.slice(2, -2)}
+          </strong>
+        );
       }
       return part;
     });
@@ -244,7 +270,7 @@ export default function Dashboard({ sessions, user, onNavigate }) {
   const renderInsights = (text) => {
     if (!text) return null;
 
-    const lines = text.split('\n');
+    const lines = text.split("\n");
     const elements = [];
     let currentSection = [];
 
@@ -252,19 +278,31 @@ export default function Dashboard({ sessions, user, onNavigate }) {
       // Bold headings (e.g., **Summary:**)
       if (line.match(/^\*\*.*:\*\*$/)) {
         if (currentSection.length > 0) {
-          elements.push(<p key={`p-${index}`} className="text-gray-700 mb-4">{parseBoldText(currentSection.join(' '))}</p>);
+          elements.push(
+            <p key={`p-${index}`} className="text-gray-700 mb-4">
+              {parseBoldText(currentSection.join(" "))}
+            </p>
+          );
           currentSection = [];
         }
-        const heading = line.replace(/\*\*/g, '');
-        elements.push(<h3 key={`h-${index}`} className="text-lg font-bold text-gray-900 mt-6 mb-3">{heading}</h3>);
+        const heading = line.replace(/\*\*/g, "");
+        elements.push(
+          <h3 key={`h-${index}`} className="text-lg font-bold text-gray-900 mt-6 mb-3">
+            {heading}
+          </h3>
+        );
       }
       // Numbered list items
       else if (line.match(/^\d+\.\s/)) {
         if (currentSection.length > 0) {
-          elements.push(<p key={`p-${index}`} className="text-gray-700 mb-4">{parseBoldText(currentSection.join(' '))}</p>);
+          elements.push(
+            <p key={`p-${index}`} className="text-gray-700 mb-4">
+              {parseBoldText(currentSection.join(" "))}
+            </p>
+          );
           currentSection = [];
         }
-        const item = line.replace(/^\d+\.\s/, '');
+        const item = line.replace(/^\d+\.\s/, "");
         elements.push(
           <div key={`li-${index}`} className="flex gap-3 mb-3">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-sm font-semibold flex items-center justify-center">
@@ -280,13 +318,21 @@ export default function Dashboard({ sessions, user, onNavigate }) {
       }
       // Empty line - flush current section
       else if (currentSection.length > 0) {
-        elements.push(<p key={`p-${index}`} className="text-gray-700 mb-4">{parseBoldText(currentSection.join(' '))}</p>);
+        elements.push(
+          <p key={`p-${index}`} className="text-gray-700 mb-4">
+            {parseBoldText(currentSection.join(" "))}
+          </p>
+        );
         currentSection = [];
       }
     });
 
     if (currentSection.length > 0) {
-      elements.push(<p key="p-last" className="text-gray-700 mb-4">{parseBoldText(currentSection.join(' '))}</p>);
+      elements.push(
+        <p key="p-last" className="text-gray-700 mb-4">
+          {parseBoldText(currentSection.join(" "))}
+        </p>
+      );
     }
 
     return <div>{elements}</div>;
@@ -298,7 +344,8 @@ export default function Dashboard({ sessions, user, onNavigate }) {
     return COLORS.promoter;
   };
 
-  const npsColor = nps.score >= 50 ? COLORS.promoter : nps.score >= 0 ? COLORS.blue : COLORS.detractor;
+  const npsColor =
+    nps.score >= 50 ? COLORS.promoter : nps.score >= 0 ? COLORS.blue : COLORS.detractor;
 
   if (sessions.length === 0) {
     return (
@@ -320,14 +367,19 @@ export default function Dashboard({ sessions, user, onNavigate }) {
             <div className="space-y-6">
               {/* Step 1 */}
               <div className="flex gap-5 items-start">
-                <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: "var(--cam-blue)" }}>
+                <div
+                  className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg"
+                  style={{ backgroundColor: "var(--cam-blue)" }}
+                >
                   1
                 </div>
                 <div className="flex-1 pt-1">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Add your board members</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                    Add your board members
+                  </h3>
                   <p className="text-gray-500 mb-3">
-                    Head over to the Board Members tab and add the people you'd like to survey.
-                    You can add them one at a time or import a CSV list —{" "}
+                    Head over to the Board Members tab and add the people you'd like to survey. You
+                    can add them one at a time or import a CSV list —{" "}
                     <button
                       onClick={() => {
                         const csv = `email,first_name,last_name,community_name\nresident1@example.com,John,Doe,Sunset Gardens\nresident2@example.com,Jane,Smith,Oak Hills`;
@@ -353,8 +405,18 @@ export default function Dashboard({ sessions, user, onNavigate }) {
                       style={{ backgroundColor: "var(--cam-blue)" }}
                     >
                       Go to Board Members
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
                       </svg>
                     </button>
                   )}
@@ -363,14 +425,20 @@ export default function Dashboard({ sessions, user, onNavigate }) {
 
               {/* Step 2 */}
               <div className="flex gap-5 items-start">
-                <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: "var(--cam-blue)" }}>
+                <div
+                  className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg"
+                  style={{ backgroundColor: "var(--cam-blue)" }}
+                >
                   2
                 </div>
                 <div className="flex-1 pt-1">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Schedule your survey rounds</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                    Schedule your survey rounds
+                  </h3>
                   <p className="text-gray-500 mb-3">
                     Pick a launch date and we'll set up your survey schedule based on your cadence.
-                    When it's time, confirm the launch and all board members get invited automatically.
+                    When it's time, confirm the launch and all board members get invited
+                    automatically.
                   </p>
                   <SurveySchedule />
                 </div>
@@ -378,14 +446,19 @@ export default function Dashboard({ sessions, user, onNavigate }) {
 
               {/* Step 3 */}
               <div className="flex gap-5 items-start">
-                <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: "var(--cam-green)" }}>
+                <div
+                  className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg"
+                  style={{ backgroundColor: "var(--cam-green)" }}
+                >
                   3
                 </div>
                 <div className="flex-1 pt-1">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Watch your dashboard come alive</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                    Watch your dashboard come alive
+                  </h3>
                   <p className="text-gray-500">
-                    As responses roll in, this dashboard will fill up with your NPS score, trends over time,
-                    and AI-powered insights to help you take action. It's all automatic!
+                    As responses roll in, this dashboard will fill up with your NPS score, trends
+                    over time, and AI-powered insights to help you take action. It's all automatic!
                   </p>
                 </div>
               </div>
@@ -400,7 +473,12 @@ export default function Dashboard({ sessions, user, onNavigate }) {
               <img src="/CAMAscent.png" alt="CAM Ascent" className="h-10 object-contain" />
             </a>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--cam-green)" }}>Powered by CAM Ascent Analytical Insights</p>
+              <p
+                className="text-xs font-semibold uppercase tracking-wide"
+                style={{ color: "var(--cam-green)" }}
+              >
+                Powered by CAM Ascent Analytical Insights
+              </p>
               <h3 className="text-lg font-semibold text-gray-900">
                 AI-driven intelligence built for community association management
               </h3>
@@ -408,38 +486,94 @@ export default function Dashboard({ sessions, user, onNavigate }) {
           </div>
           <div className="px-8 pb-6">
             <p className="text-gray-500 leading-relaxed mb-5">
-              ResidentPulse leverages CAM Ascent's analytical engine to transform raw board member feedback
-              into clear, actionable intelligence. Our AI doesn't just collect data — it reads between the lines,
-              identifies emerging trends, and delivers insights your team can act on immediately. Purpose-built for
-              the community association industry, not adapted from generic survey tools.
+              ResidentPulse leverages CAM Ascent's analytical engine to transform raw board member
+              feedback into clear, actionable intelligence. Our AI doesn't just collect data — it
+              reads between the lines, identifies emerging trends, and delivers insights your team
+              can act on immediately. Purpose-built for the community association industry, not
+              adapted from generic survey tools.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-gray-50 rounded-xl p-4">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: "var(--cam-blue)", opacity: 0.1 }}>
-                  <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center mb-3"
+                  style={{ backgroundColor: "var(--cam-blue)", opacity: 0.1 }}
+                >
+                  <svg
+                    className="w-5 h-5"
+                    style={{ color: "var(--cam-blue)" }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                    />
                   </svg>
                 </div>
-                <h4 className="text-sm font-semibold text-gray-900 mb-1">AI-Guided Conversations</h4>
-                <p className="text-xs text-gray-500">Intelligent dialogue that adapts to each board member's responses — uncovering what surveys miss.</p>
+                <h4 className="text-sm font-semibold text-gray-900 mb-1">
+                  AI-Guided Conversations
+                </h4>
+                <p className="text-xs text-gray-500">
+                  Intelligent dialogue that adapts to each board member's responses — uncovering
+                  what surveys miss.
+                </p>
               </div>
               <div className="bg-gray-50 rounded-xl p-4">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: "var(--cam-green)", opacity: 0.1 }}>
-                  <svg className="w-5 h-5" style={{ color: "var(--cam-green)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center mb-3"
+                  style={{ backgroundColor: "var(--cam-green)", opacity: 0.1 }}
+                >
+                  <svg
+                    className="w-5 h-5"
+                    style={{ color: "var(--cam-green)" }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                    />
                   </svg>
                 </div>
                 <h4 className="text-sm font-semibold text-gray-900 mb-1">Sentiment Analytics</h4>
-                <p className="text-xs text-gray-500">CAM Ascent's AI analyzes tone, themes, and satisfaction signals across all your communities at once.</p>
+                <p className="text-xs text-gray-500">
+                  CAM Ascent's AI analyzes tone, themes, and satisfaction signals across all your
+                  communities at once.
+                </p>
               </div>
               <div className="bg-gray-50 rounded-xl p-4">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: "var(--cam-blue)", opacity: 0.1 }}>
-                  <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center mb-3"
+                  style={{ backgroundColor: "var(--cam-blue)", opacity: 0.1 }}
+                >
+                  <svg
+                    className="w-5 h-5"
+                    style={{ color: "var(--cam-blue)" }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
                   </svg>
                 </div>
-                <h4 className="text-sm font-semibold text-gray-900 mb-1">Actionable Recommendations</h4>
-                <p className="text-xs text-gray-500">Get specific, prioritized actions — not just data — so you know exactly what to improve next.</p>
+                <h4 className="text-sm font-semibold text-gray-900 mb-1">
+                  Actionable Recommendations
+                </h4>
+                <p className="text-xs text-gray-500">
+                  Get specific, prioritized actions — not just data — so you know exactly what to
+                  improve next.
+                </p>
               </div>
             </div>
           </div>
@@ -447,29 +581,37 @@ export default function Dashboard({ sessions, user, onNavigate }) {
 
         {/* Survey Cadence Best Practices */}
         <div className="bg-white rounded-2xl border border-gray-200 p-8">
-          <p className="text-xs font-semibold uppercase tracking-wide mb-4" style={{ color: "var(--cam-blue)" }}>Best Practices</p>
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">
-            How often should you survey?
-          </h3>
+          <p
+            className="text-xs font-semibold uppercase tracking-wide mb-4"
+            style={{ color: "var(--cam-blue)" }}
+          >
+            Best Practices
+          </p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">How often should you survey?</h3>
           <p className="text-gray-500 leading-relaxed mb-5">
-            ResidentPulse is designed for consistent, thoughtful engagement — not survey fatigue.
-            We recommend surveying your board members <strong className="text-gray-700">2 to 4 times per year</strong>,
-            depending on your community's needs. Here's what works best:
+            ResidentPulse is designed for consistent, thoughtful engagement — not survey fatigue. We
+            recommend surveying your board members{" "}
+            <strong className="text-gray-700">2 to 4 times per year</strong>, depending on your
+            community's needs. Here's what works best:
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             <div className="border border-gray-200 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-2xl font-bold" style={{ color: "var(--cam-blue)" }}>2x</span>
+                <span className="text-2xl font-bold" style={{ color: "var(--cam-blue)" }}>
+                  2x
+                </span>
                 <span className="text-sm font-medium text-gray-500">per year</span>
               </div>
               <p className="text-sm text-gray-500">
-                Great for smaller boards or communities just getting started. Survey in the spring and fall
-                to capture seasonal shifts in sentiment and track year-over-year progress.
+                Great for smaller boards or communities just getting started. Survey in the spring
+                and fall to capture seasonal shifts in sentiment and track year-over-year progress.
               </p>
             </div>
             <div className="border border-gray-200 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-2xl font-bold" style={{ color: "var(--cam-green)" }}>4x</span>
+                <span className="text-2xl font-bold" style={{ color: "var(--cam-green)" }}>
+                  4x
+                </span>
                 <span className="text-sm font-medium text-gray-500">per year</span>
               </div>
               <p className="text-sm text-gray-500">
@@ -480,9 +622,17 @@ export default function Dashboard({ sessions, user, onNavigate }) {
           </div>
           <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
             <p className="text-sm text-blue-800">
-              <strong>Consistency is key.</strong> Pick a cadence and stick with it — regular surveys build trust
-              with your board members and give you reliable trend data over time. You can set your preferred
-              cadence in the <button onClick={() => onNavigate && onNavigate("account")} className="font-semibold underline hover:no-underline" style={{ color: "var(--cam-blue)" }}>Account</button> tab.
+              <strong>Consistency is key.</strong> Pick a cadence and stick with it — regular
+              surveys build trust with your board members and give you reliable trend data over
+              time. You can set your preferred cadence in the{" "}
+              <button
+                onClick={() => onNavigate && onNavigate("account")}
+                className="font-semibold underline hover:no-underline"
+                style={{ color: "var(--cam-blue)" }}
+              >
+                Account
+              </button>{" "}
+              tab.
             </p>
           </div>
         </div>
@@ -508,7 +658,9 @@ export default function Dashboard({ sessions, user, onNavigate }) {
         >
           <option value="">All Communities</option>
           {communities.map((c) => (
-            <option key={c} value={c}>{c}</option>
+            <option key={c} value={c}>
+              {c}
+            </option>
           ))}
         </select>
         <select
@@ -518,7 +670,9 @@ export default function Dashboard({ sessions, user, onNavigate }) {
         >
           <option value="">All Companies</option>
           {companies.map((c) => (
-            <option key={c} value={c}>{c}</option>
+            <option key={c} value={c}>
+              {c}
+            </option>
           ))}
         </select>
         <div>
@@ -538,16 +692,23 @@ export default function Dashboard({ sessions, user, onNavigate }) {
       </div>
 
       {scored.length === 0 ? (
-        <p className="text-gray-500 text-center py-10 text-lg">No scored responses match the current filters.</p>
+        <p className="text-gray-500 text-center py-10 text-lg">
+          No scored responses match the current filters.
+        </p>
       ) : (
         <>
           {/* NPS Score Card */}
           <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">Net Promoter Score</p>
-            <p className="text-6xl font-bold" style={{ color: npsColor }}>
-              {nps.score > 0 ? "+" : ""}{nps.score}
+            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">
+              Net Promoter Score
             </p>
-            <p className="text-sm text-gray-500 mt-2">Based on {nps.total} user{nps.total !== 1 ? "s" : ""} (latest response per user)</p>
+            <p className="text-6xl font-bold" style={{ color: npsColor }}>
+              {nps.score > 0 ? "+" : ""}
+              {nps.score}
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              Based on {nps.total} user{nps.total !== 1 ? "s" : ""} (latest response per user)
+            </p>
           </div>
 
           {/* AI Insights — Powered by CAM Ascent */}
@@ -558,8 +719,15 @@ export default function Dashboard({ sessions, user, onNavigate }) {
                   <img src="/CAMAscent.png" alt="CAM Ascent" className="h-8 object-contain" />
                 </a>
                 <div>
-                  <p className="text-sm font-semibold uppercase tracking-wide" style={{ color: "var(--cam-green)" }}>AI Insights by CAM Ascent Analytics</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Actionable recommendations powered by AI analysis of your NPS responses</p>
+                  <p
+                    className="text-sm font-semibold uppercase tracking-wide"
+                    style={{ color: "var(--cam-green)" }}
+                  >
+                    AI Insights by CAM Ascent Analytics
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Actionable recommendations powered by AI analysis of your NPS responses
+                  </p>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -570,15 +738,35 @@ export default function Dashboard({ sessions, user, onNavigate }) {
                   >
                     {copied ? (
                       <>
-                        <svg className="inline w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        <svg
+                          className="inline w-4 h-4 mr-1"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
                         </svg>
                         Copied!
                       </>
                     ) : (
                       <>
-                        <svg className="inline w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        <svg
+                          className="inline w-4 h-4 mr-1"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                          />
                         </svg>
                         Copy
                       </>
@@ -591,7 +779,11 @@ export default function Dashboard({ sessions, user, onNavigate }) {
                   className="px-4 py-2 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
                   style={{ backgroundColor: "var(--cam-blue)" }}
                 >
-                  {loadingInsights ? "Generating..." : insights ? "Refresh Insights" : "Generate Insights"}
+                  {loadingInsights
+                    ? "Generating..."
+                    : insights
+                      ? "Refresh Insights"
+                      : "Generate Insights"}
                 </button>
               </div>
             </div>
@@ -617,7 +809,10 @@ export default function Dashboard({ sessions, user, onNavigate }) {
               { label: "Completed", value: stats.completed },
               { label: "Completion Rate", value: `${stats.rate}%` },
             ].map((s) => (
-              <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+              <div
+                key={s.label}
+                className="bg-white rounded-xl border border-gray-200 p-4 text-center"
+              >
                 <p className="text-2xl font-bold text-gray-900">{s.value}</p>
                 <p className="text-xs text-gray-400 mt-1">{s.label}</p>
               </div>
@@ -626,7 +821,9 @@ export default function Dashboard({ sessions, user, onNavigate }) {
 
           {/* NPS Category Bar */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">NPS Breakdown</p>
+            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">
+              NPS Breakdown
+            </p>
             <div className="flex rounded-lg overflow-hidden h-10 text-sm font-semibold text-white">
               {pPct > 0 && (
                 <div
@@ -655,15 +852,24 @@ export default function Dashboard({ sessions, user, onNavigate }) {
             </div>
             <div className="flex justify-between mt-3 text-sm text-gray-500">
               <span>
-                <span className="inline-block w-3 h-3 rounded-full mr-1" style={{ backgroundColor: COLORS.promoter }} />
+                <span
+                  className="inline-block w-3 h-3 rounded-full mr-1"
+                  style={{ backgroundColor: COLORS.promoter }}
+                />
                 Promoters ({nps.promoters})
               </span>
               <span>
-                <span className="inline-block w-3 h-3 rounded-full mr-1" style={{ backgroundColor: COLORS.passive }} />
+                <span
+                  className="inline-block w-3 h-3 rounded-full mr-1"
+                  style={{ backgroundColor: COLORS.passive }}
+                />
                 Passives ({nps.passives})
               </span>
               <span>
-                <span className="inline-block w-3 h-3 rounded-full mr-1" style={{ backgroundColor: COLORS.detractor }} />
+                <span
+                  className="inline-block w-3 h-3 rounded-full mr-1"
+                  style={{ backgroundColor: COLORS.detractor }}
+                />
                 Detractors ({nps.detractors})
               </span>
             </div>
@@ -672,7 +878,9 @@ export default function Dashboard({ sessions, user, onNavigate }) {
           {/* NPS Over Time */}
           {overTime.length > 1 && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">NPS Over Time</p>
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">
+                NPS Over Time
+              </p>
               <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={overTime}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -698,7 +906,9 @@ export default function Dashboard({ sessions, user, onNavigate }) {
 
           {/* Score Distribution */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Score Distribution</p>
+            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">
+              Score Distribution
+            </p>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={distribution}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
@@ -720,7 +930,9 @@ export default function Dashboard({ sessions, user, onNavigate }) {
           {/* Per-User NPS */}
           {userScores.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">NPS by User</p>
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">
+                NPS by User
+              </p>
               <p className="text-xs text-gray-400 mb-3">Click a user to view their score history</p>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -734,7 +946,7 @@ export default function Dashboard({ sessions, user, onNavigate }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {userScores.map((u, i) => {
+                    {userScores.map((u) => {
                       const isSelected = selectedUser === u.email;
                       const color = isSelected ? COLORS.blue : undefined;
                       return (
@@ -754,9 +966,13 @@ export default function Dashboard({ sessions, user, onNavigate }) {
                           </td>
                           <td className="py-2 pr-4 text-gray-900">{u.email}</td>
                           <td className="py-2 pr-4 text-center text-gray-500">{u.count}</td>
-                          <td className="py-2 pr-4 text-center text-gray-700 font-medium">{u.avg}</td>
+                          <td className="py-2 pr-4 text-center text-gray-700 font-medium">
+                            {u.avg}
+                          </td>
                           <td className="py-2 text-center">
-                            <span className={`font-bold ${u.latest <= 6 ? "text-red-600" : u.latest <= 8 ? "text-yellow-600" : "text-green-600"}`}>
+                            <span
+                              className={`font-bold ${u.latest <= 6 ? "text-red-600" : u.latest <= 8 ? "text-yellow-600" : "text-green-600"}`}
+                            >
                               {u.latest}
                             </span>
                           </td>

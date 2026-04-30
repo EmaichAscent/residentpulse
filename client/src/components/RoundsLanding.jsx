@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import SurveySchedule from "./SurveySchedule";
-import { COLORS, npsColor } from "../utils/npsHelpers";
 
 export default function RoundsLanding() {
   const { user } = useOutletContext();
@@ -125,7 +124,11 @@ export default function RoundsLanding() {
     // For date-only strings (YYYY-MM-DD), parse as local date to avoid timezone shift
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       const [y, m, d] = dateStr.split("-");
-      return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
     }
     return new Date(dateStr).toLocaleDateString("en-US", {
       month: "short",
@@ -146,8 +149,14 @@ export default function RoundsLanding() {
     e.target.value = "";
     setLogoError("");
     const allowedTypes = ["image/png", "image/jpeg", "image/svg+xml"];
-    if (!allowedTypes.includes(file.type)) { setLogoError("Only PNG, JPG, and SVG files are accepted."); return; }
-    if (file.size > 500 * 1024) { setLogoError("Logo must be under 500KB."); return; }
+    if (!allowedTypes.includes(file.type)) {
+      setLogoError("Only PNG, JPG, and SVG files are accepted.");
+      return;
+    }
+    if (file.size > 500 * 1024) {
+      setLogoError("Logo must be under 500KB.");
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result;
@@ -155,8 +164,14 @@ export default function RoundsLanding() {
         const img = new Image();
         img.onload = () => {
           const ratio = img.width / img.height;
-          if (ratio < 0.8) { setLogoError("Portrait logos are not supported. Use a landscape or square image."); return; }
-          if (ratio > 3) { setLogoError("Logo is too wide. Maximum aspect ratio is 3:1."); return; }
+          if (ratio < 0.8) {
+            setLogoError("Portrait logos are not supported. Use a landscape or square image.");
+            return;
+          }
+          if (ratio > 3) {
+            setLogoError("Logo is too wide. Maximum aspect ratio is 3:1.");
+            return;
+          }
           uploadLogo(dataUrl, file.type, img.width, img.height);
         };
         img.src = dataUrl;
@@ -201,7 +216,10 @@ export default function RoundsLanding() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save");
-      setReviewMessage({ type: "success", text: newVal ? "Google Reviews enabled." : "Google Reviews disabled." });
+      setReviewMessage({
+        type: "success",
+        text: newVal ? "Google Reviews enabled." : "Google Reviews disabled.",
+      });
     } catch (err) {
       setGoogleReviewEnabled(!newVal);
       setReviewMessage({ type: "error", text: err.message });
@@ -245,7 +263,9 @@ export default function RoundsLanding() {
 
   // Show welcome page if no rounds have been launched yet (planned-only doesn't count)
   // Once user schedules their first round from onboarding, transition to the normal dashboard
-  const hasLaunchedRounds = rounds.some(r => r.status === "in_progress" || r.status === "concluded");
+  const hasLaunchedRounds = rounds.some(
+    (r) => r.status === "in_progress" || r.status === "concluded"
+  );
   if (!hasLaunchedRounds && !scheduledFirstRound) {
     return (
       <div className="space-y-6">
@@ -261,19 +281,37 @@ export default function RoundsLanding() {
           {/* Left Column — Launch Checklist */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-5">Get Live in 3 Steps</h3>
-            <p className="text-xs text-gray-400 mb-4 -mt-3">Plus optional extras to enhance your experience</p>
+            <p className="text-xs text-gray-400 mb-4 -mt-3">
+              Plus optional extras to enhance your experience
+            </p>
 
             {/* Step 1: AI Interview */}
             <div className="flex gap-4 mb-6">
               <div className="flex-shrink-0 mt-0.5">
                 {interviewCompleted ? (
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: "var(--cam-green)" }}>
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: "var(--cam-green)" }}
+                  >
+                    <svg
+                      className="w-4 h-4 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={3}
+                        d="M5 13l4 4L19 7"
+                      />
                     </svg>
                   </div>
                 ) : (
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: "var(--cam-blue)" }}>
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
+                    style={{ backgroundColor: "var(--cam-blue)" }}
+                  >
                     1
                   </div>
                 )}
@@ -284,7 +322,10 @@ export default function RoundsLanding() {
                   <p className="text-sm text-green-600 font-medium mt-0.5">Completed</p>
                 ) : (
                   <>
-                    <p className="text-sm text-gray-500 mt-0.5">A quick conversation with our AI so we can personalize your board member interviews.</p>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      A quick conversation with our AI so we can personalize your board member
+                      interviews.
+                    </p>
                     <button
                       onClick={() => navigate("/admin/onboarding")}
                       className="mt-2 px-4 py-1.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90"
@@ -301,13 +342,29 @@ export default function RoundsLanding() {
             <div className="flex gap-4 mb-6">
               <div className="flex-shrink-0 mt-0.5">
                 {memberCount > 0 ? (
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: "var(--cam-green)" }}>
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: "var(--cam-green)" }}
+                  >
+                    <svg
+                      className="w-4 h-4 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={3}
+                        d="M5 13l4 4L19 7"
+                      />
                     </svg>
                   </div>
                 ) : (
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ backgroundColor: "var(--cam-blue)" }}>
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
+                    style={{ backgroundColor: "var(--cam-blue)" }}
+                  >
                     2
                   </div>
                 )}
@@ -315,10 +372,14 @@ export default function RoundsLanding() {
               <div className="flex-1">
                 <p className="font-semibold text-gray-900">Add Your Members</p>
                 {memberCount > 0 ? (
-                  <p className="text-sm text-green-600 font-medium mt-0.5">{memberCount} member{memberCount !== 1 ? "s" : ""} added</p>
+                  <p className="text-sm text-green-600 font-medium mt-0.5">
+                    {memberCount} member{memberCount !== 1 ? "s" : ""} added
+                  </p>
                 ) : (
                   <>
-                    <p className="text-sm text-gray-500 mt-0.5">Load your board members so they can receive survey invitations.</p>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      Load your board members so they can receive survey invitations.
+                    </p>
                     <button
                       onClick={() => navigate("/admin/members")}
                       className="mt-2 px-4 py-1.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90"
@@ -334,34 +395,64 @@ export default function RoundsLanding() {
             {/* Step 3: Schedule First Round */}
             <div className="flex gap-4 mb-6">
               <div className="flex-shrink-0 mt-0.5">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${memberCount > 0 ? "text-white" : "bg-gray-200 text-gray-400"}`} style={memberCount > 0 ? { backgroundColor: "var(--cam-blue)" } : {}}>
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${memberCount > 0 ? "text-white" : "bg-gray-200 text-gray-400"}`}
+                  style={memberCount > 0 ? { backgroundColor: "var(--cam-blue)" } : {}}
+                >
                   3
                 </div>
               </div>
               <div className="flex-1">
-                <p className={`font-semibold ${memberCount > 0 ? "text-gray-900" : "text-gray-400"}`}>Schedule Your First Round</p>
+                <p
+                  className={`font-semibold ${memberCount > 0 ? "text-gray-900" : "text-gray-400"}`}
+                >
+                  Schedule Your First Round
+                </p>
                 {memberCount > 0 ? (
                   <div className="mt-2">
-                    <SurveySchedule embedded onScheduled={() => { setScheduledFirstRound(true); loadRounds(); }} />
+                    <SurveySchedule
+                      embedded
+                      onScheduled={() => {
+                        setScheduledFirstRound(true);
+                        loadRounds();
+                      }}
+                    />
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400 mt-0.5">Add members first to unlock scheduling.</p>
+                  <p className="text-sm text-gray-400 mt-0.5">
+                    Add members first to unlock scheduling.
+                  </p>
                 )}
               </div>
             </div>
 
             {/* Optional divider */}
             <div className="border-t border-gray-100 pt-4 mb-4">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Optional</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                Optional
+              </p>
             </div>
 
             {/* Step 4: Upload Logo */}
             <div className="flex gap-4 mb-6">
               <div className="flex-shrink-0 mt-0.5">
                 {hasLogo ? (
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: "var(--cam-green)" }}>
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: "var(--cam-green)" }}
+                  >
+                    <svg
+                      className="w-4 h-4 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={3}
+                        d="M5 13l4 4L19 7"
+                      />
                     </svg>
                   </div>
                 ) : (
@@ -372,16 +463,28 @@ export default function RoundsLanding() {
               </div>
               <div className="flex-1">
                 <p className="font-semibold text-gray-900">Add Your Logo</p>
-                <p className="text-sm text-gray-500 mt-0.5">Personalize survey emails and the board member experience with your company logo.</p>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Personalize survey emails and the board member experience with your company logo.
+                </p>
                 {(logoPreview || hasLogo) && (
-                  <img src={logoPreview || "/api/admin/account/logo"} alt="Company logo" className="mt-2 max-h-12 rounded" />
+                  <img
+                    src={logoPreview || "/api/admin/account/logo"}
+                    alt="Company logo"
+                    className="mt-2 max-h-12 rounded"
+                  />
                 )}
                 <label
                   className="mt-2 inline-block px-4 py-1.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 cursor-pointer"
                   style={{ backgroundColor: "var(--cam-green)" }}
                 >
                   {logoUploading ? "Uploading..." : hasLogo ? "Replace Logo" : "Upload Logo"}
-                  <input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={handleLogoSelect} disabled={logoUploading} className="hidden" />
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml"
+                    onChange={handleLogoSelect}
+                    disabled={logoUploading}
+                    className="hidden"
+                  />
                 </label>
                 {logoError && <p className="text-xs text-red-600 mt-1">{logoError}</p>}
               </div>
@@ -391,9 +494,22 @@ export default function RoundsLanding() {
             <div className="flex gap-4">
               <div className="flex-shrink-0 mt-0.5">
                 {googleReviewEnabled ? (
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: "var(--cam-green)" }}>
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: "var(--cam-green)" }}
+                  >
+                    <svg
+                      className="w-4 h-4 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={3}
+                        d="M5 13l4 4L19 7"
+                      />
                     </svg>
                   </div>
                 ) : (
@@ -404,7 +520,10 @@ export default function RoundsLanding() {
               </div>
               <div className="flex-1">
                 <p className="font-semibold text-gray-900">Activate Google Reviews</p>
-                <p className="text-sm text-gray-500 mt-0.5">Automatically prompt happy board members to leave a Google review after their interview.</p>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Automatically prompt happy board members to leave a Google review after their
+                  interview.
+                </p>
                 <div className="flex items-center gap-3 mt-2">
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
@@ -429,7 +548,9 @@ export default function RoundsLanding() {
                       className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
                       placeholder="g.page/r/your-business/review"
                     />
-                    <p className="text-xs text-gray-400 mt-1">Paste your Google Business review link here.</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Paste your Google Business review link here.
+                    </p>
                     <button
                       onClick={handleReviewUrlSave}
                       disabled={reviewSaving}
@@ -441,7 +562,9 @@ export default function RoundsLanding() {
                   </div>
                 )}
                 {reviewMessage && (
-                  <p className={`text-xs mt-1 ${reviewMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
+                  <p
+                    className={`text-xs mt-1 ${reviewMessage.type === "success" ? "text-green-600" : "text-red-600"}`}
+                  >
                     {reviewMessage.text}
                   </p>
                 )}
@@ -458,8 +581,14 @@ export default function RoundsLanding() {
                 </div>
                 <div className="flex-1">
                   <p className="font-semibold text-gray-900">Try a Test Run</p>
-                  <p className="text-sm text-gray-500 mt-0.5">Preview the full survey experience with sample data before going live. No real emails sent.</p>
-                  <p className="text-xs text-gray-400 mt-1">Use the <span className="font-semibold">Test Mode</span> toggle in the header to get started.</p>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    Preview the full survey experience with sample data before going live. No real
+                    emails sent.
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Use the <span className="font-semibold">Test Mode</span> toggle in the header to
+                    get started.
+                  </p>
                 </div>
               </div>
             )}
@@ -469,14 +598,22 @@ export default function RoundsLanding() {
           <div className="lg:self-start lg:sticky lg:top-6 space-y-4">
             {/* Progress Tracker */}
             {(() => {
-              const completed = [interviewCompleted, memberCount > 0, false, hasLogo, googleReviewEnabled].filter(Boolean).length;
+              const completed = [
+                interviewCompleted,
+                memberCount > 0,
+                false,
+                hasLogo,
+                googleReviewEnabled,
+              ].filter(Boolean).length;
               const total = 5;
               const pct = Math.round((completed / total) * 100);
               return (
                 <div className="bg-white rounded-2xl border border-gray-200 p-5">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-sm font-bold text-gray-900">Your Progress</h3>
-                    <span className="text-sm font-semibold" style={{ color: "var(--cam-green)" }}>{completed}/{total}</span>
+                    <span className="text-sm font-semibold" style={{ color: "var(--cam-green)" }}>
+                      {completed}/{total}
+                    </span>
                   </div>
                   <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
                     <div
@@ -485,7 +622,13 @@ export default function RoundsLanding() {
                     />
                   </div>
                   <p className="text-xs text-gray-400 mt-2">
-                    {completed === 0 ? "Let's get started!" : completed < 3 ? "Great start — keep going!" : completed < 5 ? "Almost there!" : "You're all set!"}
+                    {completed === 0
+                      ? "Let's get started!"
+                      : completed < 3
+                        ? "Great start — keep going!"
+                        : completed < 5
+                          ? "Almost there!"
+                          : "You're all set!"}
                   </p>
                 </div>
               );
@@ -497,9 +640,23 @@ export default function RoundsLanding() {
 
               <div className="space-y-4">
                 <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "rgba(59, 159, 231, 0.1)" }}>
-                    <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  <div
+                    className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ backgroundColor: "rgba(59, 159, 231, 0.1)" }}
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      style={{ color: "var(--cam-blue)" }}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                      />
                     </svg>
                   </div>
                   <div>
@@ -511,9 +668,23 @@ export default function RoundsLanding() {
                 </div>
 
                 <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "rgba(26, 176, 110, 0.1)" }}>
-                    <svg className="w-5 h-5" style={{ color: "var(--cam-green)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  <div
+                    className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ backgroundColor: "rgba(26, 176, 110, 0.1)" }}
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      style={{ color: "var(--cam-green)" }}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
                     </svg>
                   </div>
                   <div>
@@ -525,13 +696,29 @@ export default function RoundsLanding() {
                 </div>
 
                 <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "rgba(59, 159, 231, 0.1)" }}>
-                    <svg className="w-5 h-5" style={{ color: "var(--cam-blue)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  <div
+                    className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ backgroundColor: "rgba(59, 159, 231, 0.1)" }}
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      style={{ color: "var(--cam-blue)" }}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 10V3L4 14h7v7l9-11h-7z"
+                      />
                     </svg>
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900 text-sm">Minimal Effort, Maximum Impact</p>
+                    <p className="font-semibold text-gray-900 text-sm">
+                      Minimal Effort, Maximum Impact
+                    </p>
                     <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
                       Launch, and we handle the rest — interviews, analysis, and insights.
                     </p>
@@ -547,13 +734,15 @@ export default function RoundsLanding() {
                 <div className="flex gap-2.5">
                   <span className="text-base mt-0.5">🎨</span>
                   <p className="text-xs text-gray-600 leading-relaxed">
-                    <span className="font-semibold text-gray-800">Your logo</span> in survey emails builds trust and increases response rates.
+                    <span className="font-semibold text-gray-800">Your logo</span> in survey emails
+                    builds trust and increases response rates.
                   </p>
                 </div>
                 <div className="flex gap-2.5">
                   <span className="text-base mt-0.5">⭐</span>
                   <p className="text-xs text-gray-600 leading-relaxed">
-                    <span className="font-semibold text-gray-800">Google Reviews</span> turn happy board members into public advocates for your community.
+                    <span className="font-semibold text-gray-800">Google Reviews</span> turn happy
+                    board members into public advocates for your community.
                   </p>
                 </div>
               </div>
@@ -564,10 +753,12 @@ export default function RoundsLanding() {
               <div className="bg-amber-50 rounded-2xl border border-amber-200 p-5">
                 <h3 className="text-sm font-bold text-amber-900 mb-2">Want to try it first?</h3>
                 <p className="text-xs text-amber-700 leading-relaxed mb-3">
-                  Switch to <span className="font-semibold">Test Mode</span> to preview the full survey experience with sample data. No real emails sent — completely safe.
+                  Switch to <span className="font-semibold">Test Mode</span> to preview the full
+                  survey experience with sample data. No real emails sent — completely safe.
                 </p>
                 <p className="text-xs text-amber-600">
-                  Use the <span className="font-semibold">Live</span> toggle in the header to get started.
+                  Use the <span className="font-semibold">Live</span> toggle in the header to get
+                  started.
                 </p>
               </div>
             )}
@@ -587,21 +778,42 @@ export default function RoundsLanding() {
           <h3 className="text-sm font-bold text-amber-900 mb-3">Try the Full Survey Experience</h3>
           <div className="space-y-2.5">
             <div className="flex gap-3 items-start">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold">1</span>
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold">
+                1
+              </span>
               <p className="text-sm text-amber-800">
-                Go to <button onClick={() => navigate("/admin/members")} className="font-semibold underline hover:text-amber-600">Members</button> and click <span className="font-semibold">Take Survey</span> next to any test member
+                Go to{" "}
+                <button
+                  onClick={() => navigate("/admin/members")}
+                  className="font-semibold underline hover:text-amber-600"
+                >
+                  Members
+                </button>{" "}
+                and click <span className="font-semibold">Take Survey</span> next to any test member
               </p>
             </div>
             <div className="flex gap-3 items-start">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold">2</span>
-              <p className="text-sm text-amber-800">Complete the AI interview — rate, chat, and finish just like a real board member would</p>
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold">
+                2
+              </span>
+              <p className="text-sm text-amber-800">
+                Complete the AI interview — rate, chat, and finish just like a real board member
+                would
+              </p>
             </div>
             <div className="flex gap-3 items-start">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold">3</span>
-              <p className="text-sm text-amber-800">Come back here to see results populate in the dashboard — NPS scores, summaries, and insights</p>
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold">
+                3
+              </span>
+              <p className="text-sm text-amber-800">
+                Come back here to see results populate in the dashboard — NPS scores, summaries, and
+                insights
+              </p>
             </div>
           </div>
-          <p className="text-xs text-amber-600 mt-3">Do this for multiple members to see how a real round looks with varied responses.</p>
+          <p className="text-xs text-amber-600 mt-3">
+            Do this for multiple members to see how a real round looks with varied responses.
+          </p>
         </div>
       )}
 
@@ -617,15 +829,24 @@ export default function RoundsLanding() {
             key={round.id}
             className="bg-white rounded-xl border-2 border-blue-200 shadow-sm overflow-hidden"
           >
-            <div className="px-6 py-4 border-b border-blue-100 flex items-center justify-between" style={{ backgroundColor: "rgba(59, 159, 231, 0.05)" }}>
+            <div
+              className="px-6 py-4 border-b border-blue-100 flex items-center justify-between"
+              style={{ backgroundColor: "rgba(59, 159, 231, 0.05)" }}
+            >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white" style={{ backgroundColor: "var(--cam-blue)" }}>
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white"
+                  style={{ backgroundColor: "var(--cam-blue)" }}
+                >
                   {round.round_number}
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Round {round.round_number}</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Round {round.round_number}
+                  </h3>
                   <p className="text-xs text-gray-500">
-                    Launched {formatDate(round.launched_at)} &middot; Closes {formatDate(round.closes_at)}
+                    Launched {formatDate(round.launched_at)} &middot; Closes{" "}
+                    {formatDate(round.closes_at)}
                     {days !== null && ` (${days} day${days !== 1 ? "s" : ""} remaining)`}
                   </p>
                 </div>
@@ -633,7 +854,9 @@ export default function RoundsLanding() {
               <div className="flex items-center gap-2">
                 {round.active_alert_count > 0 && (
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-700">
-                    {round.active_alert_count} Warning{round.active_alert_count !== 1 ? "s" : ""} in {round.alert_community_count} Communit{round.alert_community_count !== 1 ? "ies" : "y"}
+                    {round.active_alert_count} Warning{round.active_alert_count !== 1 ? "s" : ""} in{" "}
+                    {round.alert_community_count} Communit
+                    {round.alert_community_count !== 1 ? "ies" : "y"}
                   </span>
                 )}
                 <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-100 text-blue-700">
@@ -646,7 +869,9 @@ export default function RoundsLanding() {
               {/* Progress bar */}
               <div className="mb-4">
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-600 font-medium">{responded} of {invited} responses</span>
+                  <span className="text-gray-600 font-medium">
+                    {responded} of {invited} responses
+                  </span>
                   <span className="text-gray-500">{progress}%</span>
                 </div>
                 <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
@@ -716,7 +941,10 @@ export default function RoundsLanding() {
                   className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4 hover:border-gray-300 transition cursor-pointer"
                   onClick={() => navigate(`/admin/rounds/${round.id}`)}
                 >
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white" style={{ backgroundColor: "var(--cam-green)" }}>
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white"
+                    style={{ backgroundColor: "var(--cam-green)" }}
+                  >
                     {round.round_number}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -727,22 +955,37 @@ export default function RoundsLanding() {
                       </span>
                       {round.active_alert_count > 0 && (
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
-                          {round.active_alert_count} Warning{round.active_alert_count !== 1 ? "s" : ""}
+                          {round.active_alert_count} Warning
+                          {round.active_alert_count !== 1 ? "s" : ""}
                         </span>
                       )}
                       {round.insights_generated_at && (
                         <span className="text-xs text-gray-400" title="AI insights available">
-                          <svg className="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          <svg
+                            className="w-4 h-4 inline"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                            />
                           </svg>
                         </span>
                       )}
                     </div>
                     <p className="text-sm text-gray-500">
-                      {formatDate(round.launched_at)} — {formatDate(round.concluded_at)} &middot; {responded}/{invited} responses ({rate}%)
+                      {formatDate(round.launched_at)} — {formatDate(round.concluded_at)} &middot;{" "}
+                      {responded}/{invited} responses ({rate}%)
                     </p>
                   </div>
-                  <span className="text-sm font-semibold px-4 py-1.5 rounded-lg text-white flex-shrink-0" style={{ backgroundColor: "var(--cam-green)" }}>
+                  <span
+                    className="text-sm font-semibold px-4 py-1.5 rounded-lg text-white flex-shrink-0"
+                    style={{ backgroundColor: "var(--cam-green)" }}
+                  >
                     View Results
                   </span>
                 </div>
@@ -772,13 +1015,25 @@ export default function RoundsLanding() {
       {memberLimit && memberCount > memberLimit && (
         <div className="bg-amber-50 border border-amber-300 rounded-xl p-4">
           <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            <svg
+              className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+              />
             </svg>
             <div>
               <p className="text-sm font-semibold text-amber-800">Board member limit exceeded</p>
               <p className="text-sm text-amber-700 mt-0.5">
-                You have {memberCount} board members but your plan supports {memberLimit}. New survey rounds cannot be launched until you're within your plan limit. Remove inactive board members or upgrade your plan.
+                You have {memberCount} board members but your plan supports {memberLimit}. New
+                survey rounds cannot be launched until you're within your plan limit. Remove
+                inactive board members or upgrade your plan.
               </p>
             </div>
           </div>
