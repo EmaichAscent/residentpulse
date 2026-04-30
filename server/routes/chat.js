@@ -130,7 +130,17 @@ Do NOT include any tag until the user has responded to your review question.`;
       })
       .join("\n");
 
-    systemPrompt += `\n\nIMPORTANT: This is a returning resident. They have completed ${priorSessions.length} prior survey(s). Reference their previous feedback naturally when relevant — acknowledge their history and ask about progress on past concerns. Do NOT repeat the summaries back verbatim; use them to inform your follow-up questions.\n\nPrior session summaries:\n${priorContext}`;
+    // The system prompt's "Referencing prior context" block governs HOW
+    // to use this. Two rules that this block must NOT contradict:
+    //   1. NEVER meta-narrate the act of consulting history.
+    //      ("I see from your history…", "Looking at your past…" are banned.)
+    //   2. Weave prior threads INTO the question itself, one thread at a time.
+    // We deliberately avoid the word "acknowledge" here — earlier
+    // wording that said "acknowledge their history" trained the model
+    // to open with "I see you've been frustrated with X, Y, Z" which
+    // is the exact preamble pattern the forbidden-openers list
+    // disallows.
+    systemPrompt += `\n\nPRIOR SESSION CONTEXT — for your private use, NOT for narration:\nThis resident has completed ${priorSessions.length} prior survey(s) at this client. The summaries below are factual context the resident does not know you have. Use them like a reporter who did their homework — invisibly. Pick at most ONE prior thread per turn and ask about it specifically (e.g. "Last December you mentioned the landscaping vendor wasn't being held accountable — has that improved?"). Never list multiple prior threads in one reply. Never say you "see" or "notice" anything from their history.\n\nPrior session summaries:\n${priorContext}`;
   }
 
   try {
