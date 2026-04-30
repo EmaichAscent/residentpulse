@@ -276,16 +276,27 @@ export default function ChatPage() {
   });
 
   return (
-    <div className="flex flex-col h-screen bg-brand-gradient">
-      <div className="flex flex-col h-full max-w-2xl mx-auto w-full shadow-xl">
-        {/* Header */}
-        <div className="bg-white border-b px-5 py-4 flex-shrink-0 flex items-center">
-          <div className="w-1/2">
+    <div
+      className="flex flex-col h-screen"
+      style={{
+        background: "linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%)",
+      }}
+    >
+      <div
+        className="flex flex-col h-full max-w-2xl mx-auto w-full"
+        style={{ boxShadow: "var(--shadow-lg)" }}
+      >
+        {/* Header — Polished variant: brand left, identity right, Confidential pill */}
+        <div
+          className="bg-white px-5 py-4 flex-shrink-0 flex items-center justify-between"
+          style={{ borderBottom: "1px solid var(--line)" }}
+        >
+          <div className="flex items-center gap-3 min-w-0">
             {hasLogo && clientId ? (
               <img
                 src={`/api/sessions/logo/${clientId}`}
                 alt={companyName || "Company logo"}
-                className="h-12 max-w-[180px] object-contain"
+                className="h-10 max-w-[140px] object-contain"
                 onError={(e) => {
                   e.target.style.display = "none";
                   e.target.nextElementSibling.style.display = "block";
@@ -293,28 +304,57 @@ export default function ChatPage() {
               />
             ) : null}
             <div style={hasLogo && clientId ? { display: "none" } : {}}>
-              <h1 className="text-xl font-bold text-gray-900">ResidentPulse</h1>
-              <img src="/CAMAscent.png" alt="CAM Ascent" className="h-10 object-contain mt-1" />
+              <h1
+                className="font-semibold"
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: 18,
+                  color: "var(--ink)",
+                }}
+              >
+                ResidentPulse
+              </h1>
             </div>
           </div>
-          <div className="w-1/2 text-right">
-            <p className="font-semibold text-gray-900">{email}</p>
-            {company && <p className="text-sm text-gray-500">{company}</p>}
-            {community && <p className="text-sm text-gray-500">{community}</p>}
+          <div className="text-right min-w-0">
+            <p className="text-sm truncate" style={{ color: "var(--ink-2)" }} title={email}>
+              {email}
+            </p>
+            {company && (
+              <p className="text-xs truncate" style={{ color: "var(--ink-3)" }} title={company}>
+                {company}
+              </p>
+            )}
+            {community && (
+              <p className="text-xs truncate" style={{ color: "var(--ink-4)" }} title={community}>
+                {community}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Mock survey banner */}
+        {/* Mock survey banner — uses plum (AI/system signal) */}
         {isMock && (
-          <div className="bg-purple-50 border-b border-purple-200 px-5 py-2 flex-shrink-0">
-            <p className="text-sm text-purple-800 font-medium text-center">
+          <div
+            className="px-5 py-2 flex-shrink-0"
+            style={{
+              backgroundColor: "var(--plum-tint)",
+              borderBottom: "1px solid var(--plum-soft)",
+            }}
+          >
+            <p className="text-xs font-medium text-center" style={{ color: "var(--plum)" }}>
               Mock Survey Mode &mdash; This session will not affect analytics
             </p>
           </div>
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-5 py-6 bg-gradient-to-b from-gray-50 to-white">
+        <div
+          className="flex-1 overflow-y-auto px-5 py-6"
+          style={{
+            background: "linear-gradient(180deg, var(--paper-2) 0%, var(--paper) 100%)",
+          }}
+        >
           {/* Initial greeting + NPS */}
           {!npsSubmitted && (
             <>
@@ -348,7 +388,7 @@ export default function ChatPage() {
 
           {completed && (
             <div className="text-center py-6">
-              <p className="text-lg text-gray-500">
+              <p className="text-lg" style={{ color: "var(--ink-3)" }}>
                 Session complete. Thank you for your feedback!
               </p>
 
@@ -359,7 +399,7 @@ export default function ChatPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-4 inline-flex items-center gap-2 px-6 py-3 text-base font-semibold text-white rounded-xl shadow-md hover:shadow-lg transition"
-                  style={{ backgroundColor: "var(--cam-blue, #2563eb)" }}
+                  style={{ backgroundColor: "var(--pulse)" }}
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -438,10 +478,11 @@ export default function ChatPage() {
                   className={`p-4 rounded-xl transition ${
                     speechEnabled
                       ? speaking
-                        ? "bg-blue-100 text-blue-600 hover:bg-blue-200"
-                        : "bg-blue-50 text-blue-500 hover:bg-blue-100"
+                        ? "bg-[color:var(--pulse-tint)] hover:opacity-90"
+                        : "bg-[color:var(--pulse-tint)] hover:opacity-90"
                       : "bg-gray-100 text-gray-400 hover:bg-gray-200"
                   }`}
+                  style={speechEnabled ? { color: "var(--pulse-deep)" } : undefined}
                   title={
                     speechEnabled
                       ? speaking
@@ -472,7 +513,10 @@ export default function ChatPage() {
                       </svg>
                     )}
                     {speaking && (
-                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse" />
+                      <span
+                        className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-pulse"
+                        style={{ backgroundColor: "var(--pulse)" }}
+                      />
                     )}
                   </div>
                 </button>
@@ -505,17 +549,25 @@ export default function ChatPage() {
                   </div>
                 </button>
               )}
-              <button type="submit" disabled={loading || !input.trim()} className="btn-send">
+              <button
+                type="submit"
+                disabled={loading || !input.trim()}
+                className="px-6 py-4 text-lg font-semibold text-white rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ backgroundColor: "var(--pulse)" }}
+              >
                 Send
               </button>
             </form>
-            <div className="px-5 pb-4">
+            {/* End Chat — subtle text link (V2 voice: don't proactively
+                emphasize the exit ramp; keep it accessible but quiet) */}
+            <div className="px-5 pb-3 text-center">
               <button
                 onClick={handleEndChat}
                 disabled={loading}
-                className="w-full py-2 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50"
+                className="text-xs font-medium hover:underline transition disabled:opacity-50"
+                style={{ color: "var(--ink-4)" }}
               >
-                End Chat
+                End chat early
               </button>
             </div>
           </div>
