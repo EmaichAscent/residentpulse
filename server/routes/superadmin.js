@@ -306,6 +306,31 @@ router.get("/prompt", async (req, res) => {
   res.json({ prompt: setting?.value || "" });
 });
 
+// Keys that the prompt-versioning system supports. Used as a allowlist
+// for the version endpoints so callers can't write to arbitrary settings rows.
+const VERSIONED_PROMPT_KEYS = [
+  "system_prompt",
+  "interview_initial_prompt",
+  "interview_re_prompt",
+  "prompt_generation_instruction",
+];
+
+/**
+ * Auto-save the current value of a global prompt as a version before it's
+ * overwritten. Idempotent — skips if the new value equals the current one.
+ */
+async function autoSaveVersion(key, newValue, actorEmail) {
+  const current = await db.get("SELECT value FROM settings WHERE key = ? AND client_id IS NULL", [
+    key,
+  ]);
+  if (current?.value && current.value !== newValue) {
+    await db.run(
+      "INSERT INTO prompt_versions (prompt_key, prompt_text, label, created_by) VALUES (?, ?, ?, ?)",
+      [key, current.value, "Auto-save", actorEmail || "unknown"]
+    );
+  }
+}
+
 // Update global system prompt (auto-saves previous version)
 router.put("/prompt", async (req, res) => {
   const { prompt } = req.body;
@@ -315,16 +340,7 @@ router.put("/prompt", async (req, res) => {
   }
 
   try {
-    // Auto-save the current live prompt as a version before overwriting
-    const current = await db.get(
-      "SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL"
-    );
-    if (current?.value && current.value !== prompt) {
-      await db.run(
-        "INSERT INTO prompt_versions (prompt_text, label, created_by) VALUES (?, ?, ?)",
-        [current.value, "Auto-save", req.session.user?.email || "unknown"]
-      );
-    }
+    await autoSaveVersion("system_prompt", prompt, req.session.user?.email);
 
     // Try UPDATE first (row seeded on startup)
     const result = await db.run(
@@ -370,7 +386,7 @@ router.get("/interview-prompts", async (req, res) => {
   }
 });
 
-// Update an interview prompt
+// Update an interview prompt (auto-saves previous version)
 router.put("/interview-prompts", async (req, res) => {
   const { key, value } = req.body;
   const validKeys = [
@@ -388,6 +404,8 @@ router.put("/interview-prompts", async (req, res) => {
   }
 
   try {
+    await autoSaveVersion(key, value, req.session.user?.email);
+
     const result = await db.run(
       "UPDATE settings SET value = ? WHERE key = ? AND client_id IS NULL",
       [value, key]
@@ -405,10 +423,20 @@ router.put("/interview-prompts", async (req, res) => {
   }
 });
 
-// Get saved prompt versions
+// Get saved prompt versions for a specific prompt key.
+// Defaults to system_prompt for backward compatibility with the original UI.
 router.get("/prompt/versions", async (req, res) => {
+  const key = req.query.key || "system_prompt";
+
+  if (!VERSIONED_PROMPT_KEYS.includes(key)) {
+    return res.status(400).json({ error: "Invalid prompt key" });
+  }
+
   try {
-    const versions = await db.all("SELECT * FROM prompt_versions ORDER BY created_at DESC");
+    const versions = await db.all(
+      "SELECT * FROM prompt_versions WHERE prompt_key = ? ORDER BY created_at DESC",
+      [key]
+    );
     res.json(versions);
   } catch (err) {
     logger.error({ err }, "Error loading prompt versions");
@@ -416,18 +444,22 @@ router.get("/prompt/versions", async (req, res) => {
   }
 });
 
-// Save current prompt as a named version
+// Save current prompt as a named version. Body: { prompt_text, label, key? }
 router.post("/prompt/versions", async (req, res) => {
   const { prompt_text, label } = req.body;
+  const key = req.body.key || "system_prompt";
 
+  if (!VERSIONED_PROMPT_KEYS.includes(key)) {
+    return res.status(400).json({ error: "Invalid prompt key" });
+  }
   if (!prompt_text) {
     return res.status(400).json({ error: "prompt_text is required" });
   }
 
   try {
     const result = await db.run(
-      "INSERT INTO prompt_versions (prompt_text, label, created_by) VALUES (?, ?, ?)",
-      [prompt_text, label || "Saved version", req.session.user?.email || "unknown"]
+      "INSERT INTO prompt_versions (prompt_key, prompt_text, label, created_by) VALUES (?, ?, ?, ?)",
+      [key, prompt_text, label || "Saved version", req.session.user?.email || "unknown"]
     );
     const version = await db.get("SELECT * FROM prompt_versions WHERE id = ?", [
       result.lastInsertRowid,
@@ -447,6 +479,41 @@ router.delete("/prompt/versions/:id", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "Error deleting prompt version");
     res.status(500).json({ error: "Failed to delete version" });
+  }
+});
+
+// Restore a prompt version: set its prompt_text as the current value of the
+// matching prompt_key. Auto-saves the previous current value first so the
+// restore itself is undoable.
+router.post("/prompt/versions/:id/restore", async (req, res) => {
+  try {
+    const version = await db.get("SELECT * FROM prompt_versions WHERE id = ?", [req.params.id]);
+    if (!version) {
+      return res.status(404).json({ error: "Version not found" });
+    }
+
+    const key = version.prompt_key;
+    if (!VERSIONED_PROMPT_KEYS.includes(key)) {
+      return res.status(400).json({ error: "Version's prompt key is invalid" });
+    }
+
+    await autoSaveVersion(key, version.prompt_text, req.session.user?.email);
+
+    const result = await db.run(
+      "UPDATE settings SET value = ? WHERE key = ? AND client_id IS NULL",
+      [version.prompt_text, key]
+    );
+    if (!result.changes) {
+      await db.run("INSERT INTO settings (key, value, client_id) VALUES (?, ?, NULL)", [
+        key,
+        version.prompt_text,
+      ]);
+    }
+
+    res.json({ ok: true, restored_version_id: Number(req.params.id), key });
+  } catch (err) {
+    logger.error({ err }, "Error restoring prompt version");
+    res.status(500).json({ error: "Failed to restore version" });
   }
 });
 
