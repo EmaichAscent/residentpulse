@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ChatBubble from "../components/ChatBubble";
 import NpsScale from "../components/NpsScale";
+import { buildWelcomeMessage } from "../utils/chatWelcome";
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const synth = window.speechSynthesis;
@@ -265,21 +266,14 @@ export default function ChatPage() {
 
   if (!sessionId) return null;
 
-  // Build personalized welcome message
-  const userName = firstName || "there";
-  const companyText = company ? ` on behalf of ${company}` : "";
-  const roleText = community ? ` as a board member at ${community}` : " as a board member";
-
-  const voiceHints = [];
-  if (synth) voiceHints.push("click the speaker button to hear responses read aloud");
-  if (SpeechRecognition)
-    voiceHints.push(
-      "click the microphone button to speak your responses (your browser will ask for permission the first time)"
-    );
-  const voiceText =
-    voiceHints.length > 0 ? ` You can type your responses, or ${voiceHints.join(", and ")}.` : "";
-
-  const welcomeContent = `Hi ${userName}! We're collecting feedback${companyText} about how well they serve you${roleText}.${voiceText} When you're finished, click "End Chat" at any time. Let's start with a quick rating.`;
+  // Build personalized welcome message via testable helper.
+  const welcomeContent = buildWelcomeMessage({
+    firstName,
+    company,
+    community,
+    hasSynth: !!synth,
+    hasSpeechRecognition: !!SpeechRecognition,
+  });
 
   return (
     <div className="flex flex-col h-screen bg-brand-gradient">
