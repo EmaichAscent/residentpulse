@@ -82,7 +82,8 @@ export default function AdminPage() {
   const isPaidTier = user?.plan_name && user.plan_name !== "free";
 
   const TABS = [
-    { path: "rounds", label: "Home" },
+    { path: "home", label: "Home" },
+    { path: "rounds", label: "Rounds" },
     { path: "trends", label: "Trends" },
     { path: "communities", label: "Communities" },
     { path: "members", label: "Members" },
