@@ -505,15 +505,15 @@ export function computeLiveWordFrequencies(messages) {
 
 /**
  * Auto-finalize abandoned sessions for a round.
- * Criteria: has NPS score + at least 2 user messages + not completed.
- * Generates a summary and marks as complete.
+ * Criteria: has NPS score + not completed. The NPS itself is the primary signal,
+ * so we include it in round results even when the resident didn't add comments.
+ * Generates a summary if there's a transcript; otherwise leaves summary null.
  */
 async function finalizeStaleSessionsForRound(roundId, clientId) {
   const staleSessions = await db.all(
     `SELECT s.id
      FROM sessions s
-     WHERE s.round_id = ? AND s.client_id = ? AND s.completed = FALSE AND s.nps_score IS NOT NULL AND s.is_mock IS NOT TRUE
-       AND (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id AND m.role = 'user') >= 2`,
+     WHERE s.round_id = ? AND s.client_id = ? AND s.completed = FALSE AND s.nps_score IS NOT NULL AND s.is_mock IS NOT TRUE`,
     [roundId, clientId]
   );
 
