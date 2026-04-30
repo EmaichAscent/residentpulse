@@ -60,7 +60,7 @@ export default function AccountSettings() {
     try {
       const [clientRes, usersRes] = await Promise.all([
         fetch("/api/admin/account", { credentials: "include" }),
-        fetch("/api/admin/users", { credentials: "include" })
+        fetch("/api/admin/users", { credentials: "include" }),
       ]);
 
       if (clientRes.ok) {
@@ -111,9 +111,9 @@ export default function AccountSettings() {
           city,
           state,
           zip,
-          phone_number: phoneNumber
+          phone_number: phoneNumber,
         }),
-        credentials: "include"
+        credentials: "include",
       });
 
       const data = await response.json();
@@ -132,7 +132,7 @@ export default function AccountSettings() {
     try {
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: "DELETE",
-        credentials: "include"
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -153,12 +153,12 @@ export default function AccountSettings() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ survey_cadence: newCadence }),
-      credentials: "include"
+      credentials: "include",
     });
     if (res.ok) {
       await fetch("/api/admin/survey-rounds/recalculate", {
         method: "POST",
-        credentials: "include"
+        credentials: "include",
       });
       loadData();
     } else {
@@ -308,9 +308,7 @@ export default function AccountSettings() {
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Company Name
-              </label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Company Name</label>
               <input
                 type="text"
                 value={companyName}
@@ -319,9 +317,7 @@ export default function AccountSettings() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Phone Number
-              </label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Phone Number</label>
               <input
                 type="tel"
                 value={phoneNumber}
@@ -334,9 +330,7 @@ export default function AccountSettings() {
 
           {/* Company Logo */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              Company Logo
-            </label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Company Logo</label>
             <div className="flex items-center gap-4">
               {(logoPreview || client?.has_logo) && (
                 <img
@@ -346,23 +340,41 @@ export default function AccountSettings() {
                 />
               )}
               <div className="flex items-center gap-2">
-                <label className="px-3 py-1.5 text-sm font-medium rounded-lg cursor-pointer transition text-white" style={{ backgroundColor: "var(--cam-green, #1AB06E)" }}>
-                  {logoUploading ? "Uploading..." : (client?.has_logo || logoPreview) ? "Replace" : "Upload Logo"}
-                  <input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={handleLogoSelect} disabled={logoUploading} className="hidden" />
+                <label
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg cursor-pointer transition text-white"
+                  style={{ backgroundColor: "var(--cam-green, #1AB06E)" }}
+                >
+                  {logoUploading
+                    ? "Uploading..."
+                    : client?.has_logo || logoPreview
+                      ? "Replace"
+                      : "Upload Logo"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml"
+                    onChange={handleLogoSelect}
+                    disabled={logoUploading}
+                    className="hidden"
+                  />
                 </label>
                 {(client?.has_logo || logoPreview) && (
-                  <button onClick={handleRemoveLogo} className="text-sm text-red-500 hover:text-red-700">Remove</button>
+                  <button
+                    onClick={handleRemoveLogo}
+                    className="text-sm text-red-500 hover:text-red-700"
+                  >
+                    Remove
+                  </button>
                 )}
               </div>
             </div>
             {logoError && <p className="text-xs text-red-600 mt-1">{logoError}</p>}
-            <p className="text-xs text-gray-400 mt-1">PNG, JPG, or SVG. Max 500KB. Landscape or square.</p>
+            <p className="text-xs text-gray-400 mt-1">
+              PNG, JPG, or SVG. Max 500KB. Landscape or square.
+            </p>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              Address Line 1
-            </label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Address Line 1</label>
             <input
               type="text"
               value={addressLine1}
@@ -373,9 +385,7 @@ export default function AccountSettings() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              Address Line 2
-            </label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Address Line 2</label>
             <input
               type="text"
               value={addressLine2}
@@ -387,9 +397,7 @@ export default function AccountSettings() {
 
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                City
-              </label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">City</label>
               <input
                 type="text"
                 value={city}
@@ -398,9 +406,7 @@ export default function AccountSettings() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                State
-              </label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">State</label>
               <input
                 type="text"
                 value={state}
@@ -411,9 +417,7 @@ export default function AccountSettings() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                ZIP Code
-              </label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">ZIP Code</label>
               <input
                 type="text"
                 value={zip}
@@ -427,16 +431,12 @@ export default function AccountSettings() {
 
           <div className="grid grid-cols-3 gap-3 pt-1">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Client ID
-              </label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Client ID</label>
               <p className="text-gray-900 font-mono text-sm">{client?.id}</p>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Status
-              </label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
               <span
                 className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
                   client?.status === "active"
@@ -449,9 +449,7 @@ export default function AccountSettings() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                Created
-              </label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Created</label>
               <p className="text-gray-900 text-sm">
                 {client?.created_at ? new Date(client.created_at).toLocaleDateString() : "—"}
               </p>
@@ -459,15 +457,13 @@ export default function AccountSettings() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="btn-primary-sm"
-            >
+            <button onClick={handleSave} disabled={saving} className="btn-primary-sm">
               {saving ? "Saving..." : "Save Changes"}
             </button>
             {saveMessage && (
-              <span className={`text-sm ${saveMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
+              <span
+                className={`text-sm ${saveMessage.type === "success" ? "text-green-600" : "text-red-600"}`}
+              >
                 {saveMessage.text}
               </span>
             )}
@@ -477,12 +473,20 @@ export default function AccountSettings() {
 
       {/* Change Password Modal */}
       {showPwModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowPwModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setShowPwModal(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h2>
             <form onSubmit={handleChangePassword} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Current Password</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Current Password
+                </label>
                 <input
                   type="password"
                   value={pwForm.current}
@@ -504,7 +508,9 @@ export default function AccountSettings() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Confirm New Password</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Confirm New Password
+                </label>
                 <input
                   type="password"
                   value={pwForm.confirm}
@@ -514,7 +520,9 @@ export default function AccountSettings() {
                 />
               </div>
               {pwMessage && (
-                <p className={`text-sm ${pwMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
+                <p
+                  className={`text-sm ${pwMessage.type === "success" ? "text-green-600" : "text-red-600"}`}
+                >
                   {pwMessage.text}
                 </p>
               )}
@@ -522,7 +530,11 @@ export default function AccountSettings() {
                 <button type="submit" disabled={pwSaving} className="btn-primary-sm flex-1">
                   {pwSaving ? "Changing..." : "Change Password"}
                 </button>
-                <button type="button" onClick={() => setShowPwModal(false)} className="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                <button
+                  type="button"
+                  onClick={() => setShowPwModal(false)}
+                  className="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                >
                   Cancel
                 </button>
               </div>
@@ -544,15 +556,17 @@ export default function AccountSettings() {
           </button>
         </div>
 
-        {adminError && (
-          <p className="text-sm text-red-600 mb-3">{adminError}</p>
-        )}
+        {adminError && <p className="text-sm text-red-600 mb-3">{adminError}</p>}
         <AdminUserList
           users={adminUsers}
           onRemove={(userId) => setRemoveAdminTarget(userId)}
           onUpdate={loadData}
           currentUserEmail={sessionUser?.email}
-          onChangePassword={() => { setPwMessage(null); setPwForm({ current: "", newPw: "", confirm: "" }); setShowPwModal(true); }}
+          onChangePassword={() => {
+            setPwMessage(null);
+            setPwForm({ current: "", newPw: "", confirm: "" });
+            setShowPwModal(true);
+          }}
         />
       </div>
 
@@ -574,13 +588,15 @@ export default function AccountSettings() {
                   {client.subscription.survey_rounds_per_year} survey rounds/year
                 </p>
               </div>
-              <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full capitalize ${
-                client.subscription.cancel_at_period_end
-                  ? "bg-amber-100 text-amber-800"
-                  : client.subscription.status === "active"
-                  ? "bg-green-100 text-green-800"
-                  : "bg-gray-100 text-gray-800"
-              }`}>
+              <span
+                className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full capitalize ${
+                  client.subscription.cancel_at_period_end
+                    ? "bg-amber-100 text-amber-800"
+                    : client.subscription.status === "active"
+                      ? "bg-green-100 text-green-800"
+                      : "bg-gray-100 text-gray-800"
+                }`}
+              >
                 {client.subscription.cancel_at_period_end
                   ? `Cancels${client.subscription.current_period_end ? " " + new Date(client.subscription.current_period_end).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}`
                   : client.subscription.status}
@@ -594,7 +610,8 @@ export default function AccountSettings() {
                 <p className="text-lg font-bold text-gray-900">
                   {client.usage?.member_count || 0}
                   <span className="text-sm font-normal text-gray-500">
-                    {" / "}{client.subscription.member_limit}
+                    {" / "}
+                    {client.subscription.member_limit}
                   </span>
                 </p>
                 <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -602,8 +619,10 @@ export default function AccountSettings() {
                     className="h-full rounded-full transition-all"
                     style={{
                       width: `${Math.min(100, ((client.usage?.member_count || 0) / client.subscription.member_limit) * 100)}%`,
-                      backgroundColor: ((client.usage?.member_count || 0) / client.subscription.member_limit) > 0.9
-                        ? "#EF4444" : "var(--cam-blue)"
+                      backgroundColor:
+                        (client.usage?.member_count || 0) / client.subscription.member_limit > 0.9
+                          ? "#EF4444"
+                          : "var(--cam-blue)",
                     }}
                   />
                 </div>
@@ -614,7 +633,9 @@ export default function AccountSettings() {
                 <p className="text-lg font-bold text-gray-900">
                   {client.usage?.survey_rounds_used || 0}
                   <span className="text-sm font-normal text-gray-500">
-                    {" / "}{client.subscription.survey_cadence || client.subscription.survey_rounds_per_year}
+                    {" / "}
+                    {client.subscription.survey_cadence ||
+                      client.subscription.survey_rounds_per_year}
                   </span>
                 </p>
                 <div className="mt-2 h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -622,8 +643,13 @@ export default function AccountSettings() {
                     className="h-full rounded-full transition-all"
                     style={{
                       width: `${Math.min(100, ((client.usage?.survey_rounds_used || 0) / (client.subscription.survey_cadence || client.subscription.survey_rounds_per_year)) * 100)}%`,
-                      backgroundColor: ((client.usage?.survey_rounds_used || 0) / (client.subscription.survey_cadence || client.subscription.survey_rounds_per_year)) > 0.9
-                        ? "#EF4444" : "var(--cam-blue)"
+                      backgroundColor:
+                        (client.usage?.survey_rounds_used || 0) /
+                          (client.subscription.survey_cadence ||
+                            client.subscription.survey_rounds_per_year) >
+                        0.9
+                          ? "#EF4444"
+                          : "var(--cam-blue)",
                     }}
                   />
                 </div>
@@ -651,7 +677,11 @@ export default function AccountSettings() {
                         ? "text-white"
                         : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                     }`}
-                    style={(client.subscription.survey_cadence || 2) === 2 ? { backgroundColor: "var(--cam-blue)" } : {}}
+                    style={
+                      (client.subscription.survey_cadence || 2) === 2
+                        ? { backgroundColor: "var(--cam-blue)" }
+                        : {}
+                    }
                   >
                     2x / year
                   </button>
@@ -666,21 +696,28 @@ export default function AccountSettings() {
                       client.subscription.survey_cadence === 4
                         ? "text-white"
                         : client.subscription.survey_rounds_per_year < 4
-                        ? "bg-gray-50 text-gray-300 cursor-not-allowed"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          ? "bg-gray-50 text-gray-300 cursor-not-allowed"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                     }`}
-                    style={client.subscription.survey_cadence === 4 ? { backgroundColor: "var(--cam-blue)" } : {}}
-                    title={client.subscription.survey_rounds_per_year < 4 ? "Upgrade your plan to enable quarterly surveys" : ""}
+                    style={
+                      client.subscription.survey_cadence === 4
+                        ? { backgroundColor: "var(--cam-blue)" }
+                        : {}
+                    }
+                    title={
+                      client.subscription.survey_rounds_per_year < 4
+                        ? "Upgrade your plan to enable quarterly surveys"
+                        : ""
+                    }
                   >
                     4x / year
                   </button>
                 </div>
               </div>
-              {cadenceError && (
-                <p className="text-sm text-red-600 mt-2">{cadenceError}</p>
-              )}
+              {cadenceError && <p className="text-sm text-red-600 mt-2">{cadenceError}</p>}
               <p className="text-xs text-gray-400 mt-2">
-                Changing cadence will recalculate future planned rounds. Already launched rounds are not affected.
+                Changing cadence will recalculate future planned rounds. Already launched rounds are
+                not affected.
               </p>
               {client.subscription.survey_rounds_per_year < 4 && (
                 <p className="text-xs text-gray-400 mt-1">
@@ -702,10 +739,11 @@ export default function AccountSettings() {
                   <div>
                     <p className="text-sm font-semibold text-amber-800">Cancellation Scheduled</p>
                     <p className="text-sm text-amber-700 mt-1">
-                      Your subscription will end{client.subscription.current_period_end
+                      Your subscription will end
+                      {client.subscription.current_period_end
                         ? ` on ${new Date(client.subscription.current_period_end).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`
-                        : " at the end of your billing period"}.
-                      You'll be downgraded to the Free plan.
+                        : " at the end of your billing period"}
+                      . You'll be downgraded to the Free plan.
                     </p>
                   </div>
                   <button
@@ -713,7 +751,8 @@ export default function AccountSettings() {
                       setSubMessage(null);
                       try {
                         const res = await fetch("/api/admin/account/subscription/reactivate", {
-                          method: "POST", credentials: "include",
+                          method: "POST",
+                          credentials: "include",
                           headers: { "Content-Type": "application/json" },
                         });
                         const data = await res.json();
@@ -723,7 +762,9 @@ export default function AccountSettings() {
                         } else {
                           setSubMessage(data.error);
                         }
-                      } catch { setSubMessage("Failed to reactivate. Please try again."); }
+                      } catch {
+                        setSubMessage("Failed to reactivate. Please try again.");
+                      }
                     }}
                     className="px-4 py-2 text-sm font-semibold rounded-lg border border-amber-400 text-amber-800 hover:bg-amber-100 transition whitespace-nowrap ml-4"
                   >
@@ -737,7 +778,9 @@ export default function AccountSettings() {
                   onClick={async () => {
                     setPlanError("");
                     setShowPlanModal(true);
-                    const res = await fetch("/api/admin/account/subscription/plans", { credentials: "include" });
+                    const res = await fetch("/api/admin/account/subscription/plans", {
+                      credentials: "include",
+                    });
                     if (res.ok) setAvailablePlans(await res.json());
                   }}
                   className="px-4 py-2 text-sm font-semibold rounded-lg text-white transition"
@@ -748,7 +791,10 @@ export default function AccountSettings() {
 
                 {client.subscription.plan_name !== "free" && (
                   <button
-                    onClick={() => { setCancelError(""); setShowCancelModal(true); }}
+                    onClick={() => {
+                      setCancelError("");
+                      setShowCancelModal(true);
+                    }}
                     className="px-4 py-2 text-sm font-semibold rounded-lg border border-red-300 text-red-600 hover:bg-red-50 transition"
                   >
                     Cancel Subscription
@@ -767,16 +813,33 @@ export default function AccountSettings() {
       {/* Google Reviews */}
       <div className="bg-white shadow-md rounded-lg p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
-          <svg viewBox="0 0 24 24" className="w-5 h-5 flex-shrink-0" xmlns="http://www.w3.org/2000/svg">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          <svg
+            viewBox="0 0 24 24"
+            className="w-5 h-5 flex-shrink-0"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+              fill="#4285F4"
+            />
+            <path
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              fill="#34A853"
+            />
+            <path
+              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+              fill="#FBBC05"
+            />
+            <path
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+              fill="#EA4335"
+            />
           </svg>
           Google Reviews
         </h2>
         <p className="text-sm text-gray-500 mb-4">
-          When enabled, promoters (score 9-10) will be asked during their conversation if they'd like to leave a Google review. A link will appear on their completion screen.
+          When enabled, promoters (score 9-10) will be asked during their conversation if they'd
+          like to leave a Google review. A link will appear on their completion screen.
         </p>
 
         <div className="space-y-4">
@@ -794,12 +857,22 @@ export default function AccountSettings() {
                     const res = await fetch("/api/admin/account/google-review", {
                       method: "PUT",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ enabled: newVal, url: googleReviewUrl, location_urls: locations.map((l) => ({ location_id: l.id, google_review_url: locationUrls[l.id] || "" })) }),
+                      body: JSON.stringify({
+                        enabled: newVal,
+                        url: googleReviewUrl,
+                        location_urls: locations.map((l) => ({
+                          location_id: l.id,
+                          google_review_url: locationUrls[l.id] || "",
+                        })),
+                      }),
                       credentials: "include",
                     });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.error || "Failed to save");
-                    setReviewMessage({ type: "success", text: newVal ? "Google Reviews enabled." : "Google Reviews disabled." });
+                    setReviewMessage({
+                      type: "success",
+                      text: newVal ? "Google Reviews enabled." : "Google Reviews disabled.",
+                    });
                   } catch (err) {
                     setGoogleReviewEnabled(!newVal);
                     setReviewMessage({ type: "error", text: err.message });
@@ -831,7 +904,8 @@ export default function AccountSettings() {
                   placeholder="g.page/r/your-business/review"
                 />
                 <p className="text-xs text-gray-400 mt-1">
-                  Required. This link is used for all promoters unless a location-specific URL is set below.
+                  Required. This link is used for all promoters unless a location-specific URL is
+                  set below.
                 </p>
               </div>
 
@@ -848,15 +922,23 @@ export default function AccountSettings() {
                   {showLocationUrls && (
                     <div className="mt-3 space-y-2">
                       <p className="text-xs text-gray-400">
-                        Optionally set a unique Google Review URL for each location. Locations without a URL will use the main URL above.
+                        Optionally set a unique Google Review URL for each location. Locations
+                        without a URL will use the main URL above.
                       </p>
                       {locations.map((loc) => (
                         <div key={loc.id} className="flex items-center gap-3">
-                          <span className="text-sm text-gray-700 font-medium w-40 truncate" title={loc.name}>{loc.name}</span>
+                          <span
+                            className="text-sm text-gray-700 font-medium w-40 truncate"
+                            title={loc.name}
+                          >
+                            {loc.name}
+                          </span>
                           <input
                             type="url"
                             value={locationUrls[loc.id] || ""}
-                            onChange={(e) => setLocationUrls({ ...locationUrls, [loc.id]: e.target.value })}
+                            onChange={(e) =>
+                              setLocationUrls({ ...locationUrls, [loc.id]: e.target.value })
+                            }
                             className="input-field-sm flex-1"
                             placeholder="Uses main URL"
                           />
@@ -879,7 +961,11 @@ export default function AccountSettings() {
                     const res = await fetch("/api/admin/account/google-review", {
                       method: "PUT",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ enabled: googleReviewEnabled, url: googleReviewUrl, location_urls }),
+                      body: JSON.stringify({
+                        enabled: googleReviewEnabled,
+                        url: googleReviewUrl,
+                        location_urls,
+                      }),
                       credentials: "include",
                     });
                     const data = await res.json();
@@ -901,7 +987,9 @@ export default function AccountSettings() {
           )}
 
           {reviewMessage && (
-            <p className={`text-sm ${reviewMessage.type === "success" ? "text-green-600" : "text-red-600"}`}>
+            <p
+              className={`text-sm ${reviewMessage.type === "success" ? "text-green-600" : "text-red-600"}`}
+            >
               {reviewMessage.text}
             </p>
           )}
@@ -911,13 +999,24 @@ export default function AccountSettings() {
       {/* Detractor Alert Notifications */}
       <div className="bg-white shadow-md rounded-lg p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
-          <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          <svg
+            className="w-5 h-5 text-red-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+            />
           </svg>
           Detractor Alerts
         </h2>
         <p className="text-sm text-gray-500 mb-4">
-          Get an email notification when a board member gives a low score, so you can follow up quickly.
+          Get an email notification when a board member gives a low score, so you can follow up
+          quickly.
         </p>
 
         <div className="flex items-center gap-4">
@@ -953,8 +1052,10 @@ export default function AccountSettings() {
               className="input-field-sm w-24 text-center"
             >
               <option value={0}>Off</option>
-              {[1,2,3,4,5,6,7].map(n => (
-                <option key={n} value={n}>Below {n}</option>
+              {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                <option key={n} value={n}>
+                  Below {n}
+                </option>
               ))}
             </select>
             {savingThreshold && <span className="text-xs text-gray-400">Saving...</span>}
@@ -966,11 +1067,15 @@ export default function AccountSettings() {
       <div className="bg-white shadow-md rounded-lg p-6 border border-red-200">
         <h2 className="text-lg font-semibold text-red-700 mb-2">Delete Account</h2>
         <p className="text-sm text-gray-600 mb-3">
-          Permanently delete your account and all associated data, including board members,
-          survey rounds, responses, and insights. This action cannot be undone.
+          Permanently delete your account and all associated data, including board members, survey
+          rounds, responses, and insights. This action cannot be undone.
         </p>
         <button
-          onClick={() => { setDeletePassword(""); setDeleteError(""); setShowDeleteModal(true); }}
+          onClick={() => {
+            setDeletePassword("");
+            setDeleteError("");
+            setShowDeleteModal(true);
+          }}
           className="px-4 py-2 text-sm font-semibold text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition"
         >
           Delete Account
@@ -979,8 +1084,14 @@ export default function AccountSettings() {
 
       {/* Change Plan Modal */}
       {showPlanModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowPlanModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setShowPlanModal(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Change Your Plan</h2>
             {planError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
@@ -991,7 +1102,9 @@ export default function AccountSettings() {
               {availablePlans.map((plan) => {
                 const isCurrent = client?.subscription?.plan_id === plan.id;
                 const isFree = plan.name === "free";
-                const price = plan.price_cents ? `$${(plan.price_cents / 100).toLocaleString()}` : null;
+                const price = plan.price_cents
+                  ? `$${(plan.price_cents / 100).toLocaleString()}`
+                  : null;
                 const memberCount = client?.usage?.member_count || 0;
                 const wouldExceed = memberCount > plan.member_limit;
                 return (
@@ -1004,7 +1117,8 @@ export default function AccountSettings() {
                       setPlanLoading(true);
                       try {
                         const res = await fetch("/api/admin/account/subscription/change-plan", {
-                          method: "POST", credentials: "include",
+                          method: "POST",
+                          credentials: "include",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ plan_id: plan.id }),
                         });
@@ -1042,15 +1156,22 @@ export default function AccountSettings() {
                       {plan.survey_rounds_per_year} rounds/year
                     </p>
                     {isFree ? (
-                      <p className="text-xs font-semibold mt-2" style={{ color: "var(--cam-green)" }}>Free Forever</p>
+                      <p
+                        className="text-xs font-semibold mt-2"
+                        style={{ color: "var(--cam-green)" }}
+                      >
+                        Free Forever
+                      </p>
                     ) : (
                       <p className="text-sm font-bold mt-2" style={{ color: "var(--cam-blue)" }}>
-                        {price}<span className="text-xs font-normal text-gray-500">/mo</span>
+                        {price}
+                        <span className="text-xs font-normal text-gray-500">/mo</span>
                       </p>
                     )}
                     {wouldExceed && !isCurrent && (
                       <p className="text-xs text-amber-600 mt-2">
-                        You have {memberCount} active members. {memberCount - plan.member_limit} will be deactivated.
+                        You have {memberCount} active members. {memberCount - plan.member_limit}{" "}
+                        will be deactivated.
                       </p>
                     )}
                   </button>
@@ -1071,21 +1192,25 @@ export default function AccountSettings() {
 
       {/* Cancel Subscription Modal */}
       {showCancelModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowCancelModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setShowCancelModal(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-lg font-semibold text-red-700 mb-2">Cancel Subscription</h2>
             <p className="text-sm text-gray-600 mb-2">
-              Your subscription will remain active until the end of your billing period.
-              After that, your account will be downgraded to the <strong>Free plan</strong>:
+              Your subscription will remain active until the end of your billing period. After that,
+              your account will be downgraded to the <strong>Free plan</strong>:
             </p>
             <ul className="text-sm text-gray-600 mb-4 list-disc pl-5 space-y-1">
               <li>25 board members max</li>
               <li>2 survey rounds per year</li>
               <li>Members over the limit will be deactivated</li>
             </ul>
-            {cancelError && (
-              <p className="text-sm text-red-600 mb-3">{cancelError}</p>
-            )}
+            {cancelError && <p className="text-sm text-red-600 mb-3">{cancelError}</p>}
             <div className="flex gap-2">
               <button
                 disabled={cancelLoading}
@@ -1094,7 +1219,8 @@ export default function AccountSettings() {
                   setCancelLoading(true);
                   try {
                     const res = await fetch("/api/admin/account/subscription/cancel", {
-                      method: "POST", credentials: "include",
+                      method: "POST",
+                      credentials: "include",
                       headers: { "Content-Type": "application/json" },
                     });
                     const data = await res.json();
@@ -1126,8 +1252,14 @@ export default function AccountSettings() {
 
       {/* Delete Account Confirmation Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowDeleteModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setShowDeleteModal(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2 className="text-lg font-semibold text-red-700 mb-2">Delete Account</h2>
             <p className="text-sm text-gray-600 mb-4">
               This will permanently delete <strong>{client?.company_name}</strong> and all data.
@@ -1143,9 +1275,7 @@ export default function AccountSettings() {
                 required
                 autoFocus
               />
-              {deleteError && (
-                <p className="text-sm text-red-600">{deleteError}</p>
-              )}
+              {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
               <div className="flex gap-2">
                 <button
                   type="submit"
@@ -1175,7 +1305,10 @@ export default function AccountSettings() {
       <ConfirmModal
         isOpen={!!removeAdminTarget}
         onClose={() => setRemoveAdminTarget(null)}
-        onConfirm={async () => { await handleRemoveUser(removeAdminTarget); setRemoveAdminTarget(null); }}
+        onConfirm={async () => {
+          await handleRemoveUser(removeAdminTarget);
+          setRemoveAdminTarget(null);
+        }}
         title="Remove Admin User"
         message="Are you sure you want to remove this admin user?"
         confirmLabel="Remove"

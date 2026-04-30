@@ -15,11 +15,13 @@ Before deploying, you should test locally with PostgreSQL:
 ### Install PostgreSQL Locally (Optional)
 
 **Windows:**
+
 ```bash
 winget install PostgreSQL.PostgreSQL
 ```
 
 **Or use Railway's PostgreSQL for development:**
+
 1. Create a Railway account
 2. Create a new project
 3. Add PostgreSQL database
@@ -28,11 +30,13 @@ winget install PostgreSQL.PostgreSQL
 ### Set Up Environment Variables
 
 1. Copy the example env file:
+
 ```bash
 cp .env.example .env
 ```
 
 2. Edit `.env` and fill in:
+
 ```
 DATABASE_URL=your-postgresql-connection-string
 ANTHROPIC_API_KEY=your-anthropic-api-key
@@ -40,6 +44,7 @@ SESSION_SECRET=generate-a-random-string-here
 ```
 
 3. Also set up the server env:
+
 ```bash
 cd server
 cp .env.example .env
@@ -114,6 +119,7 @@ In your Railway project settings, add these environment variables:
 2. Go to **"Variables"** tab
 
 3. Add:
+
    ```
    ANTHROPIC_API_KEY=your-anthropic-api-key-here
    SESSION_SECRET=your-random-secret-string
@@ -226,15 +232,18 @@ DROP TABLE sessions CASCADE;  # etc.
 ## Cost Estimation
 
 **Railway Free Tier:**
+
 - $5/month credit (free)
 - Good for development and low-traffic production
 
 **Estimated costs for small production:**
+
 - Web Service: ~$5/month
 - PostgreSQL: ~$5/month
 - **Total: ~$10/month** (first $5 free)
 
 **For higher traffic:**
+
 - Scale up as needed
 - Monitor usage in Railway dashboard
 - Set spending limits to avoid surprises

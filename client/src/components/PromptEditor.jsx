@@ -24,7 +24,7 @@ export default function PromptEditor({ isSuperAdmin = false }) {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
-        credentials: "include"
+        credentials: "include",
       });
       if (!res.ok) throw new Error("Save failed");
       setSaved(true);

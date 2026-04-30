@@ -47,7 +47,10 @@ export default function SuperAdminPage() {
             <h1 className="text-2xl font-bold text-white">ResidentPulse SuperAdmin</h1>
             <p className="text-sm text-white/70">Manage all clients and system settings</p>
           </div>
-          <button onClick={handleLogout} className="px-4 py-2 text-sm font-semibold text-white border border-white/40 rounded-lg transition hover:bg-white/10">
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 text-sm font-semibold text-white border border-white/40 rounded-lg transition hover:bg-white/10"
+          >
             Logout
           </button>
         </div>
@@ -61,7 +64,9 @@ export default function SuperAdminPage() {
               key={t.path}
               onClick={() => navigate(`/superadmin/${t.path}`)}
               className={`flex-1 py-3 text-lg font-medium rounded-lg transition ${
-                activeTab === t.path ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                activeTab === t.path
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
               }`}
             >
               {t.label}

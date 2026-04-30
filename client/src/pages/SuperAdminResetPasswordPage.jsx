@@ -25,7 +25,12 @@ export default function SuperAdminResetPasswordPage() {
             <h1 className="text-4xl lg:text-5xl font-extrabold text-white tracking-tight mb-2">
               ResidentPulse
             </h1>
-            <a href="https://camascent.com" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 text-white/70 hover:text-white/90 transition-colors">
+            <a
+              href="https://camascent.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 text-white/70 hover:text-white/90 transition-colors"
+            >
               <span className="text-base font-medium">Powered by</span>
               <img src="/CAMAscent.png" alt="CAM Ascent" className="h-8 object-contain" />
               <span className="text-base font-semibold">CAM Ascent Analytical Insights</span>
@@ -71,7 +76,7 @@ export default function SuperAdminResetPasswordPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, password }),
-        credentials: "include"
+        credentials: "include",
       });
 
       const data = await response.json();
@@ -102,7 +107,12 @@ export default function SuperAdminResetPasswordPage() {
           <h1 className="text-4xl lg:text-5xl font-extrabold text-white tracking-tight mb-2">
             ResidentPulse
           </h1>
-          <a href="https://camascent.com" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 text-white/70 hover:text-white/90 transition-colors">
+          <a
+            href="https://camascent.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 text-white/70 hover:text-white/90 transition-colors"
+          >
             <span className="text-base font-medium">Powered by</span>
             <img src="/CAMAscent.png" alt="CAM Ascent" className="h-8 object-contain" />
             <span className="text-base font-semibold">CAM Ascent Analytical Insights</span>
@@ -121,17 +131,17 @@ export default function SuperAdminResetPasswordPage() {
                     Your password has been reset successfully.
                   </p>
                 </div>
-                <Link
-                  to="/superadmin/login"
-                  className="block text-center w-full btn-primary"
-                >
+                <Link to="/superadmin/login" className="block text-center w-full btn-primary">
                   Go to Login
                 </Link>
               </div>
             ) : (
               <form onSubmit={handleSubmit}>
                 <div className="mb-4">
-                  <label htmlFor="password" className="block text-base font-medium text-gray-700 mb-2">
+                  <label
+                    htmlFor="password"
+                    className="block text-base font-medium text-gray-700 mb-2"
+                  >
                     New Password
                   </label>
                   <input
@@ -149,7 +159,10 @@ export default function SuperAdminResetPasswordPage() {
                 </div>
 
                 <div className="mb-6">
-                  <label htmlFor="confirmPassword" className="block text-base font-medium text-gray-700 mb-2">
+                  <label
+                    htmlFor="confirmPassword"
+                    className="block text-base font-medium text-gray-700 mb-2"
+                  >
                     Confirm Password
                   </label>
                   <input
@@ -179,11 +192,7 @@ export default function SuperAdminResetPasswordPage() {
                   </div>
                 )}
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full btn-primary"
-                >
+                <button type="submit" disabled={loading} className="w-full btn-primary">
                   {loading ? "Resetting..." : "Reset Password"}
                 </button>
               </form>

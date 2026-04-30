@@ -75,8 +75,14 @@ export default function TestModeToggle({ user, onModeChange }) {
 
       {/* Activate Test Mode Modal */}
       {showActivateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowActivateModal(false)}>
-          <div className="bg-white rounded-2xl p-6 max-w-md mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setShowActivateModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-md mx-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-lg font-bold text-gray-900 mb-2">Enter Test Mode</h3>
             <p className="text-sm text-gray-600 mb-4">
               This creates a sandbox environment with sample data so you can experience the full
@@ -84,10 +90,21 @@ export default function TestModeToggle({ user, onModeChange }) {
               with real board members.
             </p>
             <ul className="text-sm text-gray-600 mb-5 space-y-1.5">
-              <li className="flex gap-2"><span className="text-green-500 font-bold">+</span> 1 test community with 5 sample members</li>
-              <li className="flex gap-2"><span className="text-green-500 font-bold">+</span> 1 active test survey round</li>
-              <li className="flex gap-2"><span className="text-green-500 font-bold">+</span> No real emails sent — completely safe</li>
-              <li className="flex gap-2"><span className="text-green-500 font-bold">+</span> Test data never mixes with live data</li>
+              <li className="flex gap-2">
+                <span className="text-green-500 font-bold">+</span> 1 test community with 5 sample
+                members
+              </li>
+              <li className="flex gap-2">
+                <span className="text-green-500 font-bold">+</span> 1 active test survey round
+              </li>
+              <li className="flex gap-2">
+                <span className="text-green-500 font-bold">+</span> No real emails sent — completely
+                safe
+              </li>
+              <li className="flex gap-2">
+                <span className="text-green-500 font-bold">+</span> Test data never mixes with live
+                data
+              </li>
             </ul>
             <div className="flex gap-3">
               <button
@@ -111,16 +128,20 @@ export default function TestModeToggle({ user, onModeChange }) {
 
       {/* Go Live Confirmation Modal */}
       {showGoLiveModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowGoLiveModal(false)}>
-          <div className="bg-white rounded-2xl p-6 max-w-md mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setShowGoLiveModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-md mx-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-lg font-bold text-gray-900 mb-2">Switch to Live Mode</h3>
             <p className="text-sm text-gray-600 mb-4">
               You're switching to Live Mode. Your test data stays safely in test mode — live mode
               shows your real members, communities, and survey rounds.
             </p>
-            <p className="text-sm text-gray-500 mb-5">
-              You can switch back to test mode anytime.
-            </p>
+            <p className="text-sm text-gray-500 mb-5">You can switch back to test mode anytime.</p>
             <div className="flex gap-3">
               <button
                 onClick={() => switchMode("live", true)}

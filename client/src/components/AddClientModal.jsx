@@ -31,9 +31,9 @@ export default function AddClientModal({ isOpen, onClose, onAdd }) {
           state,
           zip,
           phone_number: phoneNumber,
-          admin_email: adminEmail
+          admin_email: adminEmail,
         }),
-        credentials: "include"
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -75,8 +75,12 @@ export default function AddClientModal({ isOpen, onClose, onAdd }) {
         {success ? (
           <div className="space-y-4">
             <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-              <p className="text-sm text-green-800 font-medium mb-2">Client created successfully!</p>
-              <p className="text-sm text-green-700">Share these credentials with the client admin:</p>
+              <p className="text-sm text-green-800 font-medium mb-2">
+                Client created successfully!
+              </p>
+              <p className="text-sm text-green-700">
+                Share these credentials with the client admin:
+              </p>
             </div>
 
             <div className="p-4 bg-gray-50 rounded-md space-y-2">
@@ -86,11 +90,15 @@ export default function AddClientModal({ isOpen, onClose, onAdd }) {
               </div>
               <div>
                 <p className="text-xs text-gray-500">Temporary Password:</p>
-                <p className="text-sm font-mono font-medium text-gray-900">{success.temp_password}</p>
+                <p className="text-sm font-mono font-medium text-gray-900">
+                  {success.temp_password}
+                </p>
               </div>
             </div>
 
-            <p className="text-xs text-gray-500">This dialog will close automatically in 5 seconds...</p>
+            <p className="text-xs text-gray-500">
+              This dialog will close automatically in 5 seconds...
+            </p>
 
             <button
               onClick={() => {
@@ -113,9 +121,7 @@ export default function AddClientModal({ isOpen, onClose, onAdd }) {
         ) : (
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Company Name *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Company Name *</label>
               <input
                 type="text"
                 value={companyName}
@@ -127,9 +133,7 @@ export default function AddClientModal({ isOpen, onClose, onAdd }) {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Address Line 1
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Address Line 1</label>
               <input
                 type="text"
                 value={addressLine1}
@@ -140,9 +144,7 @@ export default function AddClientModal({ isOpen, onClose, onAdd }) {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Address Line 2
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Address Line 2</label>
               <input
                 type="text"
                 value={addressLine2}
@@ -154,9 +156,7 @@ export default function AddClientModal({ isOpen, onClose, onAdd }) {
 
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  City
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
                 <input
                   type="text"
                   value={city}
@@ -165,9 +165,7 @@ export default function AddClientModal({ isOpen, onClose, onAdd }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  State
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
                 <input
                   type="text"
                   value={state}
@@ -180,9 +178,7 @@ export default function AddClientModal({ isOpen, onClose, onAdd }) {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                ZIP Code
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">ZIP Code</label>
               <input
                 type="text"
                 value={zip}
@@ -194,9 +190,7 @@ export default function AddClientModal({ isOpen, onClose, onAdd }) {
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Phone Number
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
               <input
                 type="tel"
                 value={phoneNumber}
@@ -207,9 +201,7 @@ export default function AddClientModal({ isOpen, onClose, onAdd }) {
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Admin Email *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Admin Email *</label>
               <input
                 type="email"
                 value={adminEmail}
@@ -234,11 +226,7 @@ export default function AddClientModal({ isOpen, onClose, onAdd }) {
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                className="flex-1 btn-primary"
-                disabled={loading}
-              >
+              <button type="submit" className="flex-1 btn-primary" disabled={loading}>
                 {loading ? "Creating..." : "Create Client"}
               </button>
             </div>

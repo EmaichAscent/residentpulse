@@ -23,12 +23,15 @@ function checkRateLimit(sessionId) {
 }
 
 // Clean up stale entries every 5 minutes
-setInterval(() => {
-  const cutoff = Date.now() - RATE_WINDOW;
-  for (const [key, entry] of rateLimits) {
-    if (entry.windowStart < cutoff) rateLimits.delete(key);
-  }
-}, 5 * 60 * 1000);
+setInterval(
+  () => {
+    const cutoff = Date.now() - RATE_WINDOW;
+    for (const [key, entry] of rateLimits) {
+      if (entry.windowStart < cutoff) rateLimits.delete(key);
+    }
+  },
+  5 * 60 * 1000
+);
 
 router.post("/", async (req, res) => {
   const { session_id, message } = req.body;
@@ -38,17 +41,25 @@ router.post("/", async (req, res) => {
   }
 
   if (!checkRateLimit(session_id)) {
-    return res.status(429).json({ error: "Too many messages. Please wait a moment before sending another." });
+    return res
+      .status(429)
+      .json({ error: "Too many messages. Please wait a moment before sending another." });
   }
 
   const session = await db.get("SELECT * FROM sessions WHERE id = ?", [Number(session_id)]);
   if (!session) return res.status(404).json({ error: "Session not found" });
 
   // Save user message
-  await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'user', ?)", [Number(session_id), message]);
+  await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'user', ?)", [
+    Number(session_id),
+    message,
+  ]);
 
   // Get conversation history
-  const history = await db.all("SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at", [Number(session_id)]);
+  const history = await db.all(
+    "SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at",
+    [Number(session_id)]
+  );
 
   // Get system prompt (prefer client-specific, fall back to global)
   const clientSetting = await db.get(
@@ -58,7 +69,8 @@ router.post("/", async (req, res) => {
   const globalSetting = await db.get(
     "SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL"
   );
-  let systemPrompt = clientSetting?.value || globalSetting?.value || "You are a helpful NPS survey chatbot.";
+  let systemPrompt =
+    clientSetting?.value || globalSetting?.value || "You are a helpful NPS survey chatbot.";
 
   // Append interview prompt supplement if the client has one
   const supplement = await db.get(
@@ -136,11 +148,17 @@ Do NOT include any tag until the user has responded to your review question.`;
     if (reviewMatch) {
       assistantMessage = assistantMessage.replace(/\s*\[REVIEW:\s*(YES|NO)\s*\]\s*/gi, "").trim();
       const reviewResponse = reviewMatch[1].toLowerCase();
-      await db.run("UPDATE sessions SET google_review_response = ? WHERE id = ?", [reviewResponse, Number(session_id)]);
+      await db.run("UPDATE sessions SET google_review_response = ? WHERE id = ?", [
+        reviewResponse,
+        Number(session_id),
+      ]);
     }
 
     // Save assistant message
-    await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'assistant', ?)", [Number(session_id), assistantMessage]);
+    await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'assistant', ?)", [
+      Number(session_id),
+      assistantMessage,
+    ]);
 
     // Get the saved message ID for alert linking
     const savedMsg = await db.get(
@@ -224,7 +242,9 @@ or
     ]
   );
 
-  logger.warn(`CRITICAL ALERT created for client ${session.client_id}, session ${session.id}: ${parsed.alert_type}`);
+  logger.warn(
+    `CRITICAL ALERT created for client ${session.client_id}, session ${session.id}: ${parsed.alert_type}`
+  );
 
   // Check if a detractor email will be sent on session complete (to avoid duplicate emails)
   // If so, the critical alert info will be combined into that email instead
@@ -234,7 +254,8 @@ or
   );
   const threshold = thresholdSetting ? Number(thresholdSetting.value) : 0;
   const npsSession = await db.get("SELECT nps_score FROM sessions WHERE id = ?", [session.id]);
-  const willSendDetractorEmail = threshold > 0 && npsSession?.nps_score !== null && npsSession.nps_score < threshold;
+  const willSendDetractorEmail =
+    threshold > 0 && npsSession?.nps_score !== null && npsSession.nps_score < threshold;
 
   // Suppress email notifications for test sessions (alert record is still created above)
   if (session.is_test) {
@@ -243,11 +264,16 @@ or
   }
 
   if (willSendDetractorEmail) {
-    logger.info(`Skipping separate critical alert email for session ${session.id} — will be combined into detractor email`);
+    logger.info(
+      `Skipping separate critical alert email for session ${session.id} — will be combined into detractor email`
+    );
   } else {
     // Notify admins immediately via standalone critical alert email
-    const respondentName = [session.first_name, session.last_name].filter(Boolean).join(" ") || "A board member";
-    const round = session.round_id ? await db.get("SELECT round_number FROM survey_rounds WHERE id = ?", [session.round_id]) : null;
+    const respondentName =
+      [session.first_name, session.last_name].filter(Boolean).join(" ") || "A board member";
+    const round = session.round_id
+      ? await db.get("SELECT round_number FROM survey_rounds WHERE id = ?", [session.round_id])
+      : null;
     notifyCriticalAlert({
       clientId: session.client_id,
       alertType: parsed.alert_type || "other_critical",
@@ -257,7 +283,7 @@ or
       communityName: session.community_name || "",
       roundNumber: round?.round_number || null,
       db,
-    }).catch(err => logger.error("Failed to send critical alert notification: %s", err.message));
+    }).catch((err) => logger.error("Failed to send critical alert notification: %s", err.message));
   }
 }
 

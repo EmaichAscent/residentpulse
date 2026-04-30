@@ -5,14 +5,14 @@ const logger = pino({
   ...(process.env.NODE_ENV !== "production" && {
     transport: {
       target: "pino/file",
-      options: { destination: 1 } // stdout
+      options: { destination: 1 }, // stdout
     },
     formatters: {
       level(label) {
         return { level: label };
-      }
-    }
-  })
+      },
+    },
+  }),
 });
 
 export default logger;

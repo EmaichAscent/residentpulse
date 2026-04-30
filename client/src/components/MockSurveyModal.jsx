@@ -66,8 +66,14 @@ export default function MockSurveyModal({ clientId, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 className="text-lg font-semibold text-gray-900 mb-1">Test Survey</h2>
         <p className="text-sm text-gray-500 mb-4">
           Experience the survey as a board member would. This session won't affect analytics.
@@ -128,7 +134,9 @@ export default function MockSurveyModal({ clientId, onClose }) {
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Board Member</label>
                 {members.length === 0 ? (
-                  <p className="text-sm text-gray-400 italic">No active members found. Use generic identity instead.</p>
+                  <p className="text-sm text-gray-400 italic">
+                    No active members found. Use generic identity instead.
+                  </p>
                 ) : (
                   <select
                     value={selectedMemberId}
@@ -137,7 +145,8 @@ export default function MockSurveyModal({ clientId, onClose }) {
                   >
                     {members.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.first_name} {m.last_name} — {m.email} ({m.community_name || "No community"})
+                        {m.first_name} {m.last_name} — {m.email} (
+                        {m.community_name || "No community"})
                       </option>
                     ))}
                   </select>

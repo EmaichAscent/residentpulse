@@ -45,7 +45,11 @@ export function parseBoldText(text) {
   const parts = text.split(/(\*\*.*?\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={i} className="font-semibold text-gray-900">{part.slice(2, -2)}</strong>;
+      return (
+        <strong key={i} className="font-semibold text-gray-900">
+          {part.slice(2, -2)}
+        </strong>
+      );
     }
     return part;
   });
@@ -62,14 +66,26 @@ export function renderInsights(text) {
   lines.forEach((line, index) => {
     if (line.match(/^\*\*.*:\*\*$/)) {
       if (currentSection.length > 0) {
-        elements.push(<p key={`p-${index}`} className="text-gray-700 mb-4">{parseBoldText(currentSection.join(" "))}</p>);
+        elements.push(
+          <p key={`p-${index}`} className="text-gray-700 mb-4">
+            {parseBoldText(currentSection.join(" "))}
+          </p>
+        );
         currentSection = [];
       }
       const heading = line.replace(/\*\*/g, "");
-      elements.push(<h3 key={`h-${index}`} className="text-lg font-bold text-gray-900 mt-6 mb-3">{heading}</h3>);
+      elements.push(
+        <h3 key={`h-${index}`} className="text-lg font-bold text-gray-900 mt-6 mb-3">
+          {heading}
+        </h3>
+      );
     } else if (line.match(/^\d+\.\s/)) {
       if (currentSection.length > 0) {
-        elements.push(<p key={`p-${index}`} className="text-gray-700 mb-4">{parseBoldText(currentSection.join(" "))}</p>);
+        elements.push(
+          <p key={`p-${index}`} className="text-gray-700 mb-4">
+            {parseBoldText(currentSection.join(" "))}
+          </p>
+        );
         currentSection = [];
       }
       const item = line.replace(/^\d+\.\s/, "");
@@ -84,13 +100,21 @@ export function renderInsights(text) {
     } else if (line.trim()) {
       currentSection.push(line);
     } else if (currentSection.length > 0) {
-      elements.push(<p key={`p-${index}`} className="text-gray-700 mb-4">{parseBoldText(currentSection.join(" "))}</p>);
+      elements.push(
+        <p key={`p-${index}`} className="text-gray-700 mb-4">
+          {parseBoldText(currentSection.join(" "))}
+        </p>
+      );
       currentSection = [];
     }
   });
 
   if (currentSection.length > 0) {
-    elements.push(<p key="p-last" className="text-gray-700 mb-4">{parseBoldText(currentSection.join(" "))}</p>);
+    elements.push(
+      <p key="p-last" className="text-gray-700 mb-4">
+        {parseBoldText(currentSection.join(" "))}
+      </p>
+    );
   }
 
   return <div>{elements}</div>;

@@ -21,7 +21,7 @@ router.post("/exit-impersonation", (req, res) => {
 
   res.json({
     ok: true,
-    user: req.session.user
+    user: req.session.user,
   });
 });
 
@@ -32,10 +32,18 @@ router.use(requireSuperAdmin);
 router.get("/dashboard", async (req, res) => {
   try {
     const totalClients = await db.get("SELECT COUNT(*) as count FROM clients");
-    const activeClients = await db.get("SELECT COUNT(*) as count FROM clients WHERE status = 'active'");
-    const activeRounds = await db.get("SELECT COUNT(*) as count FROM survey_rounds WHERE status = 'in_progress' AND is_test = FALSE");
-    const totalResponses = await db.get("SELECT COUNT(*) as count FROM sessions WHERE completed = TRUE AND is_mock IS NOT TRUE AND is_test = FALSE");
-    const totalMembers = await db.get("SELECT COUNT(*) as count FROM users WHERE active = TRUE AND is_test = FALSE");
+    const activeClients = await db.get(
+      "SELECT COUNT(*) as count FROM clients WHERE status = 'active'"
+    );
+    const activeRounds = await db.get(
+      "SELECT COUNT(*) as count FROM survey_rounds WHERE status = 'in_progress' AND is_test = FALSE"
+    );
+    const totalResponses = await db.get(
+      "SELECT COUNT(*) as count FROM sessions WHERE completed = TRUE AND is_mock IS NOT TRUE AND is_test = FALSE"
+    );
+    const totalMembers = await db.get(
+      "SELECT COUNT(*) as count FROM users WHERE active = TRUE AND is_test = FALSE"
+    );
 
     // Engagement warnings: clients with no admin login in 30+ days (or never)
     const warnings = await db.all(
@@ -53,7 +61,7 @@ router.get("/dashboard", async (req, res) => {
       active_rounds: activeRounds?.count || 0,
       total_responses: totalResponses?.count || 0,
       total_members: totalMembers?.count || 0,
-      engagement_warnings: warnings
+      engagement_warnings: warnings,
     });
   } catch (err) {
     logger.error({ err }, "Dashboard error");
@@ -83,7 +91,7 @@ router.get("/activity-log", async (req, res) => {
       entries,
       total: total?.count || 0,
       page,
-      limit
+      limit,
     });
   } catch (err) {
     logger.error({ err }, "Activity log error");
@@ -111,14 +119,25 @@ router.get("/clients", async (req, res) => {
 
 // Create new client
 router.post("/clients", async (req, res) => {
-  const { company_name, address_line1, address_line2, city, state, zip, phone_number, admin_email } = req.body;
+  const {
+    company_name,
+    address_line1,
+    address_line2,
+    city,
+    state,
+    zip,
+    phone_number,
+    admin_email,
+  } = req.body;
 
   if (!company_name || !admin_email) {
     return res.status(400).json({ error: "Company name and admin email are required" });
   }
 
   // Check if admin email already exists
-  const existingAdmin = await db.get("SELECT id FROM client_admins WHERE email = ?", [admin_email.toLowerCase().trim()]);
+  const existingAdmin = await db.get("SELECT id FROM client_admins WHERE email = ?", [
+    admin_email.toLowerCase().trim(),
+  ]);
   if (existingAdmin) {
     return res.status(400).json({ error: "An admin with this email already exists" });
   }
@@ -128,7 +147,17 @@ router.post("/clients", async (req, res) => {
     const clientCode = await generateClientCode();
     const clientResult = await db.run(
       "INSERT INTO clients (company_name, address_line1, address_line2, city, state, zip, phone_number, status, client_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [company_name, address_line1 || null, address_line2 || null, city || null, state || null, zip || null, phone_number || null, "active", clientCode]
+      [
+        company_name,
+        address_line1 || null,
+        address_line2 || null,
+        city || null,
+        state || null,
+        zip || null,
+        phone_number || null,
+        "active",
+        clientCode,
+      ]
     );
     const clientId = clientResult.lastInsertRowid;
 
@@ -137,18 +166,21 @@ router.post("/clients", async (req, res) => {
     const passwordHash = await hashPassword(tempPassword);
 
     // Create first admin user for this client
-    await db.run(
-      "INSERT INTO client_admins (client_id, email, password_hash) VALUES (?, ?, ?)",
-      [clientId, admin_email.toLowerCase().trim(), passwordHash]
-    );
+    await db.run("INSERT INTO client_admins (client_id, email, password_hash) VALUES (?, ?, ?)", [
+      clientId,
+      admin_email.toLowerCase().trim(),
+      passwordHash,
+    ]);
 
     // Copy system prompt to this client
-    const globalPrompt = await db.get("SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL");
+    const globalPrompt = await db.get(
+      "SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL"
+    );
     if (globalPrompt) {
-      await db.run(
-        "INSERT INTO settings (key, value, client_id) VALUES ('system_prompt', ?, ?)",
-        [globalPrompt.value, clientId]
-      );
+      await db.run("INSERT INTO settings (key, value, client_id) VALUES ('system_prompt', ?, ?)", [
+        globalPrompt.value,
+        clientId,
+      ]);
     }
 
     // Assign default free plan
@@ -166,7 +198,7 @@ router.post("/clients", async (req, res) => {
       client_code: clientCode,
       admin_email: admin_email.toLowerCase().trim(),
       temp_password: tempPassword,
-      message: "Client created successfully. Share these credentials with the client admin."
+      message: "Client created successfully. Share these credentials with the client admin.",
     });
   } catch (error) {
     logger.error({ err: error }, "Error creating client");
@@ -185,7 +217,16 @@ router.put("/clients/:id", async (req, res) => {
 
   await db.run(
     "UPDATE clients SET company_name = ?, address_line1 = ?, address_line2 = ?, city = ?, state = ?, zip = ?, phone_number = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    [company_name, address_line1 || null, address_line2 || null, city || null, state || null, zip || null, phone_number || null, id]
+    [
+      company_name,
+      address_line1 || null,
+      address_line2 || null,
+      city || null,
+      state || null,
+      zip || null,
+      phone_number || null,
+      id,
+    ]
   );
 
   res.json({ ok: true });
@@ -200,10 +241,10 @@ router.patch("/clients/:id/status", async (req, res) => {
     return res.status(400).json({ error: "Status must be 'active' or 'inactive'" });
   }
 
-  await db.run(
-    "UPDATE clients SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    [status, id]
-  );
+  await db.run("UPDATE clients SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [
+    status,
+    id,
+  ]);
 
   res.json({ ok: true, status });
 });
@@ -248,18 +289,20 @@ router.post("/clients/:id/impersonate", async (req, res) => {
     client_id: client.id,
     company_name: client.company_name,
     plan_name: sub?.plan_name || "free",
-    impersonating: true
+    impersonating: true,
   };
 
   res.json({
     ok: true,
-    user: req.session.user
+    user: req.session.user,
   });
 });
 
 // Get global system prompt
 router.get("/prompt", async (req, res) => {
-  const setting = await db.get("SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL");
+  const setting = await db.get(
+    "SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL"
+  );
   res.json({ prompt: setting?.value || "" });
 });
 
@@ -273,7 +316,9 @@ router.put("/prompt", async (req, res) => {
 
   try {
     // Auto-save the current live prompt as a version before overwriting
-    const current = await db.get("SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL");
+    const current = await db.get(
+      "SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL"
+    );
     if (current?.value && current.value !== prompt) {
       await db.run(
         "INSERT INTO prompt_versions (prompt_text, label, created_by) VALUES (?, ?, ?)",
@@ -305,9 +350,15 @@ router.put("/prompt", async (req, res) => {
 // Get interview prompts (all three)
 router.get("/interview-prompts", async (req, res) => {
   try {
-    const initial = await db.get("SELECT value FROM settings WHERE key = 'interview_initial_prompt' AND client_id IS NULL");
-    const re = await db.get("SELECT value FROM settings WHERE key = 'interview_re_prompt' AND client_id IS NULL");
-    const generation = await db.get("SELECT value FROM settings WHERE key = 'prompt_generation_instruction' AND client_id IS NULL");
+    const initial = await db.get(
+      "SELECT value FROM settings WHERE key = 'interview_initial_prompt' AND client_id IS NULL"
+    );
+    const re = await db.get(
+      "SELECT value FROM settings WHERE key = 'interview_re_prompt' AND client_id IS NULL"
+    );
+    const generation = await db.get(
+      "SELECT value FROM settings WHERE key = 'prompt_generation_instruction' AND client_id IS NULL"
+    );
     res.json({
       interview_initial_prompt: initial?.value || "",
       interview_re_prompt: re?.value || "",
@@ -322,7 +373,11 @@ router.get("/interview-prompts", async (req, res) => {
 // Update an interview prompt
 router.put("/interview-prompts", async (req, res) => {
   const { key, value } = req.body;
-  const validKeys = ["interview_initial_prompt", "interview_re_prompt", "prompt_generation_instruction"];
+  const validKeys = [
+    "interview_initial_prompt",
+    "interview_re_prompt",
+    "prompt_generation_instruction",
+  ];
 
   if (!validKeys.includes(key)) {
     return res.status(400).json({ error: "Invalid prompt key" });
@@ -338,10 +393,10 @@ router.put("/interview-prompts", async (req, res) => {
       [value, key]
     );
     if (!result.changes) {
-      await db.run(
-        "INSERT INTO settings (key, value, client_id) VALUES (?, ?, NULL)",
-        [key, value]
-      );
+      await db.run("INSERT INTO settings (key, value, client_id) VALUES (?, ?, NULL)", [
+        key,
+        value,
+      ]);
     }
     res.json({ ok: true });
   } catch (err) {
@@ -374,7 +429,9 @@ router.post("/prompt/versions", async (req, res) => {
       "INSERT INTO prompt_versions (prompt_text, label, created_by) VALUES (?, ?, ?)",
       [prompt_text, label || "Saved version", req.session.user?.email || "unknown"]
     );
-    const version = await db.get("SELECT * FROM prompt_versions WHERE id = ?", [result.lastInsertRowid]);
+    const version = await db.get("SELECT * FROM prompt_versions WHERE id = ?", [
+      result.lastInsertRowid,
+    ]);
     res.json(version);
   } catch (err) {
     logger.error({ err }, "Error saving prompt version");
@@ -405,15 +462,16 @@ router.post("/prompt/assistant", async (req, res) => {
     const response = await createMessage({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 2000,
-      system: "You are an expert prompt engineer. The user has an existing AI system prompt that is used to conduct NPS (Net Promoter Score) surveys with HOA board members via conversational AI. They want you to improve or modify it based on their instructions. Return ONLY the full updated prompt text with no preamble, explanation, or commentary. Do not wrap it in code blocks or quotes.",
+      system:
+        "You are an expert prompt engineer. The user has an existing AI system prompt that is used to conduct NPS (Net Promoter Score) surveys with HOA board members via conversational AI. They want you to improve or modify it based on their instructions. Return ONLY the full updated prompt text with no preamble, explanation, or commentary. Do not wrap it in code blocks or quotes.",
       messages: [
         {
           role: "user",
           content: current_prompt
             ? `Here is the current system prompt:\n\n${current_prompt}\n\nPlease make the following changes:\n${instructions}`
-            : `Please create a system prompt for an AI that conducts NPS surveys with HOA board members. Here are the requirements:\n${instructions}`
-        }
-      ]
+            : `Please create a system prompt for an AI that conducts NPS surveys with HOA board members. Here are the requirements:\n${instructions}`,
+        },
+      ],
     });
 
     const improvedPrompt = response.content[0].text;
@@ -439,7 +497,16 @@ router.get("/plans", async (req, res) => {
 
 // Create a new subscription plan
 router.post("/plans", async (req, res) => {
-  const { name, display_name, member_limit, survey_rounds_per_year, price_cents, is_public, sort_order, zoho_plan_code } = req.body;
+  const {
+    name,
+    display_name,
+    member_limit,
+    survey_rounds_per_year,
+    price_cents,
+    is_public,
+    sort_order,
+    zoho_plan_code,
+  } = req.body;
 
   if (!name || !display_name) {
     return res.status(400).json({ error: "name and display_name are required" });
@@ -454,9 +521,20 @@ router.post("/plans", async (req, res) => {
     const result = await db.run(
       `INSERT INTO subscription_plans (name, display_name, member_limit, survey_rounds_per_year, price_cents, is_public, sort_order, zoho_plan_code)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, display_name, member_limit || 0, survey_rounds_per_year || 2, price_cents ?? null, is_public ?? true, sort_order || 0, zoho_plan_code || null]
+      [
+        name,
+        display_name,
+        member_limit || 0,
+        survey_rounds_per_year || 2,
+        price_cents ?? null,
+        is_public ?? true,
+        sort_order || 0,
+        zoho_plan_code || null,
+      ]
     );
-    const plan = await db.get("SELECT * FROM subscription_plans WHERE id = ?", [result.lastInsertRowid]);
+    const plan = await db.get("SELECT * FROM subscription_plans WHERE id = ?", [
+      result.lastInsertRowid,
+    ]);
     res.json(plan);
   } catch (err) {
     logger.error({ err }, "Error creating plan");
@@ -466,7 +544,15 @@ router.post("/plans", async (req, res) => {
 
 // Update a subscription plan
 router.put("/plans/:id", async (req, res) => {
-  const { display_name, member_limit, survey_rounds_per_year, price_cents, is_public, sort_order, zoho_plan_code } = req.body;
+  const {
+    display_name,
+    member_limit,
+    survey_rounds_per_year,
+    price_cents,
+    is_public,
+    sort_order,
+    zoho_plan_code,
+  } = req.body;
 
   if (!display_name) {
     return res.status(400).json({ error: "display_name is required" });
@@ -476,7 +562,16 @@ router.put("/plans/:id", async (req, res) => {
     await db.run(
       `UPDATE subscription_plans SET display_name = ?, member_limit = ?, survey_rounds_per_year = ?, price_cents = ?, is_public = ?, sort_order = ?, zoho_plan_code = ?
        WHERE id = ?`,
-      [display_name, member_limit || 0, survey_rounds_per_year || 2, price_cents ?? null, is_public ?? true, sort_order || 0, zoho_plan_code || null, req.params.id]
+      [
+        display_name,
+        member_limit || 0,
+        survey_rounds_per_year || 2,
+        price_cents ?? null,
+        is_public ?? true,
+        sort_order || 0,
+        zoho_plan_code || null,
+        req.params.id,
+      ]
     );
     const plan = await db.get("SELECT * FROM subscription_plans WHERE id = ?", [req.params.id]);
     res.json(plan);
@@ -497,9 +592,14 @@ router.delete("/plans/:id", async (req, res) => {
     return res.status(400).json({ error: "Cannot delete the free plan" });
   }
 
-  const usage = await db.get("SELECT COUNT(*) as count FROM client_subscriptions WHERE plan_id = ?", [req.params.id]);
+  const usage = await db.get(
+    "SELECT COUNT(*) as count FROM client_subscriptions WHERE plan_id = ?",
+    [req.params.id]
+  );
   if (usage?.count > 0) {
-    return res.status(400).json({ error: `Cannot delete — ${usage.count} client(s) are on this plan` });
+    return res
+      .status(400)
+      .json({ error: `Cannot delete — ${usage.count} client(s) are on this plan` });
   }
 
   try {
@@ -551,7 +651,9 @@ router.patch("/clients/:id/subscription", async (req, res) => {
   const zohoSubId = zoho_subscription_id || null;
 
   // Check if subscription exists
-  const existing = await db.get("SELECT id FROM client_subscriptions WHERE client_id = ?", [clientId]);
+  const existing = await db.get("SELECT id FROM client_subscriptions WHERE client_id = ?", [
+    clientId,
+  ]);
 
   if (existing) {
     await db.run(
@@ -579,10 +681,10 @@ router.patch("/clients/:id/subscription", async (req, res) => {
       );
 
       for (const row of distinctNames) {
-        await db.run(
-          "INSERT INTO communities (client_id, community_name) VALUES (?, ?)",
-          [clientId, row.community_name.trim()]
-        );
+        await db.run("INSERT INTO communities (client_id, community_name) VALUES (?, ?)", [
+          clientId,
+          row.community_name.trim(),
+        ]);
       }
 
       // Auto-link users to communities
@@ -628,13 +730,13 @@ router.get("/clients/:id/diagnostics", async (req, res) => {
     );
 
     // 4. All sessions matching any of this client's user emails (regardless of client_id)
-    const userEmails = users.map(u => u.email);
+    const userEmails = users.map((u) => u.email);
     let sessionsByEmail = [];
     if (userEmails.length > 0) {
       const placeholders = userEmails.map((_, i) => `$${i + 1}`).join(", ");
       const result = await db.pool.query(
         `SELECT id, email, client_id, user_id, round_id, nps_score, completed, created_at, summary FROM sessions WHERE LOWER(email) IN (${placeholders})`,
-        userEmails.map(e => e.toLowerCase())
+        userEmails.map((e) => e.toLowerCase())
       );
       sessionsByEmail = result.rows;
     }
@@ -645,10 +747,9 @@ router.get("/clients/:id/diagnostics", async (req, res) => {
     );
 
     // 6. Survey rounds for this client
-    const surveyRounds = await db.all(
-      "SELECT * FROM survey_rounds WHERE client_id = ?",
-      [clientId]
-    );
+    const surveyRounds = await db.all("SELECT * FROM survey_rounds WHERE client_id = ?", [
+      clientId,
+    ]);
 
     // 7. Invitation logs for this client
     const invitationLogs = await db.all(
@@ -670,7 +771,7 @@ router.get("/clients/:id/diagnostics", async (req, res) => {
       sessions_by_email: sessionsByEmail,
       orphaned_sessions: orphanedSessions,
       survey_rounds: surveyRounds,
-      invitation_logs: invitationLogs
+      invitation_logs: invitationLogs,
     });
   } catch (err) {
     logger.error({ err }, "Diagnostics error");
@@ -699,10 +800,11 @@ router.patch("/sessions/:id/reassign", async (req, res) => {
     return res.status(404).json({ error: "Session not found" });
   }
 
-  await db.run(
-    "UPDATE sessions SET client_id = ?, round_id = ? WHERE id = ?",
-    [client_id, round_id || null, sessionId]
-  );
+  await db.run("UPDATE sessions SET client_id = ?, round_id = ? WHERE id = ?", [
+    client_id,
+    round_id || null,
+    sessionId,
+  ]);
 
   const updated = await db.get("SELECT * FROM sessions WHERE id = ?", [sessionId]);
   res.json({ ok: true, session: updated });
@@ -734,7 +836,10 @@ router.get("/clients/:id/detail", async (req, res) => {
     );
 
     // Member + community counts
-    const memberCount = await db.get("SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE", [clientId]);
+    const memberCount = await db.get(
+      "SELECT COUNT(*) as count FROM users WHERE client_id = ? AND active = TRUE",
+      [clientId]
+    );
     const communityCount = await db.get(
       "SELECT COUNT(DISTINCT community_name) as count FROM users WHERE client_id = ? AND community_name IS NOT NULL AND active = TRUE",
       [clientId]
@@ -804,14 +909,14 @@ router.get("/clients/:id/detail", async (req, res) => {
         total: alertSummary?.total || 0,
         active: alertSummary?.active || 0,
         solved: alertSummary?.solved || 0,
-        dismissed: alertSummary?.dismissed || 0
+        dismissed: alertSummary?.dismissed || 0,
       },
       engagement: {
         last_login: lastLogin,
         days_since_login: daysSinceLogin,
-        warning: daysSinceLogin === null || daysSinceLogin > 30
+        warning: daysSinceLogin === null || daysSinceLogin > 30,
       },
-      detractor_alert_threshold: detractorSetting ? Number(detractorSetting.value) : 0
+      detractor_alert_threshold: detractorSetting ? Number(detractorSetting.value) : 0,
     });
   } catch (err) {
     logger.error({ err }, "Client detail error");
@@ -832,7 +937,10 @@ router.put("/clients/:id/detractor-threshold", async (req, res) => {
 
     if (value === 0) {
       // Disable: remove the setting
-      await db.run("DELETE FROM settings WHERE key = 'detractor_alert_threshold' AND client_id = ?", [clientId]);
+      await db.run(
+        "DELETE FROM settings WHERE key = 'detractor_alert_threshold' AND client_id = ?",
+        [clientId]
+      );
     } else {
       // Upsert the setting
       await db.run(
@@ -986,18 +1094,24 @@ router.post("/clients/:id/reset", async (req, res) => {
     await db.run("DELETE FROM communities WHERE client_id = ?", [clientId]);
 
     // 10. Reset onboarding_completed on all client admins
-    await db.run(
-      "UPDATE client_admins SET onboarding_completed = FALSE WHERE client_id = ?",
-      [clientId]
-    );
+    await db.run("UPDATE client_admins SET onboarding_completed = FALSE WHERE client_id = ?", [
+      clientId,
+    ]);
 
     // 11. Log the reset
     await db.run(
       "INSERT INTO activity_log (client_id, actor_type, actor_email, action) VALUES (?, 'superadmin', ?, ?)",
-      [clientId, req.session.user?.email || "superadmin", `Reset client "${client.company_name}" (interviews, rounds, sessions, communities cleared)`]
+      [
+        clientId,
+        req.session.user?.email || "superadmin",
+        `Reset client "${client.company_name}" (interviews, rounds, sessions, communities cleared)`,
+      ]
     );
 
-    res.json({ ok: true, message: `Client "${client.company_name}" has been reset. Board members preserved.` });
+    res.json({
+      ok: true,
+      message: `Client "${client.company_name}" has been reset. Board members preserved.`,
+    });
   } catch (err) {
     logger.error({ err }, "Client reset error");
     res.status(500).json({ error: "Failed to reset client: " + err.message });
@@ -1038,7 +1152,11 @@ router.delete("/clients/:id", async (req, res) => {
     // Log with null client_id since client is gone
     await db.run(
       "INSERT INTO activity_log (actor_type, actor_email, action, metadata) VALUES ('superadmin', ?, ?, ?)",
-      [req.session.user?.email || "superadmin", `Deleted pending client "${client.company_name}"`, JSON.stringify({ client_id: id, company_name: client.company_name })]
+      [
+        req.session.user?.email || "superadmin",
+        `Deleted pending client "${client.company_name}"`,
+        JSON.stringify({ client_id: id, company_name: client.company_name }),
+      ]
     );
 
     logger.info(`Pending client ${id} (${client.company_name}) deleted by superadmin`);
@@ -1108,7 +1226,14 @@ router.post("/clients/:id/mock-session", async (req, res) => {
     const result = await db.run(
       `INSERT INTO sessions (email, user_id, community_name, management_company, client_id, round_id, community_id, is_mock)
        VALUES (?, ?, ?, ?, ?, NULL, ?, TRUE)`,
-      [sessionEmail, sessionUserId, sessionCommunity, client.company_name, clientId, sessionCommunityId]
+      [
+        sessionEmail,
+        sessionUserId,
+        sessionCommunity,
+        client.company_name,
+        clientId,
+        sessionCommunityId,
+      ]
     );
 
     const hasLogo = client.logo_base64 ? true : false;
@@ -1122,7 +1247,8 @@ router.post("/clients/:id/mock-session", async (req, res) => {
       "SELECT value FROM settings WHERE key = 'google_review_url' AND client_id = ?",
       [clientId]
     );
-    const googleReviewUrl = (reviewEnabled?.value === "true" && reviewUrl?.value) ? reviewUrl.value : null;
+    const googleReviewUrl =
+      reviewEnabled?.value === "true" && reviewUrl?.value ? reviewUrl.value : null;
 
     res.json({
       session_id: result.lastInsertRowid,

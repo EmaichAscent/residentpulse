@@ -8,7 +8,9 @@ const router = Router();
 
 // Serve client logo as image (public — used by survey page)
 router.get("/logo/:clientId", async (req, res) => {
-  const client = await db.get("SELECT logo_base64, logo_mime_type FROM clients WHERE id = ?", [Number(req.params.clientId)]);
+  const client = await db.get("SELECT logo_base64, logo_mime_type FROM clients WHERE id = ?", [
+    Number(req.params.clientId),
+  ]);
   if (!client?.logo_base64) {
     return res.status(404).json({ error: "No logo" });
   }
@@ -88,7 +90,9 @@ router.get("/validate-token/:token", async (req, res) => {
         [user.id, activeRound.id]
       );
       if (existingSession) {
-        return res.status(409).json({ error: "You have already completed this survey. Thank you for your feedback!" });
+        return res
+          .status(409)
+          .json({ error: "You have already completed this survey. Thank you for your feedback!" });
       }
     }
 
@@ -109,7 +113,8 @@ router.get("/validate-token/:token", async (req, res) => {
     );
     // Resolution chain: location-specific URL → main URL → null
     const mainUrl = reviewUrl?.value || null;
-    const googleReviewUrl = (reviewEnabled?.value === "true") ? (user.location_review_url || mainUrl) : null;
+    const googleReviewUrl =
+      reviewEnabled?.value === "true" ? user.location_review_url || mainUrl : null;
 
     // Return user data (without sensitive info)
     res.json({
@@ -124,7 +129,6 @@ router.get("/validate-token/:token", async (req, res) => {
       has_logo: clientInfo?.has_logo || false,
       google_review_url: googleReviewUrl,
     });
-
   } catch (err) {
     logger.error({ err }, "Token validation error");
     res.status(500).json({ error: "Failed to validate token" });
@@ -135,7 +139,10 @@ router.get("/validate-token/:token", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   const id = Number(req.params.id);
   // Delete critical alerts referencing messages, then messages
-  await db.run("DELETE FROM critical_alerts WHERE source_message_id IN (SELECT id FROM messages WHERE session_id = ?)", [id]);
+  await db.run(
+    "DELETE FROM critical_alerts WHERE source_message_id IN (SELECT id FROM messages WHERE session_id = ?)",
+    [id]
+  );
   await db.run("DELETE FROM messages WHERE session_id = ?", [id]);
   // Then delete session
   await db.run("DELETE FROM sessions WHERE id = ?", [id]);
@@ -156,10 +163,15 @@ router.post("/", async (req, res) => {
   // the same email exists as a board member under multiple clients
   let user;
   if (user_id) {
-    user = await db.get("SELECT client_id, community_id, is_test FROM users WHERE id = ?", [user_id]);
+    user = await db.get("SELECT client_id, community_id, is_test FROM users WHERE id = ?", [
+      user_id,
+    ]);
   }
   if (!user) {
-    user = await db.get("SELECT client_id, community_id, is_test FROM users WHERE LOWER(email) = ?", [cleanEmail]);
+    user = await db.get(
+      "SELECT client_id, community_id, is_test FROM users WHERE LOWER(email) = ?",
+      [cleanEmail]
+    );
   }
   if (!user || !user.client_id) {
     return res.status(400).json({ error: "User not found or not associated with a client" });
@@ -175,7 +187,16 @@ router.post("/", async (req, res) => {
 
   const result = await db.run(
     "INSERT INTO sessions (email, user_id, community_name, management_company, client_id, round_id, community_id, is_test) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    [cleanEmail, user_id || null, community_name?.trim() || null, management_company?.trim() || null, user.client_id, activeRound?.id || null, user.community_id || null, userIsTest]
+    [
+      cleanEmail,
+      user_id || null,
+      community_name?.trim() || null,
+      management_company?.trim() || null,
+      user.client_id,
+      activeRound?.id || null,
+      user.community_id || null,
+      userIsTest,
+    ]
   );
   const session = await db.get("SELECT * FROM sessions WHERE id = ?", [result.lastInsertRowid]);
   res.json(session);
@@ -226,19 +247,27 @@ router.patch("/:id/complete", async (req, res) => {
 
       if (!session?.client_id || !session?.round_id || session.is_mock || session.is_test) return;
 
-      const round = await db.get("SELECT round_number, members_invited FROM survey_rounds WHERE id = ?", [session.round_id]);
+      const round = await db.get(
+        "SELECT round_number, members_invited FROM survey_rounds WHERE id = ?",
+        [session.round_id]
+      );
       const completed = await db.get(
         "SELECT COUNT(*) as count FROM sessions WHERE round_id = ? AND client_id = ? AND completed = TRUE AND is_mock IS NOT TRUE",
         [session.round_id, session.client_id]
       );
-      const respondentName = [session.first_name, session.last_name].filter(Boolean).join(" ") || "A board member";
+      const respondentName =
+        [session.first_name, session.last_name].filter(Boolean).join(" ") || "A board member";
 
       // Always notify admins of new response
       notifyNewResponse({
-        clientId: session.client_id, roundNumber: round?.round_number || 0,
-        respondentName, communityName: session.community_name || "",
-        totalResponses: completed?.count || 0, totalInvited: round?.members_invited || 0, db
-      }).catch(err => logger.error("Failed to send new response notification: %s", err.message));
+        clientId: session.client_id,
+        roundNumber: round?.round_number || 0,
+        respondentName,
+        communityName: session.community_name || "",
+        totalResponses: completed?.count || 0,
+        totalInvited: round?.members_invited || 0,
+        db,
+      }).catch((err) => logger.error("Failed to send new response notification: %s", err.message));
 
       // Check detractor threshold
       const thresholdSetting = await db.get(
@@ -263,7 +292,7 @@ router.patch("/:id/complete", async (req, res) => {
           summary,
           criticalAlerts,
           db,
-        }).catch(err => logger.error("Failed to send detractor alert: %s", err.message));
+        }).catch((err) => logger.error("Failed to send detractor alert: %s", err.message));
       }
     } catch (err) {
       logger.error("Post-completion processing failed: %s", err.message);

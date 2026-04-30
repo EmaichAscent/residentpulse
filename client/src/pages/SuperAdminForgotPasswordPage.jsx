@@ -17,7 +17,7 @@ export default function SuperAdminForgotPasswordPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
-        credentials: "include"
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -47,7 +47,12 @@ export default function SuperAdminForgotPasswordPage() {
           <h1 className="text-4xl lg:text-5xl font-extrabold text-white tracking-tight mb-2">
             ResidentPulse
           </h1>
-          <a href="https://camascent.com" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 text-white/70 hover:text-white/90 transition-colors">
+          <a
+            href="https://camascent.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 text-white/70 hover:text-white/90 transition-colors"
+          >
             <span className="text-base font-medium">Powered by</span>
             <img src="/CAMAscent.png" alt="CAM Ascent" className="h-8 object-contain" />
             <span className="text-base font-semibold">CAM Ascent Analytical Insights</span>
@@ -63,7 +68,8 @@ export default function SuperAdminForgotPasswordPage() {
               <div>
                 <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
                   <p className="text-sm text-green-700">
-                    If an account exists with that email, you'll receive a password reset link shortly. Check your inbox.
+                    If an account exists with that email, you'll receive a password reset link
+                    shortly. Check your inbox.
                   </p>
                 </div>
                 <Link
@@ -102,11 +108,7 @@ export default function SuperAdminForgotPasswordPage() {
                   </div>
                 )}
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full btn-primary"
-                >
+                <button type="submit" disabled={loading} className="w-full btn-primary">
                   {loading ? "Sending..." : "Send Reset Link"}
                 </button>
 

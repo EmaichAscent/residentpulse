@@ -73,13 +73,16 @@ async function handleSubscriptionActivated(data) {
 
   // Retrieve our client_id from the additional_param we passed during checkout
   const clientId = parseInt(
-    subscription.custom_fields?.find?.(f => f.label === "additional_param")?.value
-    || subscription.additional_param
-    || data.additional_param
+    subscription.custom_fields?.find?.((f) => f.label === "additional_param")?.value ||
+      subscription.additional_param ||
+      data.additional_param
   );
 
   if (!clientId || isNaN(clientId)) {
-    logger.error("Zoho webhook: no client_id found in subscription data %s", JSON.stringify(data).slice(0, 500));
+    logger.error(
+      "Zoho webhook: no client_id found in subscription data %s",
+      JSON.stringify(data).slice(0, 500)
+    );
     return;
   }
 
@@ -94,15 +97,13 @@ async function handleSubscriptionActivated(data) {
 
   if (result.changes > 0) {
     // New signup: activate client and send verification email
-    await db.run(
-      "UPDATE clients SET status = 'active' WHERE id = ? AND status = 'pending'",
-      [clientId]
-    );
+    await db.run("UPDATE clients SET status = 'active' WHERE id = ? AND status = 'pending'", [
+      clientId,
+    ]);
 
-    const admin = await db.get(
-      "SELECT id, email FROM client_admins WHERE client_id = ? LIMIT 1",
-      [clientId]
-    );
+    const admin = await db.get("SELECT id, email FROM client_admins WHERE client_id = ? LIMIT 1", [
+      clientId,
+    ]);
 
     if (admin?.email) {
       const verificationToken = crypto.randomBytes(32).toString("hex");
@@ -124,7 +125,9 @@ async function handleSubscriptionActivated(data) {
     // Try 2: Existing free user upgrading to paid — update plan + link Zoho IDs
     const planCode = subscription.plan?.plan_code || subscription.plan_code;
     if (planCode) {
-      const plan = await db.get("SELECT id FROM subscription_plans WHERE zoho_plan_code = ?", [planCode]);
+      const plan = await db.get("SELECT id FROM subscription_plans WHERE zoho_plan_code = ?", [
+        planCode,
+      ]);
       if (plan) {
         const upgradeResult = await db.run(
           `UPDATE client_subscriptions
@@ -136,7 +139,9 @@ async function handleSubscriptionActivated(data) {
         if (upgradeResult.changes > 0) {
           logger.info(`Client ${clientId} upgraded from free to ${planCode} via Zoho webhook`);
         } else {
-          logger.info(`Zoho webhook: subscription for client ${clientId} already active or not found`);
+          logger.info(
+            `Zoho webhook: subscription for client ${clientId} already active or not found`
+          );
           return;
         }
       } else {
@@ -155,7 +160,7 @@ async function handleSubscriptionActivated(data) {
     entityType: "client",
     entityId: clientId,
     clientId,
-    metadata: { zoho_subscription_id: zohoSubscriptionId }
+    metadata: { zoho_subscription_id: zohoSubscriptionId },
   });
 
   logger.info(`Client ${clientId} activated via Zoho webhook`);
@@ -171,7 +176,10 @@ async function handleSubscriptionPlanChanged(data, eventType) {
 
   const newPlanCode = subscription.plan?.plan_code || subscription.plan_code;
   if (!newPlanCode) {
-    logger.error("Zoho webhook: no plan_code in plan change event %s", JSON.stringify(data).slice(0, 500));
+    logger.error(
+      "Zoho webhook: no plan_code in plan change event %s",
+      JSON.stringify(data).slice(0, 500)
+    );
     return;
   }
 
@@ -193,7 +201,9 @@ async function handleSubscriptionPlanChanged(data, eventType) {
   );
 
   if (!sub) {
-    logger.error(`Zoho webhook: no subscription found for zoho_subscription_id ${zohoSubscriptionId}`);
+    logger.error(
+      `Zoho webhook: no subscription found for zoho_subscription_id ${zohoSubscriptionId}`
+    );
     return;
   }
 
@@ -211,7 +221,9 @@ async function handleSubscriptionPlanChanged(data, eventType) {
   if (eventType === "subscription_downgraded" && newPlan.member_limit > 0) {
     const result = await deactivateExcessMembers(sub.client_id, newPlan.member_limit);
     if (result.deactivatedCount > 0) {
-      logger.info(`Deactivated ${result.deactivatedCount} excess members for client ${sub.client_id} after downgrade`);
+      logger.info(
+        `Deactivated ${result.deactivatedCount} excess members for client ${sub.client_id} after downgrade`
+      );
     }
   }
 
@@ -221,7 +233,7 @@ async function handleSubscriptionPlanChanged(data, eventType) {
     entityType: "client",
     entityId: sub.client_id,
     clientId: sub.client_id,
-    metadata: { zoho_subscription_id: zohoSubscriptionId, new_plan: newPlan.name }
+    metadata: { zoho_subscription_id: zohoSubscriptionId, new_plan: newPlan.name },
   });
 
   logger.info(`Client ${sub.client_id} plan changed to ${newPlan.name} via Zoho webhook`);
@@ -243,7 +255,9 @@ async function handleSubscriptionCancelled(data) {
   if (!sub) return;
 
   // Look up free plan
-  const freePlan = await db.get("SELECT id, member_limit FROM subscription_plans WHERE name = 'free'");
+  const freePlan = await db.get(
+    "SELECT id, member_limit FROM subscription_plans WHERE name = 'free'"
+  );
   if (!freePlan) {
     logger.error("Zoho webhook: free plan not found in database");
     return;
@@ -268,7 +282,9 @@ async function handleSubscriptionCancelled(data) {
   // Deactivate excess members beyond free limit
   const result = await deactivateExcessMembers(sub.client_id, freePlan.member_limit);
   if (result.deactivatedCount > 0) {
-    logger.info(`Deactivated ${result.deactivatedCount} excess members for client ${sub.client_id} after cancel`);
+    logger.info(
+      `Deactivated ${result.deactivatedCount} excess members for client ${sub.client_id} after cancel`
+    );
   }
 
   await logActivity({
@@ -277,7 +293,10 @@ async function handleSubscriptionCancelled(data) {
     entityType: "client",
     entityId: sub.client_id,
     clientId: sub.client_id,
-    metadata: { zoho_subscription_id: zohoSubscriptionId, deactivated_members: result.deactivatedCount }
+    metadata: {
+      zoho_subscription_id: zohoSubscriptionId,
+      deactivated_members: result.deactivatedCount,
+    },
   });
 
   logger.info(`Client ${sub.client_id} downgraded to free plan after subscription cancellation`);
@@ -311,7 +330,7 @@ async function handlePaymentDeclined(data) {
       entityType: "client",
       entityId: sub.client_id,
       clientId: sub.client_id,
-      metadata: { zoho_subscription_id: zohoSubscriptionId }
+      metadata: { zoho_subscription_id: zohoSubscriptionId },
     });
   }
 }
