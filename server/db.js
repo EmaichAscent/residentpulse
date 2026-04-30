@@ -133,6 +133,28 @@ async function initializeSchema() {
       ON prompt_versions (prompt_key, created_at DESC)
     `);
 
+    // Phase 3 PR2: Actions — what the management company is doing about
+    // org-wide patterns surfaced by the AI. Per-client; tied to a theme name
+    // (free text for now). Receipts (sentiment delta after the next round)
+    // are computed at read-time from sessions, no extra columns needed yet.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS actions (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+        theme TEXT NOT NULL,
+        title TEXT NOT NULL,
+        details TEXT,
+        owner_email TEXT,
+        status TEXT NOT NULL DEFAULT 'in_progress',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_actions_client_created
+      ON actions (client_id, created_at DESC)
+    `);
+
     // Create users table (board members)
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
