@@ -347,17 +347,21 @@ export default function ChatPage() {
       }}
     >
       <div
-        className="flex flex-col w-full max-w-2xl rounded-2xl overflow-hidden bg-white my-auto"
+        className="flex flex-col w-full max-w-3xl rounded-2xl overflow-hidden bg-white my-auto"
         style={{
           boxShadow: "var(--shadow-lg)",
           border: "1px solid var(--line)",
-          maxHeight: "min(900px, 100vh - 80px)",
+          maxHeight: "min(720px, 100vh - 80px)",
           // Pre-conversation (trust gate / NPS picker): card sizes to
           // content so the welcome bubble + CTA don't sit above a sea
-          // of dead space. Once the conversation starts, lock to a
-          // tall card so the input stays pinned at the bottom and the
-          // messages have a stable scroll area.
-          ...(npsSubmitted ? { height: "min(720px, 100vh - 80px)" } : { minHeight: 0 }),
+          // of dead space.
+          //
+          // Conversation: a min-height so the card has presence when
+          // the conversation is short (otherwise a 2-message exchange
+          // floats in the middle of a tall card), plus the maxHeight
+          // above so it doesn't grow past the viewport. Messages
+          // container fills the gap with flex-1 + scrolls as needed.
+          ...(npsSubmitted ? { minHeight: "min(520px, 100vh - 80px)" } : { minHeight: 0 }),
         }}
         data-testid="chat-card"
       >
