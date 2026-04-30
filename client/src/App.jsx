@@ -18,6 +18,7 @@ import SuperAdminClientDetailPage from "./pages/SuperAdminClientDetailPage";
 import SuperAdminForgotPasswordPage from "./pages/SuperAdminForgotPasswordPage";
 import SuperAdminResetPasswordPage from "./pages/SuperAdminResetPasswordPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import Home from "./components/Home";
 import RoundsLanding from "./components/RoundsLanding";
 import RoundDashboard from "./components/RoundDashboard";
 import TrendsView from "./components/TrendsView";
@@ -88,7 +89,8 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="rounds" replace />} />
+            <Route index element={<Navigate to="home" replace />} />
+            <Route path="home" element={<Home />} />
             <Route path="rounds" element={<RoundsLanding />} />
             <Route path="rounds/:roundId" element={<RoundDashboard />} />
             <Route path="trends" element={<TrendsView />} />
