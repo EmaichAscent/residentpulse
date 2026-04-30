@@ -64,10 +64,7 @@ export default function VerifyEmailPage() {
                   Your email has been verified! Your account is now active.
                 </p>
               </div>
-              <Link
-                to="/admin/login"
-                className="block text-center w-full btn-primary"
-              >
+              <Link to="/admin/login" className="block text-center w-full btn-primary">
                 Go to Login
               </Link>
             </div>

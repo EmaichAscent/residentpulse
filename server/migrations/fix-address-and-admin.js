@@ -11,16 +11,16 @@ const columnsToAdd = [
   "address_line2 TEXT",
   "city TEXT",
   "state TEXT",
-  "zip TEXT"
+  "zip TEXT",
 ];
 
 for (const col of columnsToAdd) {
   try {
     db.run(`ALTER TABLE clients ADD COLUMN ${col}`);
-    console.log(`✓ Added column: ${col.split(' ')[0]}`);
+    console.log(`✓ Added column: ${col.split(" ")[0]}`);
   } catch (err) {
     if (err.message.includes("duplicate column")) {
-      console.log(`✓ Column ${col.split(' ')[0]} already exists`);
+      console.log(`✓ Column ${col.split(" ")[0]} already exists`);
     } else {
       throw err;
     }
@@ -37,10 +37,9 @@ if (!camAscent) {
   process.exit(1);
 }
 
-const existingAdmin = db.get(
-  "SELECT id FROM client_admins WHERE client_id = ? LIMIT 1",
-  [camAscent.id]
-);
+const existingAdmin = db.get("SELECT id FROM client_admins WHERE client_id = ? LIMIT 1", [
+  camAscent.id,
+]);
 
 if (existingAdmin) {
   console.log(`✓ Client admin already exists for CAM Ascent (ID: ${existingAdmin.id})`);
@@ -48,10 +47,11 @@ if (existingAdmin) {
   const tempPassword = "TempPass123!@#";
   const passwordHash = await hashPassword(tempPassword);
 
-  db.run(
-    "INSERT INTO client_admins (client_id, email, password_hash) VALUES (?, ?, ?)",
-    [camAscent.id, "admin@camascent.com", passwordHash]
-  );
+  db.run("INSERT INTO client_admins (client_id, email, password_hash) VALUES (?, ?, ?)", [
+    camAscent.id,
+    "admin@camascent.com",
+    passwordHash,
+  ]);
 
   console.log("✓ Created default client admin");
   console.log("  Email: admin@camascent.com");

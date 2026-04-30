@@ -75,10 +75,10 @@ async function seedCommunities() {
         console.log("  No new communities to create.");
       } else {
         for (const row of distinctNames.rows) {
-          await pool.query(
-            "INSERT INTO communities (client_id, community_name) VALUES ($1, $2)",
-            [client.id, row.community_name.trim()]
-          );
+          await pool.query("INSERT INTO communities (client_id, community_name) VALUES ($1, $2)", [
+            client.id,
+            row.community_name.trim(),
+          ]);
           console.log(`  Created: ${row.community_name.trim()}`);
           totalCreated++;
         }

@@ -5,9 +5,10 @@ export default function ClientList({ clients }) {
   const [search, setSearch] = useState("");
   const navigate = useNavigate();
 
-  const filtered = clients.filter(client =>
-    client.company_name.toLowerCase().includes(search.toLowerCase()) ||
-    (client.client_code || "").toLowerCase().includes(search.toLowerCase())
+  const filtered = clients.filter(
+    (client) =>
+      client.company_name.toLowerCase().includes(search.toLowerCase()) ||
+      (client.client_code || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const formatLastActivity = (dateStr) => {
@@ -78,8 +79,8 @@ export default function ClientList({ clients }) {
                         client.status === "active"
                           ? "bg-green-100 text-green-800"
                           : client.status === "pending"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-red-100 text-red-800"
+                            ? "bg-yellow-100 text-yellow-800"
+                            : "bg-red-100 text-red-800"
                       }`}
                     >
                       {client.status}

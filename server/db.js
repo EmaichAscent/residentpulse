@@ -10,7 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Database connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
 
 // Test connection
@@ -137,21 +137,33 @@ async function initializeSchema() {
     `);
 
     // Add active column to existing users tables
-    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`);
+    await client.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`
+    );
 
     // Add password reset columns to client_admins
-    await client.query(`ALTER TABLE client_admins ADD COLUMN IF NOT EXISTS password_reset_token TEXT`);
-    await client.query(`ALTER TABLE client_admins ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP`);
+    await client.query(
+      `ALTER TABLE client_admins ADD COLUMN IF NOT EXISTS password_reset_token TEXT`
+    );
+    await client.query(
+      `ALTER TABLE client_admins ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP`
+    );
 
     // Add password reset columns to admins (superadmin)
     await client.query(`ALTER TABLE admins ADD COLUMN IF NOT EXISTS password_reset_token TEXT`);
-    await client.query(`ALTER TABLE admins ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP`);
+    await client.query(
+      `ALTER TABLE admins ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP`
+    );
 
     // Create indexes for performance
     await client.query(`CREATE INDEX IF NOT EXISTS idx_sessions_client_id ON sessions(client_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)`
+    );
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_client_id ON users(client_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_client_admins_client_id ON client_admins(client_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_client_admins_client_id ON client_admins(client_id)`
+    );
     await client.query(`CREATE INDEX IF NOT EXISTS idx_settings_client_id ON settings(client_id)`);
 
     // Run email invitations migration
@@ -263,22 +275,34 @@ async function initializeSchema() {
 
     // Run community deactivation + snapshots migration
     try {
-      const deactivationPath = join(__dirname, "migrations", "add-community-deactivation-and-snapshots.sql");
+      const deactivationPath = join(
+        __dirname,
+        "migrations",
+        "add-community-deactivation-and-snapshots.sql"
+      );
       const deactivationSQL = readFileSync(deactivationPath, "utf-8");
       await client.query(deactivationSQL);
       logger.info("Community deactivation and snapshots migration applied successfully");
     } catch (migrationErr) {
-      logger.info("Community deactivation and snapshots migration skipped (already applied or file not found)");
+      logger.info(
+        "Community deactivation and snapshots migration skipped (already applied or file not found)"
+      );
     }
 
     // Run round approaching reminders migration
     try {
-      const roundRemindersPath = join(__dirname, "migrations", "add-round-approaching-reminders.sql");
+      const roundRemindersPath = join(
+        __dirname,
+        "migrations",
+        "add-round-approaching-reminders.sql"
+      );
       const roundRemindersSQL = readFileSync(roundRemindersPath, "utf-8");
       await client.query(roundRemindersSQL);
       logger.info("Round approaching reminders migration applied successfully");
     } catch (migrationErr) {
-      logger.info("Round approaching reminders migration skipped (already applied or file not found)");
+      logger.info(
+        "Round approaching reminders migration skipped (already applied or file not found)"
+      );
     }
 
     // Run client logo migration
@@ -429,8 +453,8 @@ async function run(sql, params = []) {
 
     const result = await client.query(finalSql, params);
     return {
-      lastInsertRowid: isInsert ? (result.rows[0]?.id || null) : null,
-      changes: result.rowCount
+      lastInsertRowid: isInsert ? result.rows[0]?.id || null : null,
+      changes: result.rowCount,
     };
   } finally {
     client.release();

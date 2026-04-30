@@ -31,75 +31,75 @@ import SuperAdminSettings from "./components/SuperAdminSettings";
 export default function App() {
   return (
     <ErrorBoundary>
-    <div className="min-h-screen bg-gray-50">
-      <Routes>
-        {/* Public routes */}
-        <Route path="/" element={<Navigate to="/admin/login" replace />} />
-        <Route path="/chat" element={<ChatPage />} />
-        <Route path="/survey" element={<TokenSurveyPage />} />
+      <div className="min-h-screen bg-gray-50">
+        <Routes>
+          {/* Public routes */}
+          <Route path="/" element={<Navigate to="/admin/login" replace />} />
+          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/survey" element={<TokenSurveyPage />} />
 
-        {/* SuperAdmin routes */}
-        <Route path="/superadmin/login" element={<SuperAdminLoginPage />} />
-        <Route path="/superadmin/forgot-password" element={<SuperAdminForgotPasswordPage />} />
-        <Route path="/superadmin/reset-password" element={<SuperAdminResetPasswordPage />} />
-        <Route
-          path="/superadmin"
-          element={
-            <ProtectedRoute requiredRole="superadmin">
-              <SuperAdminPage />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<SuperAdminDashboard />} />
-          <Route path="clients" element={<SuperAdminClients />} />
-          <Route path="settings" element={<SuperAdminSettings />} />
-        </Route>
-        <Route
-          path="/superadmin/clients/:id"
-          element={
-            <ProtectedRoute requiredRole="superadmin">
-              <SuperAdminClientDetailPage />
-            </ProtectedRoute>
-          }
-        />
+          {/* SuperAdmin routes */}
+          <Route path="/superadmin/login" element={<SuperAdminLoginPage />} />
+          <Route path="/superadmin/forgot-password" element={<SuperAdminForgotPasswordPage />} />
+          <Route path="/superadmin/reset-password" element={<SuperAdminResetPasswordPage />} />
+          <Route
+            path="/superadmin"
+            element={
+              <ProtectedRoute requiredRole="superadmin">
+                <SuperAdminPage />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<SuperAdminDashboard />} />
+            <Route path="clients" element={<SuperAdminClients />} />
+            <Route path="settings" element={<SuperAdminSettings />} />
+          </Route>
+          <Route
+            path="/superadmin/clients/:id"
+            element={
+              <ProtectedRoute requiredRole="superadmin">
+                <SuperAdminClientDetailPage />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Client Admin routes */}
-        <Route path="/admin/login" element={<ClientAdminLoginPage />} />
-        <Route path="/admin/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/admin/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/admin/signup" element={<SignUpPage />} />
-        <Route path="/signup/payment-success" element={<PaymentSuccessPage />} />
-        <Route path="/account/plan-changed" element={<PlanChangeSuccessPage />} />
-        <Route path="/admin/verify-email" element={<VerifyEmailPage />} />
-        <Route
-          path="/admin/onboarding"
-          element={
-            <ProtectedRoute requiredRole="client_admin">
-              <AdminOnboardingPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute requiredRole="client_admin">
-              <AdminPage />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to="rounds" replace />} />
-          <Route path="rounds" element={<RoundsLanding />} />
-          <Route path="rounds/:roundId" element={<RoundDashboard />} />
-          <Route path="trends" element={<TrendsView />} />
-          <Route path="communities" element={<CommunityManager />} />
-          <Route path="members" element={<UserManager />} />
-          <Route path="account" element={<AccountSettings />} />
-        </Route>
-        {/* 404 catch-all */}
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </div>
+          {/* Client Admin routes */}
+          <Route path="/admin/login" element={<ClientAdminLoginPage />} />
+          <Route path="/admin/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/admin/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/admin/signup" element={<SignUpPage />} />
+          <Route path="/signup/payment-success" element={<PaymentSuccessPage />} />
+          <Route path="/account/plan-changed" element={<PlanChangeSuccessPage />} />
+          <Route path="/admin/verify-email" element={<VerifyEmailPage />} />
+          <Route
+            path="/admin/onboarding"
+            element={
+              <ProtectedRoute requiredRole="client_admin">
+                <AdminOnboardingPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute requiredRole="client_admin">
+                <AdminPage />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="rounds" replace />} />
+            <Route path="rounds" element={<RoundsLanding />} />
+            <Route path="rounds/:roundId" element={<RoundDashboard />} />
+            <Route path="trends" element={<TrendsView />} />
+            <Route path="communities" element={<CommunityManager />} />
+            <Route path="members" element={<UserManager />} />
+            <Route path="account" element={<AccountSettings />} />
+          </Route>
+          {/* 404 catch-all */}
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </div>
     </ErrorBoundary>
   );
 }

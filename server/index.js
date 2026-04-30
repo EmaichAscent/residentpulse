@@ -37,13 +37,15 @@ if (missing.length > 0) {
 }
 
 // Trust Railway's reverse proxy for rate limiting and session management
-app.set('trust proxy', 1);
+app.set("trust proxy", 1);
 
 // Security headers
-app.use(helmet({
-  contentSecurityPolicy: false, // Disabled — SPA serves its own inline styles/scripts
-  crossOriginEmbedderPolicy: false, // Allow loading external resources (e.g. fonts)
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // Disabled — SPA serves its own inline styles/scripts
+    crossOriginEmbedderPolicy: false, // Allow loading external resources (e.g. fonts)
+  })
+);
 
 // PostgreSQL session store
 const PgStore = connectPgSimple(session);
@@ -53,45 +55,54 @@ const sessionPool = new pg.Pool({
 });
 
 // Session configuration
-app.use(session({
-  store: new PgStore({
-    pool: sessionPool,
-    createTableIfMissing: true,
-  }),
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: 30 * 60 * 1000 // 30 minutes
-  }
-}));
+app.use(
+  session({
+    store: new PgStore({
+      pool: sessionPool,
+      createTableIfMissing: true,
+    }),
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 30 * 60 * 1000, // 30 minutes
+    },
+  })
+);
 
 // CORS configuration - in production, client is served from same origin
-const corsOrigin = process.env.NODE_ENV === "production"
-  ? true // Allow same origin in production
-  : (process.env.CLIENT_URL || "http://localhost:5173");
+const corsOrigin =
+  process.env.NODE_ENV === "production"
+    ? true // Allow same origin in production
+    : process.env.CLIENT_URL || "http://localhost:5173";
 
-app.use(cors({
-  origin: corsOrigin,
-  credentials: true
-}));
-app.use(express.json({
-  limit: "2mb",
-  verify: (req, _res, buf) => {
-    // Save raw body for webhook signature verification
-    if (req.url.startsWith("/resend") || req.originalUrl?.startsWith("/api/webhooks")) {
-      req.rawBody = buf.toString();
-    }
-  }
-}));
-app.use(fileUpload({
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
-  abortOnLimit: true,
-  responseOnLimit: "File too large. Maximum upload size is 5 MB."
-}));
+app.use(
+  cors({
+    origin: corsOrigin,
+    credentials: true,
+  })
+);
+app.use(
+  express.json({
+    limit: "2mb",
+    verify: (req, _res, buf) => {
+      // Save raw body for webhook signature verification
+      if (req.url.startsWith("/resend") || req.originalUrl?.startsWith("/api/webhooks")) {
+        req.rawBody = buf.toString();
+      }
+    },
+  })
+);
+app.use(
+  fileUpload({
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+    abortOnLimit: true,
+    responseOnLimit: "File too large. Maximum upload size is 5 MB.",
+  })
+);
 
 // Auth routes (login/logout)
 app.use("/api/auth", authRoutes);

@@ -1,7 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import ReInterviewDialog from "./ReInterviewDialog";
 
-export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, cadenceUpdating, cadenceMessage, embedded, onScheduled }) {
+export default function SurveySchedule({
+  cadence,
+  maxCadence,
+  onCadenceChange,
+  cadenceUpdating,
+  cadenceMessage,
+  embedded,
+  onScheduled,
+}) {
   const [rounds, setRounds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [firstDate, setFirstDate] = useState("");
@@ -45,23 +53,28 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
     }
   }, []);
 
-  const startPolling = useCallback((jobId) => {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/admin/survey-rounds/email-jobs/${jobId}`, { credentials: "include" });
-        if (!res.ok) return;
-        const job = await res.json();
-        setActiveJob(prev => ({ ...prev, ...job }));
-        if (job.status !== "in_progress") {
-          stopPolling();
-          loadRounds();
+  const startPolling = useCallback(
+    (jobId) => {
+      stopPolling();
+      pollRef.current = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/admin/survey-rounds/email-jobs/${jobId}`, {
+            credentials: "include",
+          });
+          if (!res.ok) return;
+          const job = await res.json();
+          setActiveJob((prev) => ({ ...prev, ...job }));
+          if (job.status !== "in_progress") {
+            stopPolling();
+            loadRounds();
+          }
+        } catch {
+          // Polling error — ignore, will retry next interval
         }
-      } catch {
-        // Polling error — ignore, will retry next interval
-      }
-    }, 3000);
-  }, [stopPolling]);
+      }, 3000);
+    },
+    [stopPolling]
+  );
 
   // Clean up polling on unmount
   useEffect(() => () => stopPolling(), [stopPolling]);
@@ -70,7 +83,9 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/admin/survey-rounds/email-jobs/active", { credentials: "include" });
+        const res = await fetch("/api/admin/survey-rounds/email-jobs/active", {
+          credentials: "include",
+        });
         if (res.ok) {
           const data = await res.json();
           if (data.job) {
@@ -112,7 +127,7 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ first_launch_date: firstDate })
+        body: JSON.stringify({ first_launch_date: firstDate }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -136,13 +151,19 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
       const data = await res.json();
 
       if (data.hasCompletedInterview && data.lastInterviewDate) {
-        const daysSince = Math.floor((Date.now() - new Date(data.lastInterviewDate).getTime()) / (1000 * 60 * 60 * 24));
+        const daysSince = Math.floor(
+          (Date.now() - new Date(data.lastInterviewDate).getTime()) / (1000 * 60 * 60 * 24)
+        );
         if (daysSince < 60) {
           // Recent interview — skip dialog, launch directly
           handleLaunch(roundId);
           return;
         }
-        setReInterviewPrompt({ roundId, lastInterviewDate: data.lastInterviewDate, interviewSummary: data.interviewSummary });
+        setReInterviewPrompt({
+          roundId,
+          lastInterviewDate: data.lastInterviewDate,
+          interviewSummary: data.interviewSummary,
+        });
         return;
       }
     } catch {
@@ -159,7 +180,7 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
     try {
       const res = await fetch(`/api/admin/survey-rounds/${roundId}/launch`, {
         method: "POST",
-        credentials: "include"
+        credentials: "include",
       });
       const data = await res.json();
       if (res.ok) {
@@ -189,37 +210,49 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
     // For date-only strings (YYYY-MM-DD), parse as local date to avoid timezone shift
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       const [y, m, d] = dateStr.split("-");
-      return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
     }
     return new Date(dateStr).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
-      year: "numeric"
+      year: "numeric",
     });
   };
 
-
   const getStatusColor = (status) => {
     switch (status) {
-      case "in_progress": return "bg-blue-100 text-blue-800";
-      case "concluded": return "bg-green-100 text-green-800";
-      default: return "bg-gray-100 text-gray-600";
+      case "in_progress":
+        return "bg-blue-100 text-blue-800";
+      case "concluded":
+        return "bg-green-100 text-green-800";
+      default:
+        return "bg-gray-100 text-gray-600";
     }
   };
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case "in_progress": return "In Progress";
-      case "concluded": return "Concluded";
-      default: return "Planned";
+      case "in_progress":
+        return "In Progress";
+      case "concluded":
+        return "Concluded";
+      default:
+        return "Planned";
     }
   };
 
   const getCircleColor = (status) => {
     switch (status) {
-      case "in_progress": return "bg-[var(--cam-blue)] text-white";
-      case "concluded": return "bg-[var(--cam-green)] text-white";
-      default: return "bg-gray-200 text-gray-500";
+      case "in_progress":
+        return "bg-[var(--cam-blue)] text-white";
+      case "concluded":
+        return "bg-[var(--cam-green)] text-white";
+      default:
+        return "bg-gray-200 text-gray-500";
     }
   };
 
@@ -229,26 +262,33 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
 
   // No rounds yet — show setup
   if (rounds.length === 0) {
-    const Wrapper = embedded ? "div" : ({ children }) => (
-      <div className="bg-white rounded-xl border p-6">{children}</div>
-    );
+    const Wrapper = embedded
+      ? "div"
+      : ({ children }) => <div className="bg-white rounded-xl border p-6">{children}</div>;
 
     return (
       <Wrapper>
         {!embedded && (
           <>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Schedule Your First Survey Round</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Schedule Your First Survey Round
+            </h3>
             <p className="text-sm text-gray-600 mb-4">
-              Pick a launch date for your first survey round. We'll calculate the rest of your schedule based on your cadence settings.
+              Pick a launch date for your first survey round. We'll calculate the rest of your
+              schedule based on your cadence settings.
             </p>
           </>
         )}
 
         {embedded ? (
           <>
-            <p className="text-xs text-gray-500 mb-3">All current board members will be invited when you launch.</p>
+            <p className="text-xs text-gray-500 mb-3">
+              All current board members will be invited when you launch.
+            </p>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">First Launch Date</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                First Launch Date
+              </label>
               <input
                 type="date"
                 value={firstDate}
@@ -268,11 +308,14 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
           <>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
               <p className="text-sm text-amber-800">
-                Make sure your board member list is up to date before scheduling. Once you confirm and launch a round, all current board members will receive a survey invitation.
+                Make sure your board member list is up to date before scheduling. Once you confirm
+                and launch a round, all current board members will receive a survey invitation.
               </p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">First Launch Date</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                First Launch Date
+              </label>
               <div className="flex items-end gap-3">
                 <div className="flex-1">
                   <input
@@ -328,17 +371,15 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
                   cadence === 4
                     ? "text-white shadow-sm cursor-default"
                     : maxCadence < 4
-                    ? "text-gray-300 cursor-not-allowed"
-                    : "text-gray-500 hover:text-gray-700 cursor-pointer"
+                      ? "text-gray-300 cursor-not-allowed"
+                      : "text-gray-500 hover:text-gray-700 cursor-pointer"
                 } ${cadenceUpdating ? "opacity-50" : ""}`}
                 style={cadence === 4 ? { backgroundColor: "var(--cam-green)" } : {}}
               >
                 4x/yr
               </button>
             </div>
-            {cadenceUpdating && (
-              <span className="text-xs text-gray-400">Updating...</span>
-            )}
+            {cadenceUpdating && <span className="text-xs text-gray-400">Updating...</span>}
           </div>
         )}
       </div>
@@ -354,9 +395,16 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm font-medium text-blue-800">
               Sending invitations... {activeJob.sent_count} of {activeJob.total_count} sent
-              {activeJob.failed_count > 0 && <span className="text-red-600 ml-1">({activeJob.failed_count} failed)</span>}
+              {activeJob.failed_count > 0 && (
+                <span className="text-red-600 ml-1">({activeJob.failed_count} failed)</span>
+              )}
             </p>
-            <span className="text-xs text-blue-500">{Math.round(((activeJob.sent_count + activeJob.failed_count) / activeJob.total_count) * 100)}%</span>
+            <span className="text-xs text-blue-500">
+              {Math.round(
+                ((activeJob.sent_count + activeJob.failed_count) / activeJob.total_count) * 100
+              )}
+              %
+            </span>
           </div>
           <div className="w-full bg-blue-200 rounded-full h-2">
             <div
@@ -373,11 +421,15 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
       {activeJob && activeJob.status === "completed" && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 flex items-center justify-between">
           <p className="text-sm text-green-800">
-            Round launched! {activeJob.sent_count} invitation{activeJob.sent_count !== 1 ? "s" : ""} sent
+            Round launched! {activeJob.sent_count} invitation{activeJob.sent_count !== 1 ? "s" : ""}{" "}
+            sent
             {activeJob.failed_count > 0 && `, ${activeJob.failed_count} failed`}.
             {activeJob.closes_at && ` Survey closes ${formatDate(activeJob.closes_at)}.`}
           </p>
-          <button onClick={() => setActiveJob(null)} className="text-xs text-green-600 hover:text-green-800 font-medium ml-3 flex-shrink-0">
+          <button
+            onClick={() => setActiveJob(null)}
+            className="text-xs text-green-600 hover:text-green-800 font-medium ml-3 flex-shrink-0"
+          >
             Done
           </button>
         </div>
@@ -387,9 +439,13 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-center justify-between">
           <p className="text-sm text-red-800">
             Email sending failed: {activeJob.error_message || "Unknown error"}.
-            {activeJob.sent_count > 0 && ` ${activeJob.sent_count} of ${activeJob.total_count} sent before failure.`}
+            {activeJob.sent_count > 0 &&
+              ` ${activeJob.sent_count} of ${activeJob.total_count} sent before failure.`}
           </p>
-          <button onClick={() => setActiveJob(null)} className="text-xs text-red-600 hover:text-red-800 font-medium ml-3 flex-shrink-0">
+          <button
+            onClick={() => setActiveJob(null)}
+            className="text-xs text-red-600 hover:text-red-800 font-medium ml-3 flex-shrink-0"
+          >
             Dismiss
           </button>
         </div>
@@ -402,77 +458,83 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
       )}
 
       <div className="space-y-3">
-        {rounds.filter((r) => r.status === "planned").map((round) => {
-          return (
-            <div key={round.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${getCircleColor(round.status)}`}>
-                {round.round_number}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-medium text-gray-900">Round {round.round_number}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getStatusColor(round.status)}`}>
-                    {getStatusLabel(round.status)}
-                  </span>
+        {rounds
+          .filter((r) => r.status === "planned")
+          .map((round) => {
+            return (
+              <div key={round.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${getCircleColor(round.status)}`}
+                >
+                  {round.round_number}
                 </div>
-                <div className="text-sm text-gray-500">
-                  {editingDateId === round.id ? (
-                    <div className="flex items-center gap-2 mt-1">
-                      <input
-                        type="date"
-                        value={editDateValue}
-                        onChange={(e) => setEditDateValue(e.target.value)}
-                        className="text-sm px-2 py-1 border border-gray-300 rounded"
-                      />
-                      <button
-                        onClick={() => handleSaveDate(round.id)}
-                        disabled={savingDate}
-                        className="text-xs px-3 py-1 bg-[var(--cam-blue)] text-white rounded font-medium hover:opacity-90 disabled:opacity-50"
-                      >
-                        {savingDate ? "Saving..." : "Save"}
-                      </button>
-                      <button
-                        onClick={() => setEditingDateId(null)}
-                        className="text-xs px-3 py-1 text-gray-600 hover:text-gray-800"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <span>Scheduled for {formatDate(round.scheduled_date)}</span>
-                      <button
-                        onClick={() => {
-                          setEditingDateId(round.id);
-                          setEditDateValue(round.scheduled_date?.split("T")[0] || "");
-                        }}
-                        className="ml-2 text-xs text-[var(--cam-blue)] hover:underline font-medium"
-                      >
-                        Change
-                      </button>
-                    </>
-                  )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-gray-900">Round {round.round_number}</span>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${getStatusColor(round.status)}`}
+                    >
+                      {getStatusLabel(round.status)}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {editingDateId === round.id ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="date"
+                          value={editDateValue}
+                          onChange={(e) => setEditDateValue(e.target.value)}
+                          className="text-sm px-2 py-1 border border-gray-300 rounded"
+                        />
+                        <button
+                          onClick={() => handleSaveDate(round.id)}
+                          disabled={savingDate}
+                          className="text-xs px-3 py-1 bg-[var(--cam-blue)] text-white rounded font-medium hover:opacity-90 disabled:opacity-50"
+                        >
+                          {savingDate ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          onClick={() => setEditingDateId(null)}
+                          className="text-xs px-3 py-1 text-gray-600 hover:text-gray-800"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span>Scheduled for {formatDate(round.scheduled_date)}</span>
+                        <button
+                          onClick={() => {
+                            setEditingDateId(round.id);
+                            setEditDateValue(round.scheduled_date?.split("T")[0] || "");
+                          }}
+                          className="ml-2 text-xs text-[var(--cam-blue)] hover:underline font-medium"
+                        >
+                          Change
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                {(() => {
+                  const jobInProgress = activeJob?.status === "in_progress";
+                  const anotherRoundActive = rounds.some((r) => r.status === "in_progress");
+
+                  return (
+                    <button
+                      onClick={() => setConfirmLaunch(round.id)}
+                      disabled={jobInProgress || anotherRoundActive}
+                      title={anotherRoundActive ? "Another round is currently in progress" : ""}
+                      className="text-sm px-4 py-2 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {jobInProgress ? "Sending..." : "Launch Now"}
+                    </button>
+                  );
+                })()}
               </div>
-
-              {(() => {
-                const jobInProgress = activeJob?.status === "in_progress";
-                const anotherRoundActive = rounds.some((r) => r.status === "in_progress");
-
-                return (
-                  <button
-                    onClick={() => setConfirmLaunch(round.id)}
-                    disabled={jobInProgress || anotherRoundActive}
-                    title={anotherRoundActive ? "Another round is currently in progress" : ""}
-                    className="text-sm px-4 py-2 bg-[var(--cam-blue)] text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {jobInProgress ? "Sending..." : "Launch Now"}
-                  </button>
-                );
-              })()}
-            </div>
-          );
-        })}
+            );
+          })}
       </div>
 
       {reInterviewPrompt && (
@@ -480,7 +542,10 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
           lastInterviewDate={reInterviewPrompt.lastInterviewDate}
           interviewSummary={reInterviewPrompt.interviewSummary}
           roundId={reInterviewPrompt.roundId}
-          onSkip={() => { setReInterviewPrompt(null); handleLaunch(reInterviewPrompt.roundId); }}
+          onSkip={() => {
+            setReInterviewPrompt(null);
+            handleLaunch(reInterviewPrompt.roundId);
+          }}
           onClose={() => setReInterviewPrompt(null)}
         />
       )}
@@ -490,7 +555,8 @@ export default function SurveySchedule({ cadence, maxCadence, onCadenceChange, c
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-2">Launch Survey Now?</h3>
             <p className="text-sm text-gray-600 mb-4">
-              Are you sure you want to launch this survey round now? Invitations will be sent to all active members immediately.
+              Are you sure you want to launch this survey round now? Invitations will be sent to all
+              active members immediately.
             </p>
             <div className="flex gap-3 justify-end">
               <button

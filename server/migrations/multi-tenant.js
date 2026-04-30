@@ -49,10 +49,10 @@ if (existingClient) {
   defaultClientId = existingClient.id;
   console.log(`✓ Default client already exists (ID: ${defaultClientId})\n`);
 } else {
-  const result = db.run(
-    "INSERT INTO clients (company_name, status) VALUES (?, ?)",
-    ["CAM Ascent", "active"]
-  );
+  const result = db.run("INSERT INTO clients (company_name, status) VALUES (?, ?)", [
+    "CAM Ascent",
+    "active",
+  ]);
   defaultClientId = result.lastInsertRowid;
   console.log(`✓ Created default client: CAM Ascent (ID: ${defaultClientId})\n`);
 }
@@ -87,7 +87,7 @@ try {
 // For settings table, we need to handle this differently
 // Check if client_id column exists
 const settingsColumns = db.all("PRAGMA table_info(settings)");
-const hasClientId = settingsColumns.some(col => col.name === "client_id");
+const hasClientId = settingsColumns.some((col) => col.name === "client_id");
 
 if (!hasClientId) {
   db.run("ALTER TABLE settings ADD COLUMN client_id INTEGER REFERENCES clients(id)");
@@ -110,7 +110,7 @@ console.log("👤 Creating superadmin accounts...");
 
 const superAdmins = [
   { email: "mike.hardy@camascent.com", password: "TempPass123!@#" },
-  { email: "andrea.hardy@camascent.com", password: "TempPass123!@#" }
+  { email: "andrea.hardy@camascent.com", password: "TempPass123!@#" },
 ];
 
 for (const admin of superAdmins) {
@@ -120,10 +120,11 @@ for (const admin of superAdmins) {
     console.log(`✓ SuperAdmin already exists: ${admin.email}`);
   } else {
     const passwordHash = await hashPassword(admin.password);
-    db.run(
-      "INSERT INTO admins (email, password_hash, role) VALUES (?, ?, ?)",
-      [admin.email, passwordHash, "superadmin"]
-    );
+    db.run("INSERT INTO admins (email, password_hash, role) VALUES (?, ?, ?)", [
+      admin.email,
+      passwordHash,
+      "superadmin",
+    ]);
     console.log(`✓ Created superadmin: ${admin.email} (password: ${admin.password})`);
   }
 }

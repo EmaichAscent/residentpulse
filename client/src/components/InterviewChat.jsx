@@ -1,7 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import ChatBubble from "./ChatBubble";
 
-export default function InterviewChat({ interviewId, onComplete, onEndEarly, initialMessages = [] }) {
+export default function InterviewChat({
+  interviewId,
+  onComplete,
+  onEndEarly,
+  initialMessages = [],
+}) {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -41,17 +46,29 @@ export default function InterviewChat({ interviewId, onComplete, onEndEarly, ini
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      const aiMsg = { role: "assistant", content: data.message, timestamp: new Date().toISOString() };
+      const aiMsg = {
+        role: "assistant",
+        content: data.message,
+        timestamp: new Date().toISOString(),
+      };
       setMessages((prev) => [...prev, aiMsg]);
 
       const lower = data.message.toLowerCase();
-      if (lower.includes("does this sound right") || lower.includes("does that sound right") || lower.includes("sound accurate")) {
+      if (
+        lower.includes("does this sound right") ||
+        lower.includes("does that sound right") ||
+        lower.includes("sound accurate")
+      ) {
         if (onComplete) onComplete(data.message);
       }
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Sorry, something went wrong. Please try again.", timestamp: new Date().toISOString() },
+        {
+          role: "assistant",
+          content: "Sorry, something went wrong. Please try again.",
+          timestamp: new Date().toISOString(),
+        },
       ]);
     } finally {
       setLoading(false);
@@ -74,11 +91,20 @@ export default function InterviewChat({ interviewId, onComplete, onEndEarly, ini
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 flex flex-col overflow-hidden" style={{ height: "calc(100vh - 220px)", minHeight: 400 }}>
+    <div
+      className="bg-white rounded-xl shadow-lg border border-gray-200 flex flex-col overflow-hidden"
+      style={{ height: "calc(100vh - 220px)", minHeight: 400 }}
+    >
       {/* Messages area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4">
         {messages.map((msg, i) => (
-          <ChatBubble key={i} role={msg.role} content={msg.content} timestamp={msg.timestamp} compact />
+          <ChatBubble
+            key={i}
+            role={msg.role}
+            content={msg.content}
+            timestamp={msg.timestamp}
+            compact
+          />
         ))}
 
         {loading && (
@@ -114,11 +140,7 @@ export default function InterviewChat({ interviewId, onComplete, onEndEarly, ini
             style={{ maxHeight: 120 }}
             autoFocus
           />
-          <button
-            type="submit"
-            disabled={loading || !input.trim()}
-            className="btn-send-sm"
-          >
+          <button type="submit" disabled={loading || !input.trim()} className="btn-send-sm">
             Send
           </button>
         </form>

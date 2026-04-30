@@ -42,33 +42,30 @@ export default function CriticalAlertsBanner({ onViewRound }) {
 
   const alertTypeLabel = (type) => {
     switch (type) {
-      case "contract_termination": return "Contract Risk";
-      case "legal_threat": return "Legal Threat";
-      case "safety_concern": return "Safety Concern";
-      default: return "Critical Alert";
+      case "contract_termination":
+        return "Contract Risk";
+      case "legal_threat":
+        return "Legal Threat";
+      case "safety_concern":
+        return "Safety Concern";
+      default:
+        return "Critical Alert";
     }
   };
 
   const alertColor = (severity) =>
-    severity === "critical"
-      ? "bg-red-50 border-red-200"
-      : "bg-amber-50 border-amber-200";
+    severity === "critical" ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200";
 
   const alertTextColor = (severity) =>
     severity === "critical" ? "text-red-800" : "text-amber-800";
 
   const alertBadgeColor = (severity) =>
-    severity === "critical"
-      ? "bg-red-100 text-red-700"
-      : "bg-amber-100 text-amber-700";
+    severity === "critical" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700";
 
   return (
     <div className="space-y-2 mb-6">
       {alerts.map((alert) => (
-        <div
-          key={alert.id}
-          className={`rounded-lg border p-4 ${alertColor(alert.severity)}`}
-        >
+        <div key={alert.id} className={`rounded-lg border p-4 ${alertColor(alert.severity)}`}>
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
               <svg
@@ -86,7 +83,9 @@ export default function CriticalAlertsBanner({ onViewRound }) {
               </svg>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${alertBadgeColor(alert.severity)}`}>
+                  <span
+                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${alertBadgeColor(alert.severity)}`}
+                  >
                     {alertTypeLabel(alert.alert_type)}
                   </span>
                   {alert.round_number && (

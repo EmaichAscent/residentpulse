@@ -32,8 +32,8 @@ function verifyWebhookSignature(req) {
   const computed = crypto.createHmac("sha256", secretBytes).update(toSign).digest("base64");
 
   // Svix may send multiple signatures space-separated, each prefixed with "v1,"
-  const candidates = svixSignature.split(" ").map(s => s.replace(/^v1,/, ""));
-  return candidates.some(sig => {
+  const candidates = svixSignature.split(" ").map((s) => s.replace(/^v1,/, ""));
+  return candidates.some((sig) => {
     try {
       return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(sig));
     } catch {
@@ -125,7 +125,7 @@ router.post("/resend", async (req, res) => {
             memberName,
             bounceType,
             db,
-          }).catch(err => logger.error("Failed to send bounce notification: %s", err.message));
+          }).catch((err) => logger.error("Failed to send bounce notification: %s", err.message));
         }
       }
     }

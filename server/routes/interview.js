@@ -15,9 +15,12 @@ async function getInterviewPrompt(key, fallback) {
   return row?.value || fallback;
 }
 
-const getInitialPrompt = () => getInterviewPrompt("interview_initial_prompt", "You are a professional onboarding specialist.");
-const getReInterviewPrompt = () => getInterviewPrompt("interview_re_prompt", "You are conducting a check-in interview.");
-const getPromptGenerationInstruction = () => getInterviewPrompt("prompt_generation_instruction", "Generate a prompt supplement.");
+const getInitialPrompt = () =>
+  getInterviewPrompt("interview_initial_prompt", "You are a professional onboarding specialist.");
+const getReInterviewPrompt = () =>
+  getInterviewPrompt("interview_re_prompt", "You are conducting a check-in interview.");
+const getPromptGenerationInstruction = () =>
+  getInterviewPrompt("prompt_generation_instruction", "Generate a prompt supplement.");
 
 // Get interview status for the current admin
 router.get("/status", async (req, res) => {
@@ -32,17 +35,16 @@ router.get("/status", async (req, res) => {
       [req.clientId, req.userId]
     );
 
-    const admin = await db.get(
-      "SELECT onboarding_completed FROM client_admins WHERE id = ?",
-      [req.userId]
-    );
+    const admin = await db.get("SELECT onboarding_completed FROM client_admins WHERE id = ?", [
+      req.userId,
+    ]);
 
     res.json({
       hasCompletedInterview: !!completedInterview,
       lastInterviewDate: completedInterview?.completed_at || null,
       interviewSummary: completedInterview?.interview_summary || null,
       activeInterviewId: activeInterview?.id || null,
-      onboardingCompleted: admin?.onboarding_completed || false
+      onboardingCompleted: admin?.onboarding_completed || false,
     });
   } catch (err) {
     logger.error({ err }, "Error getting interview status");
@@ -113,7 +115,7 @@ router.post("/", async (req, res) => {
       entityType: "interview",
       entityId: result.lastInsertRowid,
       clientId: req.clientId,
-      metadata: { interview_type: type }
+      metadata: { interview_type: type },
     });
 
     res.json({ interview_id: result.lastInsertRowid, resumed: false });
@@ -127,7 +129,13 @@ router.post("/", async (req, res) => {
 router.post("/:id/structured", async (req, res) => {
   try {
     const interviewId = Number(req.params.id);
-    const { company_size, years_in_business, geographic_area, communities_managed, competitive_advantages } = req.body;
+    const {
+      company_size,
+      years_in_business,
+      geographic_area,
+      communities_managed,
+      competitive_advantages,
+    } = req.body;
 
     const interview = await db.get(
       "SELECT * FROM admin_interviews WHERE id = ? AND client_id = ? AND status = 'in_progress'",
@@ -142,19 +150,27 @@ router.post("/:id/structured", async (req, res) => {
     await db.run(
       `UPDATE admin_interviews SET company_size = ?, years_in_business = ?, geographic_area = ?,
        communities_managed = ?, competitive_advantages = ? WHERE id = ?`,
-      [company_size || null, years_in_business || null, geographic_area || null,
-       communities_managed || null, competitive_advantages || null, interviewId]
+      [
+        company_size || null,
+        years_in_business || null,
+        geographic_area || null,
+        communities_managed || null,
+        competitive_advantages || null,
+        interviewId,
+      ]
     );
 
     // Build context for the AI
     let contextIntro = `The admin has provided the following about their company:\n`;
     contextIntro += `- Admin email: ${req.userEmail}\n`;
-    if (req.session?.user?.company_name) contextIntro += `- Company name: ${req.session.user.company_name}\n`;
+    if (req.session?.user?.company_name)
+      contextIntro += `- Company name: ${req.session.user.company_name}\n`;
     if (company_size) contextIntro += `- Company size: ${company_size}\n`;
     if (years_in_business) contextIntro += `- Years in business: ${years_in_business}\n`;
     if (geographic_area) contextIntro += `- Geographic area: ${geographic_area}\n`;
     if (communities_managed) contextIntro += `- Communities managed: ${communities_managed}\n`;
-    if (competitive_advantages) contextIntro += `- Competitive advantages: ${competitive_advantages}\n`;
+    if (competitive_advantages)
+      contextIntro += `- Competitive advantages: ${competitive_advantages}\n`;
 
     let systemPrompt = await getInitialPrompt();
 
@@ -196,7 +212,9 @@ router.post("/:id/structured", async (req, res) => {
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 400,
       system: systemPrompt,
-      messages: [{ role: "user", content: "I've filled in the form above. Let's start the interview." }],
+      messages: [
+        { role: "user", content: "I've filled in the form above. Let's start the interview." },
+      ],
     });
 
     const aiMessage = response.content[0].text;
@@ -250,19 +268,25 @@ router.post("/:id/message", async (req, res) => {
     );
 
     // Build system prompt with context
-    let systemPrompt = interview.interview_type === "re_interview"
-      ? await getReInterviewPrompt()
-      : await getInitialPrompt();
+    let systemPrompt =
+      interview.interview_type === "re_interview"
+        ? await getReInterviewPrompt()
+        : await getInitialPrompt();
 
     // Add structured data context
     let contextIntro = `\n\nCURRENT STRUCTURED DATA:\n`;
     contextIntro += `- Admin email: ${req.userEmail}\n`;
-    if (req.session?.user?.company_name) contextIntro += `- Company name: ${req.session.user.company_name}\n`;
+    if (req.session?.user?.company_name)
+      contextIntro += `- Company name: ${req.session.user.company_name}\n`;
     if (interview.company_size) contextIntro += `- Company size: ${interview.company_size}\n`;
-    if (interview.years_in_business) contextIntro += `- Years in business: ${interview.years_in_business}\n`;
-    if (interview.geographic_area) contextIntro += `- Geographic area: ${interview.geographic_area}\n`;
-    if (interview.communities_managed) contextIntro += `- Communities managed: ${interview.communities_managed}\n`;
-    if (interview.competitive_advantages) contextIntro += `- Competitive advantages: ${interview.competitive_advantages}\n`;
+    if (interview.years_in_business)
+      contextIntro += `- Years in business: ${interview.years_in_business}\n`;
+    if (interview.geographic_area)
+      contextIntro += `- Geographic area: ${interview.geographic_area}\n`;
+    if (interview.communities_managed)
+      contextIntro += `- Communities managed: ${interview.communities_managed}\n`;
+    if (interview.competitive_advantages)
+      contextIntro += `- Competitive advantages: ${interview.competitive_advantages}\n`;
     systemPrompt += contextIntro;
 
     // For re-interviews, include previous context
@@ -333,20 +357,26 @@ router.patch("/:id/confirm", async (req, res) => {
     // Build context for prompt generation
     let structuredContext = "";
     if (interview.company_size) structuredContext += `Company size: ${interview.company_size}\n`;
-    if (interview.years_in_business) structuredContext += `Years in business: ${interview.years_in_business}\n`;
-    if (interview.geographic_area) structuredContext += `Geographic area: ${interview.geographic_area}\n`;
-    if (interview.communities_managed) structuredContext += `Communities managed: ${interview.communities_managed}\n`;
-    if (interview.competitive_advantages) structuredContext += `Competitive advantages: ${interview.competitive_advantages}\n`;
+    if (interview.years_in_business)
+      structuredContext += `Years in business: ${interview.years_in_business}\n`;
+    if (interview.geographic_area)
+      structuredContext += `Geographic area: ${interview.geographic_area}\n`;
+    if (interview.communities_managed)
+      structuredContext += `Communities managed: ${interview.communities_managed}\n`;
+    if (interview.competitive_advantages)
+      structuredContext += `Competitive advantages: ${interview.competitive_advantages}\n`;
 
     // Generate prompt supplement
     const promptResponse = await createMessage({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 600,
       system: await getPromptGenerationInstruction(),
-      messages: [{
-        role: "user",
-        content: `STRUCTURED DATA:\n${structuredContext}\n\nINTERVIEW TRANSCRIPT:\n${transcript}`
-      }],
+      messages: [
+        {
+          role: "user",
+          content: `STRUCTURED DATA:\n${structuredContext}\n\nINTERVIEW TRANSCRIPT:\n${transcript}`,
+        },
+      ],
     });
 
     const generatedPrompt = promptResponse.content[0].text;
@@ -355,11 +385,14 @@ router.patch("/:id/confirm", async (req, res) => {
     const summaryResponse = await createMessage({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 300,
-      system: "Summarize this interview in 2-3 sentences capturing the key takeaways. Output only the summary text.",
-      messages: [{
-        role: "user",
-        content: `STRUCTURED DATA:\n${structuredContext}\n\nINTERVIEW TRANSCRIPT:\n${transcript}`
-      }],
+      system:
+        "Summarize this interview in 2-3 sentences capturing the key takeaways. Output only the summary text.",
+      messages: [
+        {
+          role: "user",
+          content: `STRUCTURED DATA:\n${structuredContext}\n\nINTERVIEW TRANSCRIPT:\n${transcript}`,
+        },
+      ],
     });
 
     const interviewSummary = summaryResponse.content[0].text;
@@ -390,10 +423,7 @@ router.patch("/:id/confirm", async (req, res) => {
     }
 
     // Mark onboarding as completed (DB + session)
-    await db.run(
-      "UPDATE client_admins SET onboarding_completed = TRUE WHERE id = ?",
-      [req.userId]
-    );
+    await db.run("UPDATE client_admins SET onboarding_completed = TRUE WHERE id = ?", [req.userId]);
     if (req.session?.user) {
       req.session.user.onboarding_completed = true;
     }
@@ -406,13 +436,13 @@ router.patch("/:id/confirm", async (req, res) => {
       entityType: "interview",
       entityId: interviewId,
       clientId: req.clientId,
-      metadata: { interview_type: interview.interview_type }
+      metadata: { interview_type: interview.interview_type },
     });
 
     res.json({
       ok: true,
       summary: interviewSummary,
-      generated_prompt: generatedPrompt
+      generated_prompt: generatedPrompt,
     });
   } catch (err) {
     logger.error({ err }, "Error confirming interview");
@@ -434,10 +464,7 @@ router.patch("/:id/abandon", async (req, res) => {
       return res.status(404).json({ error: "Interview not found or already completed" });
     }
 
-    await db.run(
-      "UPDATE admin_interviews SET status = 'abandoned' WHERE id = ?",
-      [interviewId]
-    );
+    await db.run("UPDATE admin_interviews SET status = 'abandoned' WHERE id = ?", [interviewId]);
 
     await logActivity({
       actorType: "client_admin",
@@ -446,7 +473,7 @@ router.patch("/:id/abandon", async (req, res) => {
       action: "abandon_interview",
       entityType: "interview",
       entityId: interviewId,
-      clientId: req.clientId
+      clientId: req.clientId,
     });
 
     res.json({ ok: true });

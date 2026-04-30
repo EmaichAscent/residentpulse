@@ -45,9 +45,10 @@ router.post("/", async (req, res) => {
     .join("\n\n");
 
   const scoredSessions = sessions.filter((s) => s.nps_score != null);
-  const avgNps = scoredSessions.length > 0
-    ? (scoredSessions.reduce((sum, s) => sum + s.nps_score, 0) / scoredSessions.length).toFixed(1)
-    : "N/A";
+  const avgNps =
+    scoredSessions.length > 0
+      ? (scoredSessions.reduce((sum, s) => sum + s.nps_score, 0) / scoredSessions.length).toFixed(1)
+      : "N/A";
 
   const prompt = `You are analyzing resident feedback for a property management company. Below are ${sessions.length} survey responses that make up the current NPS calculation (average NPS: ${avgNps}).
 
