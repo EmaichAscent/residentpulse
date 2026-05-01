@@ -63,61 +63,60 @@ export default function ClientAdminLoginPage() {
         color: "var(--ink)",
       }}
     >
-      <div
-        className="grid min-h-screen"
-        style={{ gridTemplateColumns: "minmax(440px, 1fr) 1.25fr" }}
-      >
-        <div className="flex flex-col px-12 py-10" style={{ minWidth: 0 }}>
-          <BrandRow />
+      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[1fr_1.25fr]">
+        <div className="flex flex-col px-6 py-8 sm:px-10 sm:py-10 lg:px-12" style={{ minWidth: 0 }}>
+          <div className="mx-auto flex w-full flex-1 flex-col" style={{ maxWidth: 520 }}>
+            <BrandRow />
 
-          <div className="flex-1 flex flex-col justify-center max-w-[480px]">
-            <div
-              className="text-[11px] font-semibold uppercase mb-3"
-              style={{ letterSpacing: "0.12em", color: "var(--ink-3)" }}
-            >
-              Built for HOA management
+            <div className="flex flex-1 flex-col justify-center">
+              <div
+                className="text-[11px] font-semibold uppercase mb-3"
+                style={{ letterSpacing: "0.12em", color: "var(--ink-3)" }}
+              >
+                Built for HOA management
+              </div>
+              <h1
+                className="font-normal mb-4"
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: 44,
+                  lineHeight: 1.1,
+                  letterSpacing: "-0.015em",
+                  color: "var(--ink)",
+                }}
+              >
+                The pulse of your{" "}
+                <em style={{ color: "var(--pulse-deep)", fontStyle: "italic" }}>portfolio</em>, in
+                real time.
+              </h1>
+              <p
+                className="mb-8"
+                style={{
+                  fontSize: 14.5,
+                  lineHeight: 1.55,
+                  color: "var(--ink-2)",
+                  maxWidth: "38ch",
+                }}
+              >
+                ResidentPulse is the survey &amp; sentiment platform built for HOA management — so
+                you can spot dissatisfaction early, prove your value, and renew with confidence.
+              </p>
+
+              <FormCard
+                email={email}
+                setEmail={setEmail}
+                password={password}
+                setPassword={setPassword}
+                remember={remember}
+                setRemember={setRemember}
+                onSubmit={handleSubmit}
+                submitting={submitting}
+                error={error}
+              />
             </div>
-            <h1
-              className="font-normal mb-4"
-              style={{
-                fontFamily: "var(--font-display)",
-                fontSize: 44,
-                lineHeight: 1.1,
-                letterSpacing: "-0.015em",
-                color: "var(--ink)",
-              }}
-            >
-              The pulse of your{" "}
-              <em style={{ color: "var(--pulse-deep)", fontStyle: "italic" }}>portfolio</em>, in
-              real time.
-            </h1>
-            <p
-              className="mb-8"
-              style={{
-                fontSize: 14.5,
-                lineHeight: 1.55,
-                color: "var(--ink-2)",
-                maxWidth: "38ch",
-              }}
-            >
-              ResidentPulse is the survey &amp; sentiment platform built for HOA management — so you
-              can spot dissatisfaction early, prove your value, and renew with confidence.
-            </p>
 
-            <FormCard
-              email={email}
-              setEmail={setEmail}
-              password={password}
-              setPassword={setPassword}
-              remember={remember}
-              setRemember={setRemember}
-              onSubmit={handleSubmit}
-              submitting={submitting}
-              error={error}
-            />
+            <Footer />
           </div>
-
-          <Footer />
         </div>
 
         <PreviewColumn />
@@ -173,7 +172,7 @@ export function BrandRow() {
           className="text-[10px] font-semibold uppercase"
           style={{ letterSpacing: "0.1em", color: "var(--ink-4)" }}
         >
-          AN <span style={{ color: "var(--ink)" }}>AscentCAM</span> PRODUCT
+          A <span style={{ color: "var(--ink)" }}>CAM Ascent</span> product
         </div>
       </div>
     </div>
