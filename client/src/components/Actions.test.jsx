@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Routes, Route, Outlet } from "react-router-dom";
 import Actions from "./Actions";
 
@@ -22,18 +22,20 @@ function renderActions({ user = { email: "mike@camascent.com" }, fetchImpl } = {
 
 const sampleBrief = {
   round: { id: 42, round_number: 3, concluded_at: "2026-04-15T10:00:00Z" },
+  total_respondents: 200,
   picks: [
     {
       rank: 1,
       theme: "Maintenance ticket response time",
       summary: "Residents across many communities mention slow tickets.",
-      has_action: false,
+      priority: "high",
+      affected_detractor_count: 24,
     },
     {
       rank: 2,
       theme: "Special-assessment communication",
       summary: "Boards want more notice and rationale.",
-      has_action: true,
+      priority: "medium",
     },
   ],
 };
@@ -75,7 +77,7 @@ describe("Actions screen", () => {
     expect(screen.getByTestId("actions-loading")).toBeInTheDocument();
   });
 
-  it("renders the header, brief picks, and journal once data loads", async () => {
+  it("renders the header, both pick states, and done list once data loads", async () => {
     globalThis.fetch = vi.fn((url) => {
       if (url.includes("/brief")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleBrief) });
@@ -83,77 +85,67 @@ describe("Actions screen", () => {
       if (url.endsWith("/actions")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleActions) });
       }
+      if (url.includes("/users")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
 
     renderActions();
 
     expect(await screen.findByText("Actions")).toBeInTheDocument();
-    expect(screen.getByText(/Round 3 · 2 picks/i)).toBeInTheDocument();
-    // "Maintenance ticket response time" appears in both pick #1 AND action #1's
-    // theme tag — getAllByText finds both, which is the expected behavior.
-    expect(screen.getAllByText("Maintenance ticket response time").length).toBeGreaterThanOrEqual(
-      2
-    );
+    // Eyebrow: round + concluded date
+    expect(screen.getByText(/Round 3/i)).toBeInTheDocument();
+    // Pick #1 has a logged action → State B. The card eyebrow reads
+    // "From pick · Maintenance ticket response time" — broken across
+    // spans, so match with a regex.
+    expect(screen.getByText(/Maintenance ticket response time/i)).toBeInTheDocument();
+    // Pick #2 has no action → State A; theme is the headline.
     expect(screen.getByText("Special-assessment communication")).toBeInTheDocument();
+    // The active action's own title (the user's logged commitment) is
+    // now the State B card headline.
     expect(screen.getByText("Roll out 48-hour SLA dashboard")).toBeInTheDocument();
+    // Done section row title
     expect(screen.getByText("Pilot text-message updates with 3 boards")).toBeInTheDocument();
   });
 
-  it("shows 'Action logged' badge when an action exists for a brief theme", async () => {
+  it("shows the in-flight pill on a pick that has a logged action", async () => {
     globalThis.fetch = vi.fn((url) => {
       if (url.includes("/brief")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleBrief) });
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleActions) });
+      if (url.endsWith("/actions")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleActions) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
     });
 
     renderActions();
 
     await screen.findByText("Special-assessment communication");
-    // Pick #1 ("Maintenance...") has a matching action → "Action logged" badge.
-    expect(screen.getByText(/Action logged/i)).toBeInTheDocument();
-    // Pick #2 ("Special-assessment...") has NO logged action and no
-    // decision yet → Accept / Reject buttons shown (the new
-    // recommendation-decisions flow that replaced the single-path
-    // "Log what we're doing" UI).
-    expect(screen.getByText("Accept")).toBeInTheDocument();
-    expect(screen.getByText("Reject")).toBeInTheDocument();
+    // "In flight" appears in the header lede AND on the State B pill
+    // — both expected, so use getAllByText.
+    expect(screen.getAllByText(/in flight/i).length).toBeGreaterThanOrEqual(2);
+    // State A card on pick #2 has Accept controls
+    expect(screen.getAllByText(/Accept/).length).toBeGreaterThan(0);
   });
 
-  it("filters journal by 'Mine' to current user only", async () => {
+  it("shows accept-and-assign on undecided picks", async () => {
     globalThis.fetch = vi.fn((url) => {
       if (url.includes("/brief")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleBrief) });
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleActions) });
-    });
-
-    renderActions({ user: { email: "mike@camascent.com" } });
-
-    await screen.findByText("Roll out 48-hour SLA dashboard");
-    fireEvent.click(screen.getByText(/^Mine \(/));
-
-    // Tom's action should be hidden, Mike's should remain
-    expect(screen.queryByText("Roll out 48-hour SLA dashboard")).not.toBeInTheDocument();
-    expect(screen.getByText("Pilot text-message updates with 3 boards")).toBeInTheDocument();
-  });
-
-  it("filters journal by 'Completed'", async () => {
-    globalThis.fetch = vi.fn((url) => {
-      if (url.includes("/brief")) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleBrief) });
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleActions) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
     });
 
     renderActions();
 
-    await screen.findByText("Roll out 48-hour SLA dashboard");
-    fireEvent.click(screen.getByText(/^Completed \(/));
-
-    expect(screen.queryByText("Roll out 48-hour SLA dashboard")).not.toBeInTheDocument();
-    expect(screen.getByText("Pilot text-message updates with 3 boards")).toBeInTheDocument();
+    await screen.findByText("Special-assessment communication");
+    // Both picks now have no logged actions → both render State A.
+    // The primary CTA is "Accept & assign owner →".
+    expect(screen.getAllByText(/Accept & assign owner/).length).toBe(2);
+    // Decline (replaces "Reject" terminology in the new flow)
+    expect(screen.getAllByText(/^Decline$/).length).toBe(2);
   });
 
   it("shows the empty-brief copy when no concluded round exists", async () => {
@@ -173,27 +165,24 @@ describe("Actions screen", () => {
     expect(screen.getByText(/The brief generates from the AI insights/i)).toBeInTheDocument();
   });
 
-  it("renders Accept / Reject buttons on undecided brief picks", async () => {
-    // The single-path "Log what we're doing" button was replaced by an
-    // accept/reject flow: undecided picks show Accept + Reject; once
-    // accepted, "Configure & assign →" opens the ActionDrawer. This
-    // test guards the new structure — the full Accept → Configure →
-    // drawer round-trip is integration territory left to manual smoke.
+  it("collapses completed actions into the Done section", async () => {
     globalThis.fetch = vi.fn((url) => {
       if (url.includes("/brief")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleBrief) });
+      }
+      if (url.endsWith("/actions")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleActions) });
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
     });
 
     renderActions();
 
-    await screen.findByText("Special-assessment communication");
-    // Both picks have no logged action and no decision → Accept/Reject.
-    const acceptButtons = screen.getAllByText("Accept");
-    const rejectButtons = screen.getAllByText("Reject");
-    expect(acceptButtons.length).toBe(2);
-    expect(rejectButtons.length).toBe(2);
+    await screen.findByText("Pilot text-message updates with 3 boards");
+    // Done section header
+    expect(screen.getByText(/Done · 1/i)).toBeInTheDocument();
+    // Done pill on the completed row
+    expect(screen.getAllByText(/^Done$/i).length).toBeGreaterThan(0);
   });
 
   it("shows error state on fetch failure", async () => {

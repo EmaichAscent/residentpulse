@@ -186,7 +186,7 @@ router.post("/", async (req, res) => {
  * Marking an action 'completed' stamps completed_at server-side.
  */
 router.patch("/:id", async (req, res) => {
-  const { status, title, details } = req.body || {};
+  const { status, title, details, owner_email } = req.body || {};
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id) || id <= 0) {
@@ -227,6 +227,14 @@ router.patch("/:id", async (req, res) => {
     if (details !== undefined) {
       updates.push("details = ?");
       params.push(details?.trim() || null);
+    }
+    // owner_email reassignment — empty string clears the owner.
+    // Source of truth for who's selectable lives on the Account page;
+    // this endpoint just persists what the OwnerPicker dropdown sent.
+    if (owner_email !== undefined) {
+      const trimmed = typeof owner_email === "string" ? owner_email.trim() : "";
+      updates.push("owner_email = ?");
+      params.push(trimmed || null);
     }
     if (updates.length === 0) {
       return res.json(existing); // nothing to change

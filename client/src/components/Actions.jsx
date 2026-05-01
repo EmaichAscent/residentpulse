@@ -2,21 +2,37 @@ import { useState, useEffect, useCallback } from "react";
 import { useOutletContext } from "react-router-dom";
 import ActionDrawer from "./ActionDrawer";
 import ConfirmModal from "./ConfirmModal";
+import OwnerPicker from "./OwnerPicker";
 
 /**
- * Actions — the strategic centerpiece of the redesign.
+ * Actions — strategic centerpiece of the round-over-round loop.
  *
- * Three bands top-to-bottom:
- *   1. This Quarter's Brief: 1–3 ranked picks the AI surfaced from the
- *      latest concluded round.
- *   2. What we've done: filterable journal of logged actions.
- *   3. All themes: long-tail list of recommendations not in the brief,
- *      each loggable.
+ * Single concept, two states: each action you commit to is the
+ * downstream of an AI recommendation (or a critical alert). They
+ * share the same card slot — the card flips between two states
+ * depending on whether the user has logged something against it.
  *
- * Closed-loop is intentional: actions are {what, who, free-text note,
- * optional status}. No SLAs, due dates, notifications. The real payoff is
- * the next round's resident chat referencing what's been done — that
- * wiring is its own future PR.
+ *   STATE A · Recommended (no logged action yet)
+ *      Recommendation body is the focal content. Accept / Modify /
+ *      Decline CTAs. The pick stays in this slot until accepted.
+ *
+ *   STATE B · In flight (action logged against the theme)
+ *      Active progress is the focal content — owner chip, latest
+ *      update, mark-complete CTA. The original recommendation
+ *      collapses into a click-to-expand provenance footer.
+ *
+ * Page composition reflects priorities:
+ *   • Active picks rise to the top, loud
+ *   • "Other actions in flight" — actions whose theme isn't on the
+ *     current brief (warning-spawned via the Round Results alerts
+ *     panel, or manually created) — render in the same State B
+ *     shape just below
+ *   • Recommended (still-to-decide) picks below that, only loud
+ *     when there are NO active actions
+ *   • Done — collapsed one-line summary rows at the bottom
+ *
+ * Owner assignment uses OwnerPicker → /api/admin/users (the same
+ * Admin users list shown on Account → Admin users).
  */
 export default function Actions() {
   const { user } = useOutletContext();
@@ -25,9 +41,9 @@ export default function Actions() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [drawerSeed, setDrawerSeed] = useState(null);
-  const [filter, setFilter] = useState("all"); // "all" | "mine" | "completed"
   const [completeTarget, setCompleteTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [reopenError, setReopenError] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,7 +82,7 @@ export default function Actions() {
       }
       await load();
     } catch (err) {
-      alert(err.message);
+      setReopenError(err.message);
     }
   };
 
@@ -81,22 +97,13 @@ export default function Actions() {
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      alert(err.message);
+      setReopenError(err.message);
       setDeleteTarget(null);
     }
   };
 
-  const filteredActions = actions.filter((a) => {
-    if (filter === "mine") return a.owner_email === user?.email;
-    if (filter === "completed") return a.status === "completed";
-    return true;
-  });
-
-  // Accept/reject decisions on brief picks. Same backend as the
-  // Round Results dashboard and Rounds landing page (POST/DELETE
-  // /api/admin/actions/decisions). Optimistic local update flips the
-  // UI immediately; a follow-up `load()` reconciles with whatever
-  // the brief endpoint returns.
+  // Same backend as Round Results / Rounds landing — kept identical
+  // so the three pages stay in sync.
   const handleDecision = async (theme, decision) => {
     if (!brief.round || !theme) return;
     try {
@@ -115,6 +122,7 @@ export default function Actions() {
         }));
       }
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error("Failed to record decision:", err);
     }
   };
@@ -137,6 +145,7 @@ export default function Actions() {
         }));
       }
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error("Failed to undo decision:", err);
     }
   };
@@ -160,117 +169,130 @@ export default function Actions() {
     );
   }
 
+  // Bucket the data into the four sections.
+  const actionByTheme = new Map();
+  for (const a of actions) {
+    if (!actionByTheme.has(a.theme)) actionByTheme.set(a.theme, a);
+  }
+  const matchedThemes = new Set();
+
+  const activePicks = [];
+  const pendingPicks = [];
+  const declinedPicks = [];
+  for (const pick of brief.picks) {
+    const matched = actionByTheme.get(pick.theme);
+    if (matched) {
+      matchedThemes.add(pick.theme);
+      if (matched.status !== "completed") {
+        activePicks.push({ pick, action: matched });
+      }
+    } else if (pick.decision === "rejected") {
+      declinedPicks.push(pick);
+    } else {
+      pendingPicks.push(pick);
+    }
+  }
+
+  const otherInFlight = actions.filter(
+    (a) => a.status !== "completed" && !matchedThemes.has(a.theme)
+  );
+  const doneActions = actions.filter((a) => a.status === "completed");
+
+  const inFlightCount = activePicks.length + otherInFlight.length;
+
   return (
-    <div className="space-y-8">
-      {/* ─── Header ─── */}
-      <div>
-        <p
-          className="text-[11px] font-semibold uppercase tracking-wider mb-1"
-          style={{ color: "var(--ink-4)", letterSpacing: "0.12em" }}
-        >
-          {brief.round
-            ? `Round ${brief.round.round_number} · ${brief.picks.length} picks`
-            : "No brief yet"}
-        </p>
-        <h1
-          style={{
-            fontFamily: "var(--font-display)",
-            fontSize: 32,
-            fontWeight: 500,
-            letterSpacing: "-0.02em",
-            color: "var(--ink)",
-          }}
-        >
-          Actions
-        </h1>
-        <p className="text-sm mt-2 max-w-2xl" style={{ color: "var(--ink-3)" }}>
-          The fewest, biggest moves your organization can make this quarter to lift sentiment across
-          the portfolio. Optional. Skippable. We track what you log so we can tell residents about
-          it next round.
-        </p>
-      </div>
+    <div className="flex flex-col" style={{ gap: 28 }} data-testid="actions">
+      <Header
+        round={brief.round}
+        inFlightCount={inFlightCount}
+        pendingCount={pendingPicks.length}
+      />
 
-      {/* ─── Band 1 — This Quarter's Brief ─── */}
-      <section>
-        <SectionHeader>This quarter's brief</SectionHeader>
-        {brief.picks.length === 0 ? (
-          <Card className="mt-3">
-            <p className="text-sm" style={{ color: "var(--ink-3)" }}>
-              No picks yet. The brief generates from the AI insights of the most recent concluded
-              round. Conclude a round with insights to see picks here.
-            </p>
-          </Card>
-        ) : (
-          <div className="mt-3 space-y-3">
-            {brief.picks.map((pick) => {
-              const loggedAction = actions.find((a) => a.theme === pick.theme);
-              return (
-                <BriefPick
-                  key={pick.theme}
-                  pick={pick}
-                  loggedAction={loggedAction}
-                  totalRespondents={brief.total_respondents}
-                  onAccept={() => handleDecision(pick.theme, "accepted")}
-                  onReject={() => handleDecision(pick.theme, "rejected")}
-                  onUndoDecision={() => handleUndoDecision(pick.theme)}
-                  onConfigure={() =>
-                    setDrawerSeed({
-                      theme: pick.theme,
-                      title: pick.theme,
-                      details:
-                        [pick.summary, pick.rationale].filter(Boolean).join(" · ") ||
-                        (brief.round ? `Round ${brief.round.round_number} · ` : "") +
-                          "Generated from AI insights.",
-                    })
-                  }
-                />
-              );
-            })}
-          </div>
-        )}
-      </section>
+      {/* ─── Active picks (State B) ─── */}
+      {activePicks.map(({ pick, action }) => (
+        <PickCard
+          key={pick.theme}
+          pick={pick}
+          action={action}
+          totalRespondents={brief.total_respondents}
+          onMarkComplete={() => setCompleteTarget(action)}
+          onAddUpdate={() =>
+            setDrawerSeed({
+              mode: "edit",
+              actionId: action.id,
+              theme: pick.theme,
+              title: action.title,
+              details: action.details || "",
+              owner_email: action.owner_email || "",
+              providence: pick,
+            })
+          }
+          onReassign={(email) => updateAction(action.id, { owner_email: email })}
+          onDelete={() => setDeleteTarget(action)}
+        />
+      ))}
 
-      {/* ─── Band 2 — What we've done ─── */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <SectionHeader>What we've done</SectionHeader>
-          <div className="flex gap-1.5 text-xs">
-            <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
-              All ({actions.length})
-            </FilterChip>
-            <FilterChip active={filter === "mine"} onClick={() => setFilter("mine")}>
-              Mine ({actions.filter((a) => a.owner_email === user?.email).length})
-            </FilterChip>
-            <FilterChip active={filter === "completed"} onClick={() => setFilter("completed")}>
-              Completed ({actions.filter((a) => a.status === "completed").length})
-            </FilterChip>
-          </div>
-        </div>
+      {/* ─── Other in-flight actions (warning-spawned or manual) ─── */}
+      {otherInFlight.map((action) => (
+        <ActionCard
+          key={action.id}
+          action={action}
+          onMarkComplete={() => setCompleteTarget(action)}
+          onAddUpdate={() =>
+            setDrawerSeed({
+              mode: "edit",
+              actionId: action.id,
+              theme: action.theme,
+              title: action.title,
+              details: action.details || "",
+              owner_email: action.owner_email || "",
+            })
+          }
+          onReassign={(email) => updateAction(action.id, { owner_email: email })}
+          onDelete={() => setDeleteTarget(action)}
+        />
+      ))}
 
-        {filteredActions.length === 0 ? (
-          <Card>
-            <p className="text-sm" style={{ color: "var(--ink-3)" }}>
-              {actions.length === 0
-                ? "Nothing logged yet. Log an action above and it lands here."
-                : "Nothing matches this filter."}
-            </p>
-          </Card>
-        ) : (
-          <div className="space-y-2">
-            {filteredActions.map((action) => (
-              <ActionRow
-                key={action.id}
-                action={action}
-                onComplete={() => setCompleteTarget(action)}
-                onReopen={() => updateAction(action.id, { status: "in_progress" })}
-                onDelete={() => setDeleteTarget(action)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      {/* ─── Pending recommendations (State A) ─── */}
+      {pendingPicks.length > 0 && (
+        <PendingPicksHeader inFlightCount={inFlightCount} pendingCount={pendingPicks.length} />
+      )}
+      {pendingPicks.map((pick) => (
+        <PickCard
+          key={pick.theme}
+          pick={pick}
+          action={null}
+          totalRespondents={brief.total_respondents}
+          onAccept={() => handleDecision(pick.theme, "accepted")}
+          onAcceptAndAssign={() =>
+            setDrawerSeed({
+              mode: "create",
+              theme: pick.theme,
+              title: pick.theme,
+              details:
+                [pick.summary, pick.rationale].filter(Boolean).join(" · ") ||
+                (brief.round ? `Round ${brief.round.round_number} · ` : "") +
+                  "Generated from AI insights.",
+              owner_email: user?.email || "",
+              providence: pick,
+            })
+          }
+          onDecline={() => handleDecision(pick.theme, "rejected")}
+          onUndoDecision={() => handleUndoDecision(pick.theme)}
+        />
+      ))}
 
-      {/* ─── Drawer (lazy-rendered when open) ─── */}
+      {/* ─── Empty states ─── */}
+      {brief.picks.length === 0 && otherInFlight.length === 0 && doneActions.length === 0 && (
+        <EmptyState reason={brief.round ? "no-picks" : "no-round"} />
+      )}
+
+      {/* ─── Done — collapsed one-liners ─── */}
+      {(doneActions.length > 0 || declinedPicks.length > 0) && (
+        <DoneSection actions={doneActions} declined={declinedPicks} round={brief.round} />
+      )}
+
+      {/* ─── Drawer ─── */}
       <ActionDrawer
         isOpen={!!drawerSeed}
         seed={drawerSeed}
@@ -293,7 +315,7 @@ export default function Actions() {
         title="Mark as completed"
         message={
           completeTarget
-            ? `Mark "${completeTarget.title}" as completed?\n\nYou can reopen it later if needed.`
+            ? `Mark "${completeTarget.title}" as completed?\n\nIt will move to the Done list. You can reopen it later.`
             : ""
         }
         confirmLabel="Mark completed"
@@ -305,372 +327,953 @@ export default function Actions() {
         title="Delete action"
         message={
           deleteTarget
-            ? `Delete "${deleteTarget.title}"?\n\nThis removes the entry permanently.`
+            ? `Delete "${deleteTarget.title}"?\n\nThis removes the entry permanently. The original recommendation stays available — you can re-accept it.`
             : ""
         }
         confirmLabel="Delete"
         destructive
       />
+
+      {reopenError && (
+        <div
+          className="rounded-lg px-3 py-2 text-[12.5px]"
+          style={{
+            backgroundColor: "var(--coral-tint)",
+            color: "var(--coral)",
+            border: "1px solid var(--coral-soft)",
+          }}
+        >
+          {reopenError}
+        </div>
+      )}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Pieces
-// ─────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────
+// Header — posture-aware copy
+// ──────────────────────────────────────────────────────────────────────
 
-/**
- * Brief pick — Accept/Reject + NPS lift, matching the Round Results
- * page's recommendation row exactly. Three states:
- *
- *   • No decision yet → Accept (primary) / Reject buttons
- *   • Accepted, no logged action → "Configure & assign →" + Change my mind
- *   • Logged → "Action logged" pill (status: in progress / completed)
- *   • Rejected → muted row with Undo
- *
- * NPS lift uses the same conservative model as Round Results:
- *   lift_pts = 0.5 × affected_detractors / total_respondents × 100
- */
-function BriefPick({
+function Header({ round, inFlightCount, pendingCount }) {
+  let lede;
+  if (inFlightCount > 0 && pendingCount > 0) {
+    lede = (
+      <>
+        <strong style={{ color: "var(--pulse-deep)" }}>
+          {inFlightCount} {inFlightCount === 1 ? "action" : "actions"} in flight
+        </strong>
+        . Here's where they stand. <strong>{pendingCount}</strong>{" "}
+        {pendingCount === 1 ? "pick" : "picks"} still waiting on a decision.
+      </>
+    );
+  } else if (inFlightCount > 0) {
+    lede = (
+      <>
+        <strong style={{ color: "var(--pulse-deep)" }}>
+          {inFlightCount} {inFlightCount === 1 ? "action" : "actions"} in flight
+        </strong>
+        . Here's where they stand.
+      </>
+    );
+  } else if (pendingCount > 0) {
+    lede = (
+      <>
+        <strong>
+          {pendingCount} {pendingCount === 1 ? "pick" : "picks"} ready
+        </strong>{" "}
+        — choose what to commit to this quarter.
+      </>
+    );
+  } else {
+    lede = "All clear. Recommendations regenerate after each round closes.";
+  }
+
+  return (
+    <div>
+      {round && (
+        <p
+          className="text-[11px] font-semibold uppercase mb-1.5"
+          style={{ color: "var(--ink-4)", letterSpacing: "0.12em" }}
+        >
+          Round {round.round_number}
+          {round.concluded_at &&
+            ` · Closed ${new Date(round.concluded_at).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}`}
+        </p>
+      )}
+      <h1
+        style={{
+          fontFamily: "var(--font-display)",
+          fontSize: 32,
+          fontWeight: 500,
+          letterSpacing: "-0.02em",
+          color: "var(--ink)",
+        }}
+      >
+        Actions
+      </h1>
+      <p className="text-[14px] mt-1.5" style={{ color: "var(--ink-3)" }}>
+        {lede}
+      </p>
+    </div>
+  );
+}
+
+function PendingPicksHeader({ inFlightCount, pendingCount }) {
+  // When there are no active actions, the pending picks ARE the
+  // focus — no eyebrow needed (header lede already says so). When
+  // active actions exist, this thin eyebrow visually demotes pending
+  // to "next up".
+  if (inFlightCount === 0) return null;
+  return (
+    <div
+      className="text-[11px] font-semibold uppercase"
+      style={{ color: "var(--ink-4)", letterSpacing: "0.12em", marginTop: 4, marginBottom: -12 }}
+    >
+      Still to decide · {pendingCount}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// PickCard — handles both states A and B
+// ──────────────────────────────────────────────────────────────────────
+
+function PickCard({
   pick,
-  loggedAction,
+  action,
   totalRespondents,
   onAccept,
-  onReject,
+  onAcceptAndAssign,
+  onDecline,
   onUndoDecision,
-  onConfigure,
+  onMarkComplete,
+  onAddUpdate,
+  onReassign,
+  onDelete,
 }) {
-  const decision = pick.decision;
-  const isAccepted = decision === "accepted";
-  const isRejected = decision === "rejected";
-  const isLogged = !!loggedAction;
-
-  const lift =
-    typeof pick.affected_detractor_count === "number" && totalRespondents > 0
-      ? Math.round((0.5 * pick.affected_detractor_count * 100) / totalRespondents)
-      : null;
-
-  const priorityLabel =
-    pick.priority === "high"
-      ? "HIGH PRIORITY"
-      : pick.priority === "medium"
-        ? "MEDIUM"
-        : pick.priority === "low"
-          ? "LOW"
-          : pick.priority === "keep_doing"
-            ? "KEEP DOING"
-            : null;
-  const priorityColor =
-    pick.priority === "high"
-      ? "var(--coral)"
-      : pick.priority === "keep_doing"
-        ? "var(--pulse-deep)"
-        : pick.priority === "medium"
-          ? "var(--amber)"
-          : "var(--ink-4)";
+  const isActive = !!action;
+  const lift = computeLift(pick, totalRespondents);
 
   return (
     <div
-      className="rounded-xl border overflow-hidden flex"
+      className="rounded-2xl bg-white"
       style={{
-        borderColor: "var(--line)",
-        backgroundColor: "white",
-        opacity: isRejected ? 0.55 : 1,
+        border: "1px solid var(--line)",
+        boxShadow: isActive ? "var(--shadow-md)" : "var(--shadow-sm)",
+        borderLeft: isActive ? "3px solid var(--pulse)" : "1px solid var(--line)",
+        padding: "22px 24px",
+      }}
+    >
+      <CardHead
+        rank={`PICK ${pick.rank}`}
+        statusPill={
+          isActive ? (
+            <Pill tone="in-flight">
+              <PulseDot /> In flight
+            </Pill>
+          ) : (
+            <Pill tone="neutral">Recommended</Pill>
+          )
+        }
+        priority={pick.priority}
+        liftBadge={!isActive && lift != null && lift > 0 ? `↑ +${lift} NPS projected` : null}
+      />
+
+      {isActive ? (
+        <>
+          {/* In-flight: the *action title* (what the user committed
+              to) is the headline. The pick theme drops to a small
+              eyebrow above so the lineage stays visible — but the
+              focal content is the work itself. */}
+          <div
+            className="text-[11.5px] font-semibold uppercase mt-2"
+            style={{ letterSpacing: "0.08em", color: "var(--ink-4)" }}
+          >
+            From pick · {pick.theme}
+          </div>
+          <Title>{action.title}</Title>
+          <ActiveBody
+            action={action}
+            onMarkComplete={onMarkComplete}
+            onAddUpdate={onAddUpdate}
+            onReassign={onReassign}
+            onDelete={onDelete}
+            provenance={
+              <Provenance label="Original recommendation" tone="pulse">
+                <ProvenanceBlock
+                  source={`From AI Pick · accepted ${formatDate(action.created_at)}`}
+                  summary={pick.summary}
+                  rationale={pick.rationale}
+                />
+              </Provenance>
+            }
+          />
+        </>
+      ) : (
+        <>
+          <Title>{pick.theme}</Title>
+          <RecommendedBody
+            pick={pick}
+            totalRespondents={totalRespondents}
+            lift={lift}
+            onAccept={onAccept}
+            onAcceptAndAssign={onAcceptAndAssign}
+            onDecline={onDecline}
+            onUndoDecision={onUndoDecision}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// ActionCard — for actions whose theme isn't on the brief
+// (warning-spawned via Round Results alerts panel, or manual). Same
+// State B visual; provenance footer differs.
+// ──────────────────────────────────────────────────────────────────────
+
+function ActionCard({ action, onMarkComplete, onAddUpdate, onReassign, onDelete }) {
+  const sourceLabel = labelForAlertTheme(action.theme) || action.theme || "Manual entry";
+  const isAlert = isAlertTheme(action.theme);
+
+  return (
+    <div
+      className="rounded-2xl bg-white"
+      style={{
+        border: "1px solid var(--line)",
+        boxShadow: "var(--shadow-md)",
+        borderLeft: "3px solid var(--pulse)",
+        padding: "22px 24px",
+      }}
+    >
+      <CardHead
+        rank={isAlert ? "ALERT" : "ACTION"}
+        statusPill={
+          <Pill tone="in-flight">
+            <PulseDot /> In flight
+          </Pill>
+        }
+        sideBadge={isAlert ? <Pill tone="warn">{sourceLabel}</Pill> : null}
+      />
+      <Title>{action.title}</Title>
+
+      <ActiveBody
+        action={action}
+        onMarkComplete={onMarkComplete}
+        onAddUpdate={onAddUpdate}
+        onReassign={onReassign}
+        onDelete={onDelete}
+        provenance={
+          <Provenance
+            label={isAlert ? "Alert that triggered this" : "Source"}
+            tone={isAlert ? "coral" : "neutral"}
+          >
+            <ProvenanceBlock
+              source={
+                isAlert
+                  ? `Critical alert · logged ${formatDate(action.created_at)}`
+                  : `Manually created · ${formatDate(action.created_at)}`
+              }
+              summary={
+                isAlert
+                  ? `Triggered by a "${sourceLabel}" alert. Action created via the Round Results alerts panel.`
+                  : "Created directly from the Actions screen."
+              }
+            />
+          </Provenance>
+        }
+      />
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// State B body — owner, latest update, CTAs, provenance footer
+// ──────────────────────────────────────────────────────────────────────
+
+function ActiveBody({ action, onMarkComplete, onAddUpdate, onReassign, onDelete, provenance }) {
+  return (
+    <>
+      {/* Latest update — uses the action's `details` field as the
+          single most-recent note. A future PR can layer a real updates
+          table; for now, "Add update" overwrites the same field via
+          the drawer in edit mode. */}
+      {action.details && (
+        <div
+          className="rounded-xl"
+          style={{
+            backgroundColor: "var(--pulse-tint)",
+            padding: "12px 16px",
+            marginTop: 14,
+            borderLeft: "2px solid var(--pulse-soft)",
+          }}
+        >
+          <div
+            className="text-[10.5px] font-semibold uppercase mb-1"
+            style={{ letterSpacing: "0.1em", color: "var(--pulse-deep)" }}
+          >
+            Latest update
+          </div>
+          <p
+            className="text-[13px]"
+            style={{
+              color: "var(--ink-2)",
+              lineHeight: 1.5,
+              fontStyle: "italic",
+              margin: 0,
+            }}
+          >
+            "{action.details}"
+          </p>
+          <div className="text-[11px] mt-2" style={{ color: "var(--ink-4)" }}>
+            {action.owner_email ? `${action.owner_email} · ` : ""}
+            logged {formatRelativeDate(action.created_at)}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center" style={{ gap: 14, marginTop: 14, flexWrap: "wrap" }}>
+        <span className="text-[12.5px]" style={{ color: "var(--ink-3)" }}>
+          Owner
+        </span>
+        <OwnerPicker value={action.owner_email || ""} onChange={onReassign} compact />
+      </div>
+
+      <div className="flex items-center mt-4" style={{ gap: 8, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={onMarkComplete}
+          className="font-semibold rounded-lg transition"
+          style={{
+            backgroundColor: "var(--pulse)",
+            color: "white",
+            padding: "8px 14px",
+            fontSize: 12.5,
+            cursor: "pointer",
+            border: "1px solid var(--pulse)",
+          }}
+        >
+          Mark complete
+        </button>
+        <button
+          type="button"
+          onClick={onAddUpdate}
+          className="font-semibold rounded-lg transition"
+          style={{
+            backgroundColor: "white",
+            color: "var(--ink)",
+            padding: "8px 14px",
+            fontSize: 12.5,
+            border: "1px solid var(--line-2)",
+            cursor: "pointer",
+          }}
+        >
+          {action.details ? "Edit update" : "Add update"}
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="font-semibold transition"
+          style={{
+            background: "transparent",
+            color: "var(--ink-4)",
+            padding: "8px 4px",
+            fontSize: 12,
+            border: 0,
+            cursor: "pointer",
+          }}
+          title="Delete this action"
+        >
+          Delete
+        </button>
+      </div>
+
+      {provenance}
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// State A body — recommendation read + CTAs
+// ──────────────────────────────────────────────────────────────────────
+
+function RecommendedBody({
+  pick,
+  totalRespondents,
+  lift,
+  onAccept,
+  onAcceptAndAssign,
+  onDecline,
+  onUndoDecision,
+}) {
+  const isAccepted = pick.decision === "accepted";
+
+  return (
+    <>
+      {pick.summary && (
+        <p
+          className="text-[13.5px]"
+          style={{
+            color: "var(--ink-2)",
+            lineHeight: 1.55,
+            margin: "12px 0 0",
+          }}
+        >
+          {pick.summary}
+        </p>
+      )}
+      {pick.rationale && pick.rationale !== pick.summary && (
+        <p
+          className="text-[13px]"
+          style={{
+            color: "var(--ink-3)",
+            lineHeight: 1.55,
+            margin: "8px 0 0",
+          }}
+        >
+          {pick.rationale}
+        </p>
+      )}
+
+      {(lift != null && lift > 0) || pick.affected_detractor_count != null ? (
+        <p className="text-[11.5px]" style={{ color: "var(--ink-4)", marginTop: 10 }}>
+          {pick.affected_detractor_count != null && totalRespondents > 0
+            ? `Affecting ${pick.affected_detractor_count} of ${totalRespondents} respondents`
+            : null}
+          {lift != null && lift > 0 ? (
+            <>
+              {" "}
+              · projected lift <strong style={{ color: "var(--pulse-deep)" }}>+{lift} NPS</strong>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+
+      <div className="flex items-center mt-4" style={{ gap: 8, flexWrap: "wrap" }}>
+        {isAccepted ? (
+          <>
+            <button
+              type="button"
+              onClick={onAcceptAndAssign}
+              className="font-semibold rounded-lg transition"
+              style={{
+                backgroundColor: "var(--pulse)",
+                color: "white",
+                padding: "9px 16px",
+                fontSize: 13,
+                border: "1px solid var(--pulse)",
+                cursor: "pointer",
+              }}
+            >
+              Configure &amp; assign owner →
+            </button>
+            <button
+              type="button"
+              onClick={onUndoDecision}
+              className="font-semibold transition"
+              style={{
+                background: "transparent",
+                color: "var(--ink-4)",
+                padding: "9px 4px",
+                fontSize: 12,
+                border: 0,
+                textDecoration: "underline",
+                cursor: "pointer",
+              }}
+            >
+              Change my mind
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={onAcceptAndAssign}
+              className="font-semibold rounded-lg transition"
+              style={{
+                backgroundColor: "var(--pulse)",
+                color: "white",
+                padding: "9px 16px",
+                fontSize: 13,
+                border: "1px solid var(--pulse)",
+                cursor: "pointer",
+              }}
+            >
+              Accept &amp; assign owner →
+            </button>
+            <button
+              type="button"
+              onClick={onAccept}
+              className="font-semibold rounded-lg transition"
+              style={{
+                backgroundColor: "white",
+                color: "var(--ink)",
+                padding: "9px 16px",
+                fontSize: 13,
+                border: "1px solid var(--line-2)",
+                cursor: "pointer",
+              }}
+              title="Accept now, assign owner later"
+            >
+              Accept
+            </button>
+            <button
+              type="button"
+              onClick={onDecline}
+              className="font-semibold transition"
+              style={{
+                background: "transparent",
+                color: "var(--ink-4)",
+                padding: "9px 4px",
+                fontSize: 12,
+                border: 0,
+                cursor: "pointer",
+              }}
+            >
+              Decline
+            </button>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Card head + atoms
+// ──────────────────────────────────────────────────────────────────────
+
+function CardHead({ rank, statusPill, priority, liftBadge, sideBadge }) {
+  const priorityLabel = priorityLabelFor(priority);
+  return (
+    <div className="flex items-center" style={{ gap: 10, flexWrap: "wrap" }}>
+      <span
+        className="font-semibold"
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 11,
+          color: "var(--ink-4)",
+          letterSpacing: "0.06em",
+        }}
+      >
+        {rank}
+      </span>
+      {statusPill}
+      {priorityLabel && <Pill tone={priorityLabel.tone}>{priorityLabel.label}</Pill>}
+      {sideBadge}
+      {liftBadge && (
+        <span
+          className="text-[11px] font-semibold rounded-full"
+          style={{
+            color: "var(--pulse-deep)",
+            backgroundColor: "var(--pulse-tint)",
+            padding: "3px 9px",
+          }}
+        >
+          {liftBadge}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Title({ children }) {
+  return (
+    <h3
+      className="font-medium"
+      style={{
+        fontFamily: "var(--font-display)",
+        fontSize: 20,
+        letterSpacing: "-0.01em",
+        color: "var(--ink)",
+        marginTop: 8,
+        marginBottom: 0,
+        lineHeight: 1.25,
+      }}
+    >
+      {children}
+    </h3>
+  );
+}
+
+function Pill({ tone, children }) {
+  const tones = {
+    "in-flight": { bg: "var(--pulse-tint)", color: "var(--pulse-deep)" },
+    neutral: { bg: "var(--paper-2)", color: "var(--ink-2)" },
+    high: { bg: "var(--coral-tint)", color: "var(--coral)" },
+    medium: { bg: "var(--amber-tint)", color: "var(--amber)" },
+    low: { bg: "var(--paper-2)", color: "var(--ink-3)" },
+    "keep-doing": { bg: "var(--pulse-tint)", color: "var(--pulse-deep)" },
+    warn: { bg: "var(--coral-tint)", color: "var(--coral)" },
+    done: { bg: "var(--leaf-tint)", color: "var(--leaf)" },
+    declined: { bg: "var(--paper-3)", color: "var(--ink-3)" },
+  };
+  const t = tones[tone] || tones.neutral;
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full"
+      style={{
+        backgroundColor: t.bg,
+        color: t.color,
+        fontSize: 10.5,
+        fontWeight: 700,
+        padding: "3px 9px",
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function PulseDot() {
+  return (
+    <>
+      <span
+        className="rounded-full inline-block"
+        style={{
+          width: 6,
+          height: 6,
+          backgroundColor: "var(--pulse)",
+          animation: "actions-pulse 1.6s infinite",
+        }}
+      />
+      <style>{`
+        @keyframes actions-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.45; }
+        }
+      `}</style>
+    </>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Provenance footer — collapsible, shows source of truth
+// ──────────────────────────────────────────────────────────────────────
+
+function Provenance({ label, tone, children }) {
+  const [open, setOpen] = useState(false);
+  const accent =
+    tone === "pulse" ? "var(--pulse-deep)" : tone === "coral" ? "var(--coral)" : "var(--ink-3)";
+  return (
+    <div
+      style={{
+        marginTop: 16,
+        paddingTop: 14,
+        borderTop: "1px solid var(--line)",
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="font-semibold inline-flex items-center"
+        style={{
+          background: "transparent",
+          border: 0,
+          padding: 0,
+          color: open ? accent : "var(--ink-3)",
+          fontSize: 12,
+          cursor: "pointer",
+          gap: 6,
+        }}
+      >
+        <span style={{ color: "var(--ink-4)" }}>{open ? "▾" : "▸"}</span>
+        {label}
+      </button>
+      {open && <div style={{ marginTop: 12 }}>{children}</div>}
+    </div>
+  );
+}
+
+function ProvenanceBlock({ source, summary, rationale }) {
+  return (
+    <div
+      className="rounded-xl"
+      style={{
+        backgroundColor: "var(--paper-2)",
+        padding: "14px 16px",
+        fontSize: 12.5,
+        lineHeight: 1.55,
+        color: "var(--ink-2)",
       }}
     >
       <div
-        className="flex-shrink-0 flex items-center justify-center px-6 py-4"
-        style={{ backgroundColor: "var(--ink)", color: "white", minWidth: 80 }}
+        className="text-[10.5px] font-semibold uppercase mb-2"
+        style={{ letterSpacing: "0.08em", color: "var(--ink-4)" }}
       >
-        <div className="text-center">
-          <div
-            className="text-[10px] font-semibold uppercase tracking-wider"
-            style={{ letterSpacing: "0.15em" }}
-          >
-            Pick
-          </div>
-          <div
-            style={{
-              fontFamily: "var(--font-display)",
-              fontSize: 32,
-              fontWeight: 500,
-              lineHeight: 1,
-            }}
-          >
-            {pick.rank}
-          </div>
-        </div>
+        {source}
       </div>
-      <div className="flex-1 p-4">
-        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-          {priorityLabel && (
-            <span
-              className="text-[10px] font-bold uppercase"
-              style={{ color: priorityColor, letterSpacing: "0.08em" }}
-            >
-              {priorityLabel}
-            </span>
-          )}
-          {isLogged ? (
-            <span
-              className="text-[10.5px] font-bold uppercase rounded-full px-2 py-0.5"
-              style={{
-                backgroundColor: "var(--pulse-tint)",
-                color: "var(--pulse-deep)",
-                letterSpacing: "0.06em",
-              }}
-            >
-              ✓ {loggedAction.status === "completed" ? "Completed" : "In progress"}
-            </span>
-          ) : isAccepted ? (
-            <span
-              className="text-[10.5px] font-bold uppercase rounded-full px-2 py-0.5"
-              style={{
-                backgroundColor: "var(--pulse-tint)",
-                color: "var(--pulse-deep)",
-                letterSpacing: "0.06em",
-              }}
-            >
-              ✓ Accepted
-            </span>
-          ) : isRejected ? (
-            <span
-              className="text-[10.5px] font-bold uppercase rounded-full px-2 py-0.5"
-              style={{
-                backgroundColor: "var(--paper-3)",
-                color: "var(--ink-3)",
-                letterSpacing: "0.06em",
-              }}
-            >
-              Rejected
-            </span>
-          ) : (
-            <span
-              className="text-[10.5px] font-bold uppercase rounded-full px-2 py-0.5"
-              style={{
-                backgroundColor: "var(--coral-tint)",
-                color: "var(--coral)",
-                letterSpacing: "0.06em",
-              }}
-            >
-              Pending decision
-            </span>
-          )}
-          {lift != null && lift > 0 && !isRejected && (
-            <span
-              className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full"
-              style={{
-                backgroundColor: "var(--pulse-tint)",
-                color: "var(--pulse-deep)",
-                padding: "2px 8px",
-              }}
-              title={`Conservative projection: ${pick.affected_detractor_count} detractors mentioned this. Assumes 50% convert from detractor → passive when the issue is addressed.`}
-            >
-              ↑ +{lift} NPS projected
-            </span>
-          )}
-        </div>
-        <h3
-          className="font-semibold"
-          style={{
-            fontFamily: "var(--font-display)",
-            fontSize: 20,
-            color: "var(--ink)",
-            marginBottom: 6,
-          }}
-        >
-          {pick.theme}
-        </h3>
-        {pick.summary && (
-          <p className="text-sm mb-2" style={{ color: "var(--ink-2)" }}>
-            {pick.summary}
-          </p>
-        )}
-        {lift != null && pick.affected_detractor_count != null && !isRejected && (
-          <div className="text-[11px] mb-3" style={{ color: "var(--ink-4)" }}>
-            Based on {pick.affected_detractor_count} detractors of {totalRespondents} respondents ·
-            50% conversion to passive
-          </div>
-        )}
-        <div className="flex items-center gap-2 flex-wrap">
-          {isLogged ? (
-            <span
-              className="text-xs px-2.5 py-1 rounded-full font-semibold"
-              style={{ backgroundColor: "var(--pulse-tint)", color: "var(--pulse-deep)" }}
-            >
-              Action logged
-            </span>
-          ) : isRejected ? (
-            <button
-              onClick={onUndoDecision}
-              className="text-xs px-3 py-1.5 rounded-lg font-semibold transition"
-              style={{
-                backgroundColor: "white",
-                color: "var(--ink-2)",
-                border: "1px solid var(--line-2)",
-              }}
-            >
-              Undo
-            </button>
-          ) : isAccepted ? (
-            <>
-              <button
-                onClick={onConfigure}
-                className="text-xs px-3 py-1.5 rounded-lg text-white font-semibold transition"
-                style={{ backgroundColor: "var(--pulse)" }}
-              >
-                Configure &amp; assign →
-              </button>
-              <button
-                onClick={onUndoDecision}
-                className="text-[11px] underline"
-                style={{ color: "var(--ink-4)" }}
-              >
-                Change my mind
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={onAccept}
-                className="text-xs px-3 py-1.5 rounded-lg text-white font-semibold transition"
-                style={{ backgroundColor: "var(--pulse)" }}
-              >
-                Accept
-              </button>
-              <button
-                onClick={onReject}
-                className="text-xs px-3 py-1.5 rounded-lg font-semibold transition"
-                style={{
-                  backgroundColor: "white",
-                  color: "var(--ink-2)",
-                  border: "1px solid var(--line-2)",
-                }}
-              >
-                Reject
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      {summary && <p style={{ margin: 0 }}>{summary}</p>}
+      {rationale && rationale !== summary && (
+        <p style={{ margin: "8px 0 0", color: "var(--ink-3)" }}>{rationale}</p>
+      )}
     </div>
   );
 }
 
-function ActionRow({ action, onComplete, onReopen, onDelete }) {
-  const isCompleted = action.status === "completed";
+// ──────────────────────────────────────────────────────────────────────
+// Done section — collapsed one-liners, expandable
+// ──────────────────────────────────────────────────────────────────────
+
+function DoneSection({ actions, declined, round }) {
+  const items = [
+    ...actions.map((a) => ({
+      kind: "done",
+      key: `a-${a.id}`,
+      action: a,
+      date: a.completed_at || a.created_at,
+    })),
+    ...declined.map((p) => ({
+      kind: "declined",
+      key: `p-${p.theme}`,
+      pick: p,
+      date: p.decided_at || (round && round.concluded_at) || null,
+    })),
+  ].sort((a, b) => {
+    const ad = a.date ? new Date(a.date).getTime() : 0;
+    const bd = b.date ? new Date(b.date).getTime() : 0;
+    return bd - ad;
+  });
+
   return (
-    <div
-      className="flex items-start justify-between gap-4 px-4 py-3 rounded-lg border transition"
-      style={{
-        borderColor: "var(--line)",
-        backgroundColor: isCompleted ? "var(--paper-2)" : "white",
-      }}
-    >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 mb-1">
-          <span
-            className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded"
-            style={{
-              backgroundColor: isCompleted ? "var(--leaf-tint)" : "var(--paper-3)",
-              color: isCompleted ? "var(--pulse-deep)" : "var(--ink-3)",
-              letterSpacing: "0.08em",
-            }}
-          >
-            {isCompleted ? "✓ Completed" : "In progress"}
-          </span>
-          <span className="text-[11px]" style={{ color: "var(--ink-4)" }}>
-            {action.theme}
-          </span>
-        </div>
-        <p
-          className="text-sm font-medium"
-          style={{
-            color: isCompleted ? "var(--ink-3)" : "var(--ink)",
-            textDecoration: isCompleted ? "line-through" : "none",
-          }}
-        >
+    <section style={{ marginTop: 8 }}>
+      <p
+        className="text-[11px] font-semibold uppercase mb-2"
+        style={{ color: "var(--ink-4)", letterSpacing: "0.12em" }}
+      >
+        Done · {items.length}
+      </p>
+      <div className="flex flex-col" style={{ gap: 6 }}>
+        {items.map((item) =>
+          item.kind === "done" ? (
+            <DoneRow key={item.key} action={item.action} />
+          ) : (
+            <DeclinedRow key={item.key} pick={item.pick} />
+          )
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DoneRow({ action }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl bg-white" style={{ border: "1px solid var(--line)" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full grid items-center gap-3 text-left"
+        style={{
+          padding: "11px 14px",
+          background: "transparent",
+          border: 0,
+          cursor: "pointer",
+          gridTemplateColumns: "auto 1fr auto auto",
+        }}
+      >
+        <span style={{ color: "var(--pulse)", fontWeight: 700, fontSize: 14 }}>✓</span>
+        <span className="font-semibold truncate" style={{ color: "var(--ink-2)", fontSize: 13 }}>
           {action.title}
-        </p>
-        {action.details && (
-          <p className="text-xs mt-1 leading-snug" style={{ color: "var(--ink-3)" }}>
-            {action.details}
-          </p>
-        )}
-        <p className="text-[11px] mt-1.5" style={{ color: "var(--ink-4)" }}>
-          {action.owner_email || "unassigned"} · {new Date(action.created_at).toLocaleDateString()}
-          {action.completed_at &&
-            ` · completed ${new Date(action.completed_at).toLocaleDateString()}`}
-        </p>
-      </div>
-      <div className="flex gap-1.5 flex-shrink-0">
-        {isCompleted ? (
-          <button
-            onClick={onReopen}
-            className="text-xs px-2.5 py-1 rounded border transition"
-            style={{ borderColor: "var(--line-2)", color: "var(--ink-2)" }}
-          >
-            Reopen
-          </button>
-        ) : (
-          <button
-            onClick={onComplete}
-            className="text-xs px-2.5 py-1 rounded text-white font-semibold transition"
-            style={{ backgroundColor: "var(--pulse)" }}
-          >
-            Mark complete
-          </button>
-        )}
-        <button
-          onClick={onDelete}
-          className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-500 hover:text-red-600 hover:border-red-300 transition"
-          title="Delete"
+        </span>
+        <Pill tone="done">Done</Pill>
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 11.5,
+            color: "var(--ink-4)",
+          }}
         >
-          ×
-        </button>
-      </div>
+          {formatDate(action.completed_at || action.created_at)}
+        </span>
+      </button>
+      {open && (
+        <div
+          style={{
+            padding: "10px 14px 14px",
+            borderTop: "1px solid var(--line)",
+            fontSize: 12.5,
+            lineHeight: 1.55,
+            color: "var(--ink-3)",
+          }}
+        >
+          <div
+            className="text-[10.5px] font-semibold uppercase mb-1.5"
+            style={{ letterSpacing: "0.08em", color: "var(--ink-4)" }}
+          >
+            Theme
+          </div>
+          <p className="mb-3" style={{ margin: 0, color: "var(--ink-2)" }}>
+            {action.theme}
+          </p>
+          {action.details && (
+            <>
+              <div
+                className="text-[10.5px] font-semibold uppercase mb-1.5 mt-3"
+                style={{ letterSpacing: "0.08em", color: "var(--ink-4)" }}
+              >
+                Final note
+              </div>
+              <p style={{ margin: 0, color: "var(--ink-2)", fontStyle: "italic" }}>
+                "{action.details}"
+              </p>
+            </>
+          )}
+          <div className="text-[11px] mt-3" style={{ color: "var(--ink-4)" }}>
+            {action.owner_email && `${action.owner_email} · `}logged {formatDate(action.created_at)}
+            {action.completed_at && ` · completed ${formatDate(action.completed_at)}`}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Atoms
-// ─────────────────────────────────────────────────────────────────────────
-
-function Card({ children, className = "" }) {
+function DeclinedRow({ pick }) {
   return (
     <div
-      className={`rounded-xl border p-5 ${className}`}
-      style={{ borderColor: "var(--line)", backgroundColor: "white" }}
+      className="rounded-xl bg-white grid items-center"
+      style={{
+        border: "1px solid var(--line)",
+        padding: "11px 14px",
+        gridTemplateColumns: "auto 1fr auto auto",
+        gap: 12,
+      }}
     >
-      {children}
+      <span style={{ color: "var(--ink-4)", fontSize: 14 }}>✕</span>
+      <span
+        className="truncate"
+        style={{
+          color: "var(--ink-3)",
+          fontSize: 13,
+          textDecoration: "line-through",
+        }}
+      >
+        {pick.theme}
+      </span>
+      <Pill tone="declined">Declined</Pill>
+      <span
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 11.5,
+          color: "var(--ink-4)",
+        }}
+      >
+        {pick.decided_at ? formatDate(pick.decided_at) : "—"}
+      </span>
     </div>
   );
 }
 
-function SectionHeader({ children }) {
+// ──────────────────────────────────────────────────────────────────────
+// Empty state
+// ──────────────────────────────────────────────────────────────────────
+
+function EmptyState({ reason }) {
   return (
-    <p
-      className="text-[11px] font-semibold uppercase"
-      style={{ color: "var(--ink-4)", letterSpacing: "0.12em" }}
+    <div
+      className="rounded-2xl"
+      style={{
+        border: "1px solid var(--line)",
+        backgroundColor: "white",
+        padding: 32,
+        textAlign: "center",
+      }}
     >
-      {children}
-    </p>
+      <h3
+        className="font-medium"
+        style={{
+          fontFamily: "var(--font-display)",
+          fontSize: 22,
+          color: "var(--ink)",
+          letterSpacing: "-0.015em",
+          marginBottom: 6,
+        }}
+      >
+        {reason === "no-round" ? "No brief yet" : "All clear"}
+      </h3>
+      <p
+        className="text-[13px] max-w-md mx-auto"
+        style={{ color: "var(--ink-3)", margin: "0 auto" }}
+      >
+        {reason === "no-round"
+          ? "The brief generates from the AI insights of the most recent concluded round. Conclude a round to see picks here."
+          : "No picks waiting on a decision and nothing in flight. Recommendations regenerate after each round closes."}
+      </p>
+    </div>
   );
 }
 
-function FilterChip({ active, onClick, children }) {
-  return (
-    <button
-      onClick={onClick}
-      className="px-2.5 py-1 rounded-full font-medium transition"
-      style={{
-        backgroundColor: active ? "var(--ink)" : "transparent",
-        color: active ? "white" : "var(--ink-3)",
-        border: active ? "1px solid var(--ink)" : "1px solid var(--line-2)",
-      }}
-    >
-      {children}
-    </button>
-  );
+// ──────────────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────────────
+
+// Same projection as Round Results' "What detractors hate" lift —
+// half of the affected detractors are assumed to convert to passive
+// when the issue is addressed, expressed as an NPS-point delta over
+// the entire respondent base.
+function computeLift(pick, totalRespondents) {
+  if (typeof pick.affected_detractor_count !== "number" || !totalRespondents) {
+    return null;
+  }
+  return Math.round((0.5 * pick.affected_detractor_count * 100) / totalRespondents);
+}
+
+function priorityLabelFor(priority) {
+  switch (priority) {
+    case "high":
+      return { label: "High priority", tone: "high" };
+    case "medium":
+      return { label: "Medium priority", tone: "medium" };
+    case "low":
+      return { label: "Low", tone: "low" };
+    case "keep_doing":
+      return { label: "Keep doing", tone: "keep-doing" };
+    default:
+      return null;
+  }
+}
+
+// alert_type values that come out of /chat → critical_alerts.
+const ALERT_THEMES = {
+  contract_termination: "Contract termination",
+  legal_threat: "Legal threat",
+  safety_concern: "Safety concern",
+  other_critical: "Critical concern",
+};
+
+function isAlertTheme(theme) {
+  return Object.prototype.hasOwnProperty.call(ALERT_THEMES, theme);
+}
+
+function labelForAlertTheme(theme) {
+  return ALERT_THEMES[theme] || null;
+}
+
+function formatDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatRelativeDate(iso) {
+  if (!iso) return "just now";
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (days < 1) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return formatDate(iso);
 }
