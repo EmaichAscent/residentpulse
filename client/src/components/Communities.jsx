@@ -20,8 +20,8 @@ import {
  *     • Manager / region
  *     • NPS sentiment bar (D/P/Pr split)
  *     • NPS score
- *     • Δ vs previous round
- *     • Issue (single-line warning)
+ *     • ARR (contract value, coral-tinted on at-risk rows)
+ *     • Issue (friendly label from the alert_type enum)
  *     • Edit (inline) + Archive
  *
  * Data comes from two endpoints, merged client-side:
@@ -254,10 +254,10 @@ export default function Communities() {
       const bv = b.nps == null ? 999 : b.nps;
       return av - bv;
     }
-    if (sortKey === "delta") {
-      const av = a.delta_nps == null ? 999 : a.delta_nps;
-      const bv = b.delta_nps == null ? 999 : b.delta_nps;
-      return av - bv;
+    if (sortKey === "arr") {
+      const av = Number(a.contract_value) || 0;
+      const bv = Number(b.contract_value) || 0;
+      return bv - av;
     }
     return (a.community_name || "").localeCompare(b.community_name || "");
   });
@@ -368,7 +368,7 @@ export default function Communities() {
               onChange={setSortKey}
               options={[
                 { value: "nps", label: "NPS (risk first)" },
-                { value: "delta", label: "Δ vs previous" },
+                { value: "arr", label: "ARR (highest first)" },
                 { value: "name", label: "Name (A–Z)" },
               ]}
             />
@@ -433,7 +433,7 @@ function CommunityTableHeader() {
     <div
       className="grid items-center gap-3 px-5 py-3 text-[10.5px] font-bold uppercase"
       style={{
-        gridTemplateColumns: "32px 2fr 1.4fr 1.2fr 0.7fr 0.7fr 1.4fr auto",
+        gridTemplateColumns: "32px 2fr 1.4fr 1.2fr 0.7fr 0.9fr 1.4fr auto",
         letterSpacing: "0.06em",
         color: "var(--ink-4)",
         borderBottom: "1px solid var(--line)",
@@ -444,7 +444,7 @@ function CommunityTableHeader() {
       <span>Manager / Region</span>
       <span>NPS sentiment</span>
       <span style={{ textAlign: "right" }}>NPS</span>
-      <span style={{ textAlign: "right" }}>Δ R−1</span>
+      <span style={{ textAlign: "right" }}>ARR</span>
       <span>Issue</span>
       <span style={{ width: 110, textAlign: "right" }} />
     </div>
@@ -480,20 +480,15 @@ function CommunityRow({
   const rowBg = tone === "risk" ? "var(--coral-tint)" : "transparent";
   const npsColor =
     tone === "risk" ? "var(--coral)" : tone === "good" ? "var(--pulse-deep)" : "var(--ink)";
-  const deltaColor =
-    c.delta_nps == null
-      ? "var(--ink-4)"
-      : c.delta_nps > 0
-        ? "var(--pulse-deep)"
-        : c.delta_nps < 0
-          ? "var(--coral)"
-          : "var(--ink-4)";
+  const arrValue = Number(c.contract_value) || 0;
+  const arrColor =
+    arrValue <= 0 ? "var(--ink-4)" : tone === "risk" ? "var(--coral)" : "var(--ink-2)";
 
   return (
     <div
       className="grid items-center gap-3 px-5 py-3 transition"
       style={{
-        gridTemplateColumns: "32px 2fr 1.4fr 1.2fr 0.7fr 0.7fr 1.4fr auto",
+        gridTemplateColumns: "32px 2fr 1.4fr 1.2fr 0.7fr 0.9fr 1.4fr auto",
         backgroundColor: rowBg,
         borderBottom: isLast ? "none" : "1px solid var(--line)",
       }}
@@ -514,25 +509,9 @@ function CommunityRow({
           {c.community_name}
         </div>
         <div className="text-[11.5px]" style={{ color: "var(--ink-3)" }}>
-          <span>
-            {[formatPropertyType(c.property_type), `${c.member_count || 0} board members`]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
-          {Number(c.contract_value) > 0 && (
-            <>
-              <span> · </span>
-              <span
-                style={{
-                  color: tone === "risk" ? "var(--coral)" : "var(--ink-2)",
-                  fontWeight: 600,
-                }}
-                title={`Contract value: $${Number(c.contract_value).toLocaleString()}`}
-              >
-                ARR {formatMoney(c.contract_value)}
-              </span>
-            </>
-          )}
+          {[formatPropertyType(c.property_type), `${c.member_count || 0} board members`]
+            .filter(Boolean)
+            .join(" · ")}
         </div>
       </div>
       <div className="min-w-0">
@@ -552,9 +531,15 @@ function CommunityRow({
       </span>
       <span
         className="font-mono font-semibold"
-        style={{ textAlign: "right", color: deltaColor, fontSize: 12 }}
+        style={{
+          textAlign: "right",
+          color: arrColor,
+          fontSize: 12.5,
+          fontWeight: arrValue > 0 ? 700 : 500,
+        }}
+        title={arrValue > 0 ? `Contract value: $${arrValue.toLocaleString()}` : "Set in Edit ↗"}
       >
-        {c.delta_nps != null ? formatNps(c.delta_nps) : "—"}
+        {arrValue > 0 ? formatMoney(arrValue) : "—"}
       </span>
       <span
         className="text-[12px] truncate"
