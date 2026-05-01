@@ -155,6 +155,45 @@ async function initializeSchema() {
       ON actions (client_id, created_at DESC)
     `);
 
+    // action_updates — append-only progress log for an action. Each
+    // row is a status note left by the owner or another admin while
+    // the action is in flight. Replaces the original "details is the
+    // single latest note" model with a real history. The first row
+    // for any action is the note typed at acceptance time; subsequent
+    // rows are added via the "Add update" flow on the State B card.
+    //
+    // created_by_email is intentionally a free string (mirrors the
+    // owner_email convention) — the user list is on the Account page,
+    // not a foreign key here.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS action_updates (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+        action_id INTEGER NOT NULL REFERENCES actions(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_by_email TEXT
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_action_updates_action_created
+      ON action_updates (action_id, created_at DESC)
+    `);
+
+    // One-time backfill: actions logged before action_updates existed
+    // carry their initial note in actions.details. Seed those into
+    // action_updates so the State B card has something to show.
+    // Idempotent — only seeds for actions with details AND no updates.
+    await client.query(`
+      INSERT INTO action_updates (client_id, action_id, body, created_at, created_by_email)
+      SELECT a.client_id, a.id, a.details, a.created_at, a.owner_email
+        FROM actions a
+        LEFT JOIN action_updates u ON u.action_id = a.id
+       WHERE a.details IS NOT NULL
+         AND TRIM(a.details) <> ''
+         AND u.id IS NULL
+    `);
+
     // recommendation_decisions — per-pick accept/reject state for
     // AI-generated recommended_actions on a round. Decoupled from
     // the actions table so we can track rejections (which never

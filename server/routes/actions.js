@@ -19,8 +19,10 @@ const VALID_STATUSES = ["in_progress", "completed", "cancelled"];
 /**
  * GET /api/admin/actions
  *
- * Returns this client's actions, newest first. No filtering yet — the
- * frontend filters in-memory across All / Mine / Completed.
+ * Returns this client's actions newest-first, each one carrying its
+ * full update history (newest update first). The State B card on the
+ * Actions screen renders the first update prominently and collapses
+ * the rest behind an expander.
  */
 router.get("/", async (req, res) => {
   try {
@@ -30,10 +32,77 @@ router.get("/", async (req, res) => {
        ORDER BY created_at DESC`,
       [req.clientId]
     );
-    res.json(actions);
+    if (actions.length === 0) return res.json([]);
+
+    // Bulk-load updates for all of this client's actions in one query
+    // — avoids N+1 when the journal grows. Group client-side.
+    const updates = await db.all(
+      `SELECT id, action_id, body, created_at, created_by_email
+         FROM action_updates
+        WHERE client_id = ?
+        ORDER BY created_at DESC, id DESC`,
+      [req.clientId]
+    );
+    const byAction = new Map();
+    for (const u of updates) {
+      if (!byAction.has(u.action_id)) byAction.set(u.action_id, []);
+      byAction.get(u.action_id).push(u);
+    }
+
+    res.json(
+      actions.map((a) => ({
+        ...a,
+        updates: byAction.get(a.id) || [],
+      }))
+    );
   } catch (err) {
     logger.error({ err }, "Error loading actions");
     res.status(500).json({ error: "Failed to load actions" });
+  }
+});
+
+/**
+ * POST /api/admin/actions/:id/updates
+ *
+ * Append a progress note to an in-flight action. Body, created_at,
+ * created_by_email — that's it. The State B card shows the latest
+ * inline and exposes earlier ones behind a "View N earlier updates"
+ * expander.
+ */
+router.post("/:id/updates", async (req, res) => {
+  const id = Number(req.params.id);
+  const { body } = req.body || {};
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "Invalid action id" });
+  }
+  if (!body || typeof body !== "string" || !body.trim()) {
+    return res.status(400).json({ error: "Update body is required" });
+  }
+
+  try {
+    const action = await db.get("SELECT id FROM actions WHERE id = ? AND client_id = ?", [
+      id,
+      req.clientId,
+    ]);
+    if (!action) {
+      return res.status(404).json({ error: "Action not found" });
+    }
+
+    const result = await db.run(
+      `INSERT INTO action_updates (client_id, action_id, body, created_by_email)
+       VALUES (?, ?, ?, ?)`,
+      [req.clientId, id, body.trim(), req.userEmail || null]
+    );
+    const inserted = await db.get(
+      `SELECT id, action_id, body, created_at, created_by_email
+         FROM action_updates WHERE id = ?`,
+      [result.lastInsertRowid || result.lastID]
+    );
+    res.json(inserted);
+  } catch (err) {
+    logger.error({ err }, "Error adding action update");
+    res.status(500).json({ error: "Failed to add update" });
   }
 });
 
@@ -160,18 +229,27 @@ router.post("/", async (req, res) => {
   }
 
   try {
+    const ownerForRow = owner_email?.trim() || req.userEmail || null;
+    const detailsTrimmed = details?.trim() || null;
     const result = await db.run(
       `INSERT INTO actions (client_id, theme, title, details, owner_email)
        VALUES (?, ?, ?, ?, ?)`,
-      [
-        req.clientId,
-        theme.trim(),
-        title.trim(),
-        details?.trim() || null,
-        owner_email?.trim() || req.userEmail || null,
-      ]
+      [req.clientId, theme.trim(), title.trim(), detailsTrimmed, ownerForRow]
     );
-    const action = await db.get("SELECT * FROM actions WHERE id = ?", [result.lastInsertRowid]);
+    const newId = result.lastInsertRowid;
+
+    // If the user typed an initial note at acceptance time, seed it
+    // as the first action_update so the State B card has something
+    // to render. Author = current user (the one accepting the pick).
+    if (detailsTrimmed) {
+      await db.run(
+        `INSERT INTO action_updates (client_id, action_id, body, created_by_email)
+         VALUES (?, ?, ?, ?)`,
+        [req.clientId, newId, detailsTrimmed, req.userEmail || ownerForRow]
+      );
+    }
+
+    const action = await db.get("SELECT * FROM actions WHERE id = ?", [newId]);
     res.json(action);
   } catch (err) {
     logger.error({ err }, "Error creating action");
