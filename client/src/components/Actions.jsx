@@ -21,7 +21,7 @@ import ConfirmModal from "./ConfirmModal";
 export default function Actions() {
   const { user } = useOutletContext();
   const [actions, setActions] = useState([]);
-  const [brief, setBrief] = useState({ round: null, picks: [] });
+  const [brief, setBrief] = useState({ round: null, picks: [], total_respondents: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [drawerSeed, setDrawerSeed] = useState(null);
@@ -92,6 +92,55 @@ export default function Actions() {
     return true;
   });
 
+  // Accept/reject decisions on brief picks. Same backend as the
+  // Round Results dashboard and Rounds landing page (POST/DELETE
+  // /api/admin/actions/decisions). Optimistic local update flips the
+  // UI immediately; a follow-up `load()` reconciles with whatever
+  // the brief endpoint returns.
+  const handleDecision = async (theme, decision) => {
+    if (!brief.round || !theme) return;
+    try {
+      const res = await fetch("/api/admin/actions/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ round_id: brief.round.id, theme, decision }),
+      });
+      if (res.ok) {
+        setBrief((prev) => ({
+          ...prev,
+          picks: prev.picks.map((p) =>
+            p.theme === theme ? { ...p, decision, decided_at: new Date().toISOString() } : p
+          ),
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to record decision:", err);
+    }
+  };
+
+  const handleUndoDecision = async (theme) => {
+    if (!brief.round || !theme) return;
+    try {
+      const res = await fetch("/api/admin/actions/decisions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ round_id: brief.round.id, theme }),
+      });
+      if (res.ok) {
+        setBrief((prev) => ({
+          ...prev,
+          picks: prev.picks.map((p) =>
+            p.theme === theme ? { ...p, decision: null, decided_at: null } : p
+          ),
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to undo decision:", err);
+    }
+  };
+
   if (loading) {
     return (
       <p
@@ -153,16 +202,30 @@ export default function Actions() {
           </Card>
         ) : (
           <div className="mt-3 space-y-3">
-            {brief.picks.map((pick) => (
-              <BriefPick
-                key={pick.theme}
-                pick={pick}
-                onLog={() =>
-                  setDrawerSeed({ theme: pick.theme, title: "", details: pick.summary || "" })
-                }
-                loggedAction={actions.find((a) => a.theme === pick.theme)}
-              />
-            ))}
+            {brief.picks.map((pick) => {
+              const loggedAction = actions.find((a) => a.theme === pick.theme);
+              return (
+                <BriefPick
+                  key={pick.theme}
+                  pick={pick}
+                  loggedAction={loggedAction}
+                  totalRespondents={brief.total_respondents}
+                  onAccept={() => handleDecision(pick.theme, "accepted")}
+                  onReject={() => handleDecision(pick.theme, "rejected")}
+                  onUndoDecision={() => handleUndoDecision(pick.theme)}
+                  onConfigure={() =>
+                    setDrawerSeed({
+                      theme: pick.theme,
+                      title: pick.theme,
+                      details:
+                        [pick.summary, pick.rationale].filter(Boolean).join(" · ") ||
+                        (brief.round ? `Round ${brief.round.round_number} · ` : "") +
+                          "Generated from AI insights.",
+                    })
+                  }
+                />
+              );
+            })}
           </div>
         )}
       </section>
@@ -256,19 +319,68 @@ export default function Actions() {
 // Pieces
 // ─────────────────────────────────────────────────────────────────────────
 
-function BriefPick({ pick, onLog, loggedAction }) {
+/**
+ * Brief pick — Accept/Reject + NPS lift, matching the Round Results
+ * page's recommendation row exactly. Three states:
+ *
+ *   • No decision yet → Accept (primary) / Reject buttons
+ *   • Accepted, no logged action → "Configure & assign →" + Change my mind
+ *   • Logged → "Action logged" pill (status: in progress / completed)
+ *   • Rejected → muted row with Undo
+ *
+ * NPS lift uses the same conservative model as Round Results:
+ *   lift_pts = 0.5 × affected_detractors / total_respondents × 100
+ */
+function BriefPick({
+  pick,
+  loggedAction,
+  totalRespondents,
+  onAccept,
+  onReject,
+  onUndoDecision,
+  onConfigure,
+}) {
+  const decision = pick.decision;
+  const isAccepted = decision === "accepted";
+  const isRejected = decision === "rejected";
+  const isLogged = !!loggedAction;
+
+  const lift =
+    typeof pick.affected_detractor_count === "number" && totalRespondents > 0
+      ? Math.round((0.5 * pick.affected_detractor_count * 100) / totalRespondents)
+      : null;
+
+  const priorityLabel =
+    pick.priority === "high"
+      ? "HIGH PRIORITY"
+      : pick.priority === "medium"
+        ? "MEDIUM"
+        : pick.priority === "low"
+          ? "LOW"
+          : pick.priority === "keep_doing"
+            ? "KEEP DOING"
+            : null;
+  const priorityColor =
+    pick.priority === "high"
+      ? "var(--coral)"
+      : pick.priority === "keep_doing"
+        ? "var(--pulse-deep)"
+        : pick.priority === "medium"
+          ? "var(--amber)"
+          : "var(--ink-4)";
+
   return (
     <div
       className="rounded-xl border overflow-hidden flex"
-      style={{ borderColor: "var(--line)", backgroundColor: "white" }}
+      style={{
+        borderColor: "var(--line)",
+        backgroundColor: "white",
+        opacity: isRejected ? 0.55 : 1,
+      }}
     >
       <div
         className="flex-shrink-0 flex items-center justify-center px-6 py-4"
-        style={{
-          backgroundColor: "var(--ink)",
-          color: "white",
-          minWidth: 80,
-        }}
+        style={{ backgroundColor: "var(--ink)", color: "white", minWidth: 80 }}
       >
         <div className="text-center">
           <div
@@ -290,6 +402,74 @@ function BriefPick({ pick, onLog, loggedAction }) {
         </div>
       </div>
       <div className="flex-1 p-4">
+        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+          {priorityLabel && (
+            <span
+              className="text-[10px] font-bold uppercase"
+              style={{ color: priorityColor, letterSpacing: "0.08em" }}
+            >
+              {priorityLabel}
+            </span>
+          )}
+          {isLogged ? (
+            <span
+              className="text-[10.5px] font-bold uppercase rounded-full px-2 py-0.5"
+              style={{
+                backgroundColor: "var(--pulse-tint)",
+                color: "var(--pulse-deep)",
+                letterSpacing: "0.06em",
+              }}
+            >
+              ✓ {loggedAction.status === "completed" ? "Completed" : "In progress"}
+            </span>
+          ) : isAccepted ? (
+            <span
+              className="text-[10.5px] font-bold uppercase rounded-full px-2 py-0.5"
+              style={{
+                backgroundColor: "var(--pulse-tint)",
+                color: "var(--pulse-deep)",
+                letterSpacing: "0.06em",
+              }}
+            >
+              ✓ Accepted
+            </span>
+          ) : isRejected ? (
+            <span
+              className="text-[10.5px] font-bold uppercase rounded-full px-2 py-0.5"
+              style={{
+                backgroundColor: "var(--paper-3)",
+                color: "var(--ink-3)",
+                letterSpacing: "0.06em",
+              }}
+            >
+              Rejected
+            </span>
+          ) : (
+            <span
+              className="text-[10.5px] font-bold uppercase rounded-full px-2 py-0.5"
+              style={{
+                backgroundColor: "var(--coral-tint)",
+                color: "var(--coral)",
+                letterSpacing: "0.06em",
+              }}
+            >
+              Pending decision
+            </span>
+          )}
+          {lift != null && lift > 0 && !isRejected && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full"
+              style={{
+                backgroundColor: "var(--pulse-tint)",
+                color: "var(--pulse-deep)",
+                padding: "2px 8px",
+              }}
+              title={`Conservative projection: ${pick.affected_detractor_count} detractors mentioned this. Assumes 50% convert from detractor → passive when the issue is addressed.`}
+            >
+              ↑ +{lift} NPS projected
+            </span>
+          )}
+        </div>
         <h3
           className="font-semibold"
           style={{
@@ -302,26 +482,74 @@ function BriefPick({ pick, onLog, loggedAction }) {
           {pick.theme}
         </h3>
         {pick.summary && (
-          <p className="text-sm mb-3" style={{ color: "var(--ink-2)" }}>
+          <p className="text-sm mb-2" style={{ color: "var(--ink-2)" }}>
             {pick.summary}
           </p>
         )}
-        <div className="flex items-center gap-3">
-          {loggedAction ? (
+        {lift != null && pick.affected_detractor_count != null && !isRejected && (
+          <div className="text-[11px] mb-3" style={{ color: "var(--ink-4)" }}>
+            Based on {pick.affected_detractor_count} detractors of {totalRespondents} respondents ·
+            50% conversion to passive
+          </div>
+        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {isLogged ? (
             <span
               className="text-xs px-2.5 py-1 rounded-full font-semibold"
-              style={{ backgroundColor: "var(--leaf-tint)", color: "var(--pulse-deep)" }}
+              style={{ backgroundColor: "var(--pulse-tint)", color: "var(--pulse-deep)" }}
             >
               Action logged
             </span>
-          ) : (
+          ) : isRejected ? (
             <button
-              onClick={onLog}
-              className="text-xs px-3 py-1.5 rounded-lg text-white font-semibold transition"
-              style={{ backgroundColor: "var(--pulse)" }}
+              onClick={onUndoDecision}
+              className="text-xs px-3 py-1.5 rounded-lg font-semibold transition"
+              style={{
+                backgroundColor: "white",
+                color: "var(--ink-2)",
+                border: "1px solid var(--line-2)",
+              }}
             >
-              Log what we're doing
+              Undo
             </button>
+          ) : isAccepted ? (
+            <>
+              <button
+                onClick={onConfigure}
+                className="text-xs px-3 py-1.5 rounded-lg text-white font-semibold transition"
+                style={{ backgroundColor: "var(--pulse)" }}
+              >
+                Configure &amp; assign →
+              </button>
+              <button
+                onClick={onUndoDecision}
+                className="text-[11px] underline"
+                style={{ color: "var(--ink-4)" }}
+              >
+                Change my mind
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={onAccept}
+                className="text-xs px-3 py-1.5 rounded-lg text-white font-semibold transition"
+                style={{ backgroundColor: "var(--pulse)" }}
+              >
+                Accept
+              </button>
+              <button
+                onClick={onReject}
+                className="text-xs px-3 py-1.5 rounded-lg font-semibold transition"
+                style={{
+                  backgroundColor: "white",
+                  color: "var(--ink-2)",
+                  border: "1px solid var(--line-2)",
+                }}
+              >
+                Reject
+              </button>
+            </>
           )}
         </div>
       </div>
