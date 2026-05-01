@@ -240,6 +240,13 @@ export default function Communities() {
     return true;
   });
 
+  // ARR roll-up: total contract value across the active roster, plus the
+  // share concentrated in at-risk (NPS ≤ -10) communities. Surfaces "$X
+  // at risk" so admins can see the dollar exposure at a glance.
+  const totalArr = enriched.reduce((sum, c) => sum + (Number(c.contract_value) || 0), 0);
+  const atRisk = enriched.filter((c) => c.nps != null && c.nps <= -10);
+  const atRiskArr = atRisk.reduce((sum, c) => sum + (Number(c.contract_value) || 0), 0);
+
   const sorted = [...filtered].sort((a, b) => {
     if (sortKey === "nps") {
       // Risk-first: lowest NPS first; nulls go to the end.
@@ -272,9 +279,33 @@ export default function Communities() {
             Communities
           </h1>
           <div className="text-[13px] mt-1" style={{ color: "var(--ink-3)" }}>
-            {view === "archived"
-              ? `${active.length} archived. Reactivate to bring back into the active roster.`
-              : `${active.length} communities. Quick visual of where things stand — details and data hygiene live here.`}
+            {view === "archived" ? (
+              `${active.length} archived. Reactivate to bring back into the active roster.`
+            ) : (
+              <>
+                <span>{active.length} communities</span>
+                {totalArr > 0 && (
+                  <>
+                    {" · "}
+                    <span style={{ color: "var(--ink-2)" }}>
+                      <strong>{formatMoney(totalArr)}</strong> total ARR
+                    </span>
+                  </>
+                )}
+                {atRisk.length > 0 && atRiskArr > 0 && (
+                  <>
+                    {" · "}
+                    <span style={{ color: "var(--coral)", fontWeight: 600 }}>
+                      {formatMoney(atRiskArr)} at risk
+                    </span>
+                    <span style={{ color: "var(--ink-4)" }}>
+                      {" "}
+                      across {atRisk.length} {atRisk.length === 1 ? "community" : "communities"}
+                    </span>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -483,9 +514,25 @@ function CommunityRow({
           {c.community_name}
         </div>
         <div className="text-[11.5px]" style={{ color: "var(--ink-3)" }}>
-          {[formatPropertyType(c.property_type), `${c.member_count || 0} board members`]
-            .filter(Boolean)
-            .join(" · ")}
+          <span>
+            {[formatPropertyType(c.property_type), `${c.member_count || 0} board members`]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+          {Number(c.contract_value) > 0 && (
+            <>
+              <span> · </span>
+              <span
+                style={{
+                  color: tone === "risk" ? "var(--coral)" : "var(--ink-2)",
+                  fontWeight: 600,
+                }}
+                title={`Contract value: $${Number(c.contract_value).toLocaleString()}`}
+              >
+                ARR {formatMoney(c.contract_value)}
+              </span>
+            </>
+          )}
         </div>
       </div>
       <div className="min-w-0">
@@ -512,9 +559,9 @@ function CommunityRow({
       <span
         className="text-[12px] truncate"
         style={{ color: "var(--ink-3)" }}
-        title={c.issue || ""}
+        title={c.issue ? formatAlertLabel(c.issue) : ""}
       >
-        {c.issue || "—"}
+        {c.issue ? formatAlertLabel(c.issue) : "—"}
       </span>
       <div className="flex items-center gap-1.5" style={{ width: 110, justifyContent: "flex-end" }}>
         {view === "archived" ? (
@@ -876,4 +923,29 @@ function formatPropertyType(t) {
       other: "Other",
     }[t] || t
   );
+}
+
+// Friendly labels for the alert_type enum from the critical_alerts table.
+// Mirrors the labels used in emailService.js so the UI and emails stay
+// in sync — if more alert types are added there, mirror them here.
+function formatAlertLabel(type) {
+  if (!type) return "";
+  const labels = {
+    contract_termination: "Contract termination",
+    legal_threat: "Legal threat",
+    safety_concern: "Safety concern",
+    other_critical: "Critical concern",
+  };
+  return labels[type] || type.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+
+// Compact ARR/contract value formatter. Uses K/M suffixes once values
+// get large enough to need them so the row sub-text doesn't blow up.
+function formatMoney(n) {
+  const num = Number(n);
+  if (!num || num <= 0) return "";
+  if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(num >= 10_000_000 ? 0 : 1)}M`;
+  if (num >= 10_000) return `$${Math.round(num / 1000)}K`;
+  if (num >= 1000) return `$${(num / 1000).toFixed(1)}K`;
+  return `$${num.toLocaleString()}`;
 }
