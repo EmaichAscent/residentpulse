@@ -177,6 +177,125 @@ router.post("/schedule", async (req, res) => {
   }
 });
 
+/**
+ * Schedule a single off-cycle round at a custom date.
+ *
+ * Distinct from POST /schedule (which is the very first round + auto-fills
+ * planned rounds per cadence). This endpoint just inserts ONE planned
+ * round at the requested date with the next available round_number.
+ *
+ * Body: { scheduled_date: ISO, label?: string }
+ * Returns: the new planned round.
+ */
+router.post("/custom", async (req, res) => {
+  try {
+    const { scheduled_date } = req.body || {};
+    if (!scheduled_date) {
+      return res.status(400).json({ error: "scheduled_date is required" });
+    }
+    const parsed = new Date(scheduled_date);
+    if (isNaN(parsed.getTime())) {
+      return res.status(400).json({ error: "Invalid scheduled_date" });
+    }
+
+    const last = await db.get(
+      `SELECT round_number FROM survey_rounds
+       WHERE client_id = ? AND is_test = ?
+       ORDER BY round_number DESC LIMIT 1`,
+      [req.clientId, req.isTestMode]
+    );
+    const nextNumber = (last?.round_number || 0) + 1;
+
+    const result = await db.run(
+      `INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test)
+       VALUES (?, ?, ?, 'planned', ?)`,
+      [req.clientId, nextNumber, parsed.toISOString(), req.isTestMode]
+    );
+    const round = await db.get("SELECT * FROM survey_rounds WHERE id = ?", [
+      result.lastInsertRowid,
+    ]);
+    res.json(round);
+  } catch (err) {
+    logger.error({ err, clientId: req.clientId }, "Error scheduling custom round");
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Pre-flight checklist data for a planned round. Powers the
+ * "Next round" hero on the Rounds page — four checks:
+ *
+ *   roster_synced_at        — most recent users.created_at|updated_at
+ *   prompt_version          — latest prompt_versions row label
+ *   prompt_approved         — whether a prompt version exists at all
+ *                             (no per-version approval flag yet — defaults
+ *                             true when there's any version on file)
+ *   reminders_set           — true once a round is in 'planned' status
+ *                             (admin_reminders are auto-scheduled on insert)
+ *   communities_missing_contacts — communities that don't have a manager
+ *                             name or any active users assigned
+ */
+router.get("/:id/preflight", async (req, res) => {
+  try {
+    const roundId = Number(req.params.id);
+    const round = await db.get(
+      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ? AND is_test = ?",
+      [roundId, req.clientId, req.isTestMode]
+    );
+    if (!round) return res.status(404).json({ error: "Round not found" });
+
+    const rosterRow = await db.get(
+      `SELECT MAX(updated_at) AS latest
+       FROM users WHERE client_id = ? AND is_test = ?`,
+      [req.clientId, req.isTestMode]
+    );
+
+    // prompt_versions has columns (id, prompt_text, label, created_by,
+    // created_at) and a prompt_key TEXT added in Phase 2. Earlier rows
+    // may not have client_id either — the per-client copies are
+    // distinguishable by created_by but the table is global. We pick
+    // the most recent system_prompt version regardless of client and
+    // count "any version on file" as approved.
+    const promptRow = await db.get(
+      `SELECT label, created_at FROM prompt_versions
+       WHERE prompt_key = 'system_prompt'
+       ORDER BY created_at DESC LIMIT 1`
+    );
+
+    const memberCounts = await db.get(
+      `SELECT COUNT(*) AS invitees,
+              COUNT(DISTINCT community_id) AS communities
+       FROM users
+       WHERE client_id = ? AND is_test = ? AND active = TRUE`,
+      [req.clientId, req.isTestMode]
+    );
+
+    const missingContacts = await db.get(
+      `SELECT COUNT(*) AS count FROM communities c
+       WHERE c.client_id = ?
+         AND (c.community_manager_name IS NULL OR c.community_manager_name = '')`,
+      [req.clientId]
+    );
+
+    res.json({
+      roster_synced_at: rosterRow?.latest || null,
+      prompt_version: promptRow?.label || "default",
+      prompt_approved: !!promptRow,
+      reminders_set: round.status === "planned",
+      communities_missing_contacts: Number(missingContacts?.count || 0),
+      audience: {
+        invitees: Number(memberCounts?.invitees || 0),
+        communities: Number(memberCounts?.communities || 0),
+        window_days: 30,
+        reminder_days: [14, 7, 1],
+      },
+    });
+  } catch (err) {
+    logger.error({ err, clientId: req.clientId }, "Error loading preflight");
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Cross-round trends data (must be before /:id routes)
 router.get("/trends", async (req, res) => {
   try {
