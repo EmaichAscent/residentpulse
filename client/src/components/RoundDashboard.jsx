@@ -1452,6 +1452,71 @@ export default function RoundDashboard() {
         )}
       </div>
 
+      {/* By size — current-round NPS bucketed by community unit count.
+            Data already comes from the dashboard endpoint as
+            community_analytics.size_trends (used to only render in the
+            print/export). Surfaced here so users can see whether
+            small/medium/large communities are scoring differently. */}
+      {(community_analytics?.size_trends || []).length > 0 && (
+        <Card padding={22}>
+          <SectionHeader noOuterMargin>
+            <h3
+              className="font-semibold text-[15px]"
+              style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
+            >
+              By community size
+            </h3>
+            <span className="text-[12px]" style={{ color: "var(--ink-4)" }}>
+              {community_analytics.size_trends.length} cohorts
+            </span>
+          </SectionHeader>
+          <div className="flex flex-col">
+            {community_analytics.size_trends.map((s, i, arr) => {
+              const npsVal = s.nps != null ? s.nps : medianToNpsApprox(s.median);
+              const tone =
+                npsVal == null ? "neutral" : npsVal <= -10 ? "risk" : npsVal >= 25 ? "good" : "mid";
+              const npsColor =
+                tone === "risk"
+                  ? "var(--coral)"
+                  : tone === "good"
+                    ? "var(--pulse-deep)"
+                    : "var(--ink)";
+              return (
+                <div
+                  key={s.name}
+                  className="grid items-center gap-3 py-2.5 text-[13px]"
+                  style={{
+                    gridTemplateColumns: "1.6fr 80px 90px 60px",
+                    borderBottom: i < arr.length - 1 ? "1px solid var(--line)" : "none",
+                  }}
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate" style={{ color: "var(--ink)" }}>
+                      {s.name}
+                    </div>
+                  </div>
+                  <span className="text-[11.5px]" style={{ color: "var(--ink-4)" }}>
+                    {s.communities || 0} communities
+                  </span>
+                  <span
+                    className="text-[11.5px]"
+                    style={{ color: "var(--ink-4)", fontFamily: "var(--font-mono)" }}
+                  >
+                    {s.respondents || 0} resp
+                  </span>
+                  <span
+                    className="font-mono font-bold text-[13px]"
+                    style={{ color: npsColor, textAlign: "right" }}
+                  >
+                    {npsVal != null ? (npsVal > 0 ? `+${npsVal}` : npsVal) : "—"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* Confirm-close round modal */}
       {confirmClose && (
         <div
@@ -1508,6 +1573,14 @@ export default function RoundDashboard() {
       {void handleFinalize}
     </div>
   );
+}
+
+// Median (0-10 score) to a rough NPS-style number for display when the
+// cohort entry only carries the median rather than a full NPS calc.
+// Matches the same conversion used elsewhere in the app.
+function medianToNpsApprox(median) {
+  if (median == null) return null;
+  return Math.round((median - 5) * 20);
 }
 
 // ──────────────────────────────────────────────────────────────────────

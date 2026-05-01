@@ -604,12 +604,218 @@ router.get("/trends", async (req, res) => {
       });
     }
 
+    // ── Post-pass: prev + change deltas on manager / location / size ──
+    // trendsData is in chronological order (oldest → newest). For each
+    // round after the first, look at the immediately-previous round and
+    // attach `prev` (their NPS that round) and `change` (this round
+    // minus prev) to each manager/location/size cohort entry. Frontend
+    // already renders a change pill when these fields are present.
+    for (let i = 1; i < trendsData.length; i++) {
+      const cur = trendsData[i];
+      const prev = trendsData[i - 1];
+
+      attachPrevChange(cur.manager_performance, prev.manager_performance, "manager");
+      attachPrevChange(cur.location_performance, prev.location_performance, "location");
+      attachPrevChange(cur.size_performance, prev.size_performance, "name");
+    }
+
+    // ── Dual cohorts: communities in the same extreme cohort across
+    // ≥2 consecutive rounds ending with the latest round. Surfaces the
+    // silent-churn list (dual detractors) and the case-study list
+    // (dual promoters) on the Trends page.
+    if (trendsData.length >= 2) {
+      const latest = trendsData[trendsData.length - 1];
+      const latestCommunityData = communityDataByRound[latest.id] || [];
+      const metaByName = new Map();
+      for (const c of latestCommunityData) {
+        metaByName.set(c.community_name.trim().toLowerCase(), c);
+      }
+
+      // Build per-community history (chronological)
+      const history = new Map();
+      for (const r of trendsData) {
+        for (const c of r.community_details || []) {
+          const key = c.name;
+          if (!history.has(key)) history.set(key, []);
+          history.get(key).push({
+            round_number: r.round_number,
+            cohort: c.cohort,
+            median: c.median,
+            // Convert median (0-10) to a rough NPS-style score for display.
+            nps: c.median != null ? Math.round((c.median - 5) * 20) : null,
+            respondents: c.respondents,
+          });
+        }
+      }
+
+      const dualDetractors = [];
+      const dualPromoters = [];
+      for (const [name, hist] of history.entries()) {
+        if (hist.length < 2) continue;
+        const last = hist[hist.length - 1];
+        // Must end on the latest round to count
+        if (last.round_number !== latest.round_number) continue;
+
+        // Walk backwards while still in the same cohort
+        let consecutive = 1;
+        for (let j = hist.length - 2; j >= 0; j--) {
+          if (hist[j].cohort === last.cohort) consecutive++;
+          else break;
+        }
+        if (consecutive < 2) continue;
+        if (last.cohort !== "detractor" && last.cohort !== "promoter") continue;
+
+        const meta = metaByName.get(name.trim().toLowerCase());
+        // Compute simple linear trend across the consecutive run:
+        // 'improving'/'declining' if first vs last NPS differs by ≥10,
+        // otherwise 'flat'. For detractors, improving = NPS getting
+        // less-bad; for promoters, declining = NPS getting less-good.
+        const runStart = hist[hist.length - consecutive];
+        const runEnd = last;
+        let trend = "flat";
+        if (runStart.nps != null && runEnd.nps != null) {
+          const delta = runEnd.nps - runStart.nps;
+          if (Math.abs(delta) >= 10) trend = delta > 0 ? "improving" : "declining";
+        }
+
+        const entry = {
+          name,
+          cohort: last.cohort,
+          consecutive_rounds: consecutive,
+          latest_nps: last.nps,
+          latest_median: last.median,
+          contract_value: meta?.contract_value ? Number(meta.contract_value) : null,
+          community_manager_name: meta?.community_manager_name || null,
+          trend,
+          history: hist.slice(-Math.min(consecutive, 4)).map((h) => ({
+            round_number: h.round_number,
+            nps: h.nps,
+            median: h.median,
+          })),
+        };
+
+        if (last.cohort === "detractor") dualDetractors.push(entry);
+        else dualPromoters.push(entry);
+      }
+
+      // Detractors: longest run first, then ARR-at-risk highest first
+      dualDetractors.sort(
+        (a, b) =>
+          b.consecutive_rounds - a.consecutive_rounds ||
+          (b.contract_value || 0) - (a.contract_value || 0)
+      );
+      // Promoters: longest run first, then NPS strongest first
+      dualPromoters.sort(
+        (a, b) =>
+          b.consecutive_rounds - a.consecutive_rounds || (b.latest_nps ?? 0) - (a.latest_nps ?? 0)
+      );
+
+      latest.dual_detractors = dualDetractors;
+      latest.dual_promoters = dualPromoters;
+    }
+
     res.json({ is_paid_tier: isPaidTier, rounds: trendsData });
   } catch (err) {
     logger.error({ err }, "Error fetching trends");
     res.status(500).json({ error: err.message });
   }
 });
+
+// Helper: walk current-round entries, look up matching prev-round entry
+// by `keyField`, and attach `prev` + `change` when found. Mutates in
+// place. Used by the trends post-pass for managers, locations, sizes.
+function attachPrevChange(curList, prevList, keyField) {
+  if (!Array.isArray(curList) || !Array.isArray(prevList)) return;
+  const prevMap = new Map();
+  for (const p of prevList) {
+    if (p[keyField]) prevMap.set(p[keyField], p.nps);
+  }
+  for (const c of curList) {
+    const prevNps = prevMap.get(c[keyField]);
+    if (prevNps != null && c.nps != null) {
+      c.prev = prevNps;
+      c.change = c.nps - prevNps;
+    }
+  }
+}
+
+// Helper for the dashboard endpoint: given a roundId, return that
+// round's per-manager and per-location NPS as flat lists. Used to feed
+// `attachPrevChange` so the current round's manager/location entries
+// pick up `prev` + `change` for the change pill.
+async function computeRoundManagerLocationPerf(roundId, clientId, isTestMode) {
+  // Pull completed sessions with their NPS + community + location.
+  const sessions = await db.all(
+    `SELECT s.nps_score,
+            COALESCE(sc.community_name, s.community_name) as community_name,
+            COALESCE(loc.name, s.management_company) as location_name
+       FROM sessions s
+       LEFT JOIN communities sc ON sc.id = s.community_id
+       LEFT JOIN locations loc ON loc.id = sc.location_id
+       WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE
+         AND s.is_test = ? AND s.completed = TRUE AND s.nps_score IS NOT NULL`,
+    [roundId, clientId, isTestMode]
+  );
+  if (sessions.length === 0) return null;
+
+  // Prefer round_community_snapshots for the manager mapping (matches
+  // how the current round's analytics resolves manager names too).
+  const hasSnap = await db.get(
+    "SELECT 1 FROM round_community_snapshots WHERE round_id = ? LIMIT 1",
+    [roundId]
+  );
+  const communityRows = hasSnap
+    ? await db.all(
+        `SELECT community_name, community_manager_name
+           FROM round_community_snapshots WHERE round_id = ? AND status = 'active'`,
+        [roundId]
+      )
+    : await db.all(
+        `SELECT community_name, community_manager_name
+           FROM communities WHERE client_id = ? AND status = 'active'`,
+        [clientId]
+      );
+
+  const mgrByCommunity = new Map();
+  for (const c of communityRows) {
+    if (c.community_name && c.community_manager_name) {
+      mgrByCommunity.set(c.community_name.trim().toLowerCase(), c.community_manager_name);
+    }
+  }
+
+  const managerScores = {};
+  const locationScores = {};
+  for (const s of sessions) {
+    if (s.community_name) {
+      const mgr = mgrByCommunity.get(s.community_name.trim().toLowerCase());
+      if (mgr) {
+        if (!managerScores[mgr]) managerScores[mgr] = [];
+        managerScores[mgr].push(s.nps_score);
+      }
+    }
+    if (s.location_name) {
+      if (!locationScores[s.location_name]) locationScores[s.location_name] = [];
+      locationScores[s.location_name].push(s.nps_score);
+    }
+  }
+
+  const toNps = (scores) => {
+    const p = scores.filter((n) => n >= 9).length;
+    const d = scores.filter((n) => n <= 6).length;
+    return scores.length > 0 ? Math.round(((p - d) / scores.length) * 100) : null;
+  };
+
+  return {
+    managers: Object.entries(managerScores).map(([manager, scores]) => ({
+      manager,
+      nps: toNps(scores),
+    })),
+    locations: Object.entries(locationScores).map(([location, scores]) => ({
+      location,
+      nps: toNps(scores),
+    })),
+  };
+}
 
 // Round dashboard — single endpoint for all round data
 router.get("/:id/dashboard", async (req, res) => {
@@ -1184,6 +1390,33 @@ router.get("/:id/dashboard", async (req, res) => {
       "SELECT interview_summary FROM admin_interviews WHERE client_id = ? AND status = 'completed' ORDER BY completed_at DESC LIMIT 1",
       [req.clientId]
     );
+
+    // ── prev/change for manager + location performance ────────────────
+    // Only meaningful for concluded rounds. Find the immediately-prior
+    // concluded round, compute its manager and location NPS scores,
+    // and merge `prev` + `change` into the current round's analytics
+    // arrays. The frontend already renders change pills when these
+    // fields are present (TrendsView.jsx ManagerLocationDeltasCard).
+    if (round.status === "concluded" && communityAnalytics) {
+      const prevRound = await db.get(
+        `SELECT id FROM survey_rounds
+         WHERE client_id = ? AND is_test = ? AND status = 'concluded'
+           AND round_number < ?
+         ORDER BY round_number DESC LIMIT 1`,
+        [req.clientId, req.isTestMode, round.round_number]
+      );
+      if (prevRound) {
+        const prevPerf = await computeRoundManagerLocationPerf(
+          prevRound.id,
+          req.clientId,
+          req.isTestMode
+        );
+        if (prevPerf) {
+          attachPrevChange(communityAnalytics.manager_performance, prevPerf.managers, "manager");
+          attachPrevChange(communityAnalytics.location_performance, prevPerf.locations, "location");
+        }
+      }
+    }
 
     res.json({
       round: {

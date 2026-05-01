@@ -116,6 +116,8 @@ export default function TrendsView() {
         />
       </div>
       <ManagerLocationDeltasCard latest={latest} />
+      <SizeCohortCard latest={latest} />
+      <DualCohortsCard latest={latest} />
     </div>
   );
 }
@@ -643,7 +645,10 @@ function ManagerLocationDeltasCard({ latest }) {
             </p>
           ) : (
             locations.map((l, i) => {
-              const delta = l.delta != null ? l.delta : null;
+              // Backend writes `change` (and `prev`); accept the legacy
+              // `delta` alias for older payloads cached at the edge.
+              const change = l.change != null ? l.change : l.delta != null ? l.delta : null;
+              const positive = change != null && change > 0;
               return (
                 <div
                   key={l.location || l.name}
@@ -659,18 +664,18 @@ function ManagerLocationDeltasCard({ latest }) {
                   <span className="font-mono text-[12px]" style={{ color: "var(--ink-3)" }}>
                     {formatNps(l.nps)}
                   </span>
-                  {delta != null ? (
+                  {change != null ? (
                     <span
                       className="text-[11.5px] font-bold rounded-full"
                       style={{
-                        color: delta > 0 ? "var(--pulse-deep)" : "var(--coral)",
-                        backgroundColor: delta > 0 ? "var(--pulse-tint)" : "var(--coral-tint)",
+                        color: positive ? "var(--pulse-deep)" : "var(--coral)",
+                        backgroundColor: positive ? "var(--pulse-tint)" : "var(--coral-tint)",
                         padding: "2px 7px",
                         textAlign: "center",
                       }}
                     >
-                      {delta > 0 ? "+" : ""}
-                      {delta}
+                      {positive ? "+" : ""}
+                      {change}
                     </span>
                   ) : (
                     <span />
@@ -683,6 +688,320 @@ function ManagerLocationDeltasCard({ latest }) {
       </div>
     </Card>
   );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Size cohort card — current-round NPS by community size, with the
+// round-over-round change pill so cohorts that are slipping pop. Data
+// comes from the trends endpoint's size_performance array (already
+// computed; backend post-pass attaches prev/change by cohort name).
+// ──────────────────────────────────────────────────────────────────────
+
+function SizeCohortCard({ latest }) {
+  const sizes = latest.size_performance || [];
+  if (sizes.length === 0) return null;
+  return (
+    <Card padding={22}>
+      <div className="flex items-baseline justify-between mb-3.5">
+        <h3
+          className="font-semibold text-[15px]"
+          style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
+        >
+          By community size
+        </h3>
+        <span className="text-[11.5px]" style={{ color: "var(--ink-4)" }}>
+          Cohorts auto-bucket by unit count.
+        </span>
+      </div>
+      <div className="flex flex-col">
+        {sizes.map((s, i) => {
+          const change = s.change != null ? s.change : null;
+          const positive = change != null && change > 0;
+          return (
+            <div
+              key={s.name}
+              className="grid items-center gap-3 py-2 text-[13px]"
+              style={{
+                gridTemplateColumns: "1.4fr 80px 60px 80px 60px",
+                borderBottom: i < sizes.length - 1 ? "1px solid var(--line)" : "none",
+              }}
+            >
+              <span className="font-semibold truncate" style={{ color: "var(--ink)" }}>
+                {s.name}
+              </span>
+              <span className="text-[11.5px]" style={{ color: "var(--ink-4)" }}>
+                {s.communities || 0} communities
+              </span>
+              <span
+                className="text-[11.5px]"
+                style={{ color: "var(--ink-4)", fontFamily: "var(--font-mono)" }}
+              >
+                {s.respondents || 0} resp
+              </span>
+              <span
+                className="font-mono font-bold text-[12px]"
+                style={{ color: "var(--ink)", textAlign: "right" }}
+              >
+                {formatNps(s.nps)}
+              </span>
+              {change != null ? (
+                <span
+                  className="text-[11.5px] font-bold rounded-full"
+                  style={{
+                    color: positive ? "var(--pulse-deep)" : "var(--coral)",
+                    backgroundColor: positive ? "var(--pulse-tint)" : "var(--coral-tint)",
+                    padding: "2px 7px",
+                    textAlign: "center",
+                  }}
+                >
+                  {positive ? "+" : ""}
+                  {change}
+                </span>
+              ) : (
+                <span />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Dual cohorts — communities that have been in the same extreme cohort
+// for ≥2 consecutive rounds ending with the latest. Detractors are the
+// silent-churn list (sorted by ARR-at-risk); promoters are the
+// case-study / reference list (sorted by NPS strength).
+//
+// Aesthetic per Mike: matches the rest of v2 — soft cards, pulse/coral
+// tints, Fraunces head, mono numbers, hairline row dividers. No rough
+// design-system chips.
+// ──────────────────────────────────────────────────────────────────────
+
+function DualCohortsCard({ latest }) {
+  const detractors = latest.dual_detractors || [];
+  const promoters = latest.dual_promoters || [];
+  if (detractors.length === 0 && promoters.length === 0) return null;
+  return (
+    <div className="grid gap-3.5" style={{ gridTemplateColumns: "1fr 1fr" }}>
+      <DualCohortPanel
+        title="Dual detractors"
+        sub="Two or more rounds in the detractor cohort — silent-churn watch list."
+        tone="risk"
+        rows={detractors}
+        emptyHint="No communities have stayed in the detractor cohort across rounds."
+      />
+      <DualCohortPanel
+        title="Dual promoters"
+        sub="Two or more rounds in the promoter cohort — case studies + reference list."
+        tone="good"
+        rows={promoters}
+        emptyHint="No communities have stayed in the promoter cohort across rounds."
+      />
+    </div>
+  );
+}
+
+function DualCohortPanel({ title, sub, tone, rows, emptyHint }) {
+  const accent = tone === "risk" ? "var(--coral)" : "var(--pulse-deep)";
+  const tint = tone === "risk" ? "var(--coral-tint)" : "var(--pulse-tint)";
+  return (
+    <Card padding={22}>
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className="rounded-md flex items-center justify-center"
+              style={{ width: 22, height: 22, backgroundColor: tint, color: accent }}
+            >
+              {tone === "risk" ? <RiskGlyph /> : <PromoterGlyph />}
+            </span>
+            <h3
+              className="font-semibold text-[15px]"
+              style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
+            >
+              {title}
+            </h3>
+            <span
+              className="text-[11.5px] font-bold rounded-full"
+              style={{
+                color: accent,
+                backgroundColor: tint,
+                padding: "2px 8px",
+              }}
+            >
+              {rows.length}
+            </span>
+          </div>
+          <p className="text-[12px]" style={{ color: "var(--ink-3)" }}>
+            {sub}
+          </p>
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <p
+          className="text-[12.5px] mt-3 py-3 text-center"
+          style={{ color: "var(--ink-4)", borderTop: "1px solid var(--line)" }}
+        >
+          {emptyHint}
+        </p>
+      ) : (
+        <div className="flex flex-col mt-3">
+          {rows.slice(0, 8).map((r, i) => (
+            <DualCohortRow
+              key={r.name}
+              row={r}
+              tone={tone}
+              isLast={i === Math.min(rows.length, 8) - 1}
+            />
+          ))}
+          {rows.length > 8 && (
+            <div
+              className="text-[11.5px] text-center pt-3 mt-1"
+              style={{ color: "var(--ink-4)", borderTop: "1px solid var(--line)" }}
+            >
+              + {rows.length - 8} more
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function DualCohortRow({ row, tone, isLast }) {
+  const accent = tone === "risk" ? "var(--coral)" : "var(--pulse-deep)";
+  const tint = tone === "risk" ? "var(--coral-tint)" : "var(--pulse-tint)";
+  const arr = Number(row.contract_value) || 0;
+  // Trend pill: "Improving" / "Declining" / "Stable" — for detractors
+  // 'improving' is good (less-bad), for promoters 'declining' is the
+  // worry. Color follows that intuition.
+  const trendLabel =
+    row.trend === "improving" ? "Improving" : row.trend === "declining" ? "Declining" : "Stable";
+  const trendIsGood =
+    (tone === "risk" && row.trend === "improving") ||
+    (tone === "good" && row.trend === "improving");
+  const trendIsBad =
+    (tone === "risk" && row.trend === "declining") ||
+    (tone === "good" && row.trend === "declining");
+  const trendColor = trendIsGood
+    ? "var(--pulse-deep)"
+    : trendIsBad
+      ? "var(--coral)"
+      : "var(--ink-4)";
+  const trendBg = trendIsGood
+    ? "var(--pulse-tint)"
+    : trendIsBad
+      ? "var(--coral-tint)"
+      : "var(--paper-2)";
+
+  return (
+    <div
+      className="grid items-center gap-3 py-2.5 text-[13px]"
+      style={{
+        gridTemplateColumns: "1.6fr auto 1fr 70px 90px",
+        borderBottom: isLast ? "none" : "1px solid var(--line)",
+      }}
+    >
+      <div className="min-w-0">
+        <div className="font-semibold truncate" style={{ color: "var(--ink)" }}>
+          {row.name}
+        </div>
+        <div className="text-[11px]" style={{ color: "var(--ink-4)" }}>
+          {row.community_manager_name || "Unassigned"} · {row.consecutive_rounds} rounds in cohort
+        </div>
+      </div>
+      <RoundChips history={row.history} accent={accent} tint={tint} />
+      <span
+        className="text-[11.5px]"
+        style={{ color: "var(--ink-3)", fontFamily: "var(--font-mono)" }}
+      >
+        {arr > 0 ? `${formatTrendsMoney(arr)} ARR` : "—"}
+      </span>
+      <span
+        className="font-mono font-bold text-[12px]"
+        style={{ color: accent, textAlign: "right" }}
+      >
+        {formatNps(row.latest_nps)}
+      </span>
+      <span
+        className="text-[10.5px] font-bold rounded-full"
+        style={{
+          color: trendColor,
+          backgroundColor: trendBg,
+          padding: "3px 8px",
+          letterSpacing: "0.04em",
+          textAlign: "center",
+          textTransform: "uppercase",
+        }}
+      >
+        {trendLabel}
+      </span>
+    </div>
+  );
+}
+
+function RoundChips({ history, accent, tint }) {
+  if (!history || history.length === 0) return <span />;
+  return (
+    <div className="flex items-center gap-1">
+      {history.map((h, i) => (
+        <span
+          key={i}
+          className="font-mono font-semibold rounded"
+          style={{
+            fontSize: 10.5,
+            padding: "3px 6px",
+            backgroundColor: tint,
+            color: accent,
+            minWidth: 36,
+            textAlign: "center",
+          }}
+          title={`Round ${h.round_number} · NPS ${h.nps != null ? h.nps : "—"}`}
+        >
+          {h.nps != null ? formatNps(h.nps) : "—"}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function RiskGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function PromoterGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M14 9V5a3 3 0 0 0-6 0v4M5 9h14l-1 11H6L5 9z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function formatTrendsMoney(n) {
+  const num = Number(n);
+  if (!num || num <= 0) return "";
+  if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(num >= 10_000_000 ? 0 : 1)}M`;
+  if (num >= 10_000) return `$${Math.round(num / 1000)}K`;
+  if (num >= 1000) return `$${(num / 1000).toFixed(1)}K`;
+  return `$${num.toLocaleString()}`;
 }
 
 // ──────────────────────────────────────────────────────────────────────
