@@ -202,6 +202,14 @@ async function initializeSchema() {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`
     );
 
+    // community_count_estimate — collected on signup so we can size the
+    // workspace and (eventually) recommend the right plan tier. Stored
+    // as a free-text bucket label (e.g. "1-10", "10-50", "80-100",
+    // "250+") rather than an integer because the user is estimating.
+    await client.query(
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS community_count_estimate TEXT`
+    );
+
     // Add password reset columns to client_admins
     await client.query(
       `ALTER TABLE client_admins ADD COLUMN IF NOT EXISTS password_reset_token TEXT`
