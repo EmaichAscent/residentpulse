@@ -750,10 +750,34 @@ router.get("/:id/dashboard", async (req, res) => {
 
     const communityCohorts = [];
     for (const [name, scores] of Object.entries(communities)) {
-      scores.sort((a, b) => a - b);
-      const median = scores[Math.floor(scores.length / 2)];
-      const cohort = median >= 9 ? "promoter" : median >= 7 ? "passive" : "detractor";
-      communityCohorts.push({ name, median, cohort, respondents: scores.length });
+      // Filter nulls before computing aggregates — sessions without an
+      // NPS score shouldn't pollute the cohort math.
+      const valid = scores.filter((n) => n != null);
+      const sorted = [...valid].sort((a, b) => a - b);
+      const median = sorted.length > 0 ? sorted[Math.floor(sorted.length / 2)] : null;
+      const cohort =
+        median == null
+          ? "passive"
+          : median >= 9
+            ? "promoter"
+            : median >= 7
+              ? "passive"
+              : "detractor";
+      const promoters = valid.filter((n) => n >= 9).length;
+      const detractors = valid.filter((n) => n <= 6).length;
+      const passives = valid.length - promoters - detractors;
+      const nps =
+        valid.length > 0 ? Math.round(((promoters - detractors) / valid.length) * 100) : null;
+      communityCohorts.push({
+        name,
+        median,
+        cohort,
+        respondents: valid.length,
+        nps,
+        promoters,
+        passives,
+        detractors,
+      });
     }
 
     // Community analytics for paid tiers
