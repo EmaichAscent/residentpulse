@@ -111,10 +111,14 @@ describe("Actions screen", () => {
     renderActions();
 
     await screen.findByText("Special-assessment communication");
-    // Pick #1 ("Maintenance...") has a matching action → badge
+    // Pick #1 ("Maintenance...") has a matching action → "Action logged" badge.
     expect(screen.getByText(/Action logged/i)).toBeInTheDocument();
-    // Pick #2 ("Special-assessment...") does NOT → button shown
-    expect(screen.getByText("Log what we're doing")).toBeInTheDocument();
+    // Pick #2 ("Special-assessment...") has NO logged action and no
+    // decision yet → Accept / Reject buttons shown (the new
+    // recommendation-decisions flow that replaced the single-path
+    // "Log what we're doing" UI).
+    expect(screen.getByText("Accept")).toBeInTheDocument();
+    expect(screen.getByText("Reject")).toBeInTheDocument();
   });
 
   it("filters journal by 'Mine' to current user only", async () => {
@@ -169,7 +173,12 @@ describe("Actions screen", () => {
     expect(screen.getByText(/The brief generates from the AI insights/i)).toBeInTheDocument();
   });
 
-  it("opens the action drawer when 'Log what we're doing' is clicked", async () => {
+  it("renders Accept / Reject buttons on undecided brief picks", async () => {
+    // The single-path "Log what we're doing" button was replaced by an
+    // accept/reject flow: undecided picks show Accept + Reject; once
+    // accepted, "Configure & assign →" opens the ActionDrawer. This
+    // test guards the new structure — the full Accept → Configure →
+    // drawer round-trip is integration territory left to manual smoke.
     globalThis.fetch = vi.fn((url) => {
       if (url.includes("/brief")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleBrief) });
@@ -180,16 +189,11 @@ describe("Actions screen", () => {
     renderActions();
 
     await screen.findByText("Special-assessment communication");
-    // Both picks show "Log what we're doing" since actions=[] in this test.
-    // Click the second one (Special-assessment) to differentiate from the first.
-    const buttons = screen.getAllByText("Log what we're doing");
-    fireEvent.click(buttons[1]);
-
-    // Drawer header includes "Log an action · {theme}"
-    expect(
-      screen.getByText(/Log an action · Special-assessment communication/i)
-    ).toBeInTheDocument();
-    expect(screen.getByText("What are you doing about it?")).toBeInTheDocument();
+    // Both picks have no logged action and no decision → Accept/Reject.
+    const acceptButtons = screen.getAllByText("Accept");
+    const rejectButtons = screen.getAllByText("Reject");
+    expect(acceptButtons.length).toBe(2);
+    expect(rejectButtons.length).toBe(2);
   });
 
   it("shows error state on fetch failure", async () => {

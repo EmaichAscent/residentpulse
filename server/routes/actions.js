@@ -60,8 +60,19 @@ router.get("/brief", async (req, res) => {
     );
 
     if (!round) {
-      return res.json({ round: null, picks: [] });
+      return res.json({ round: null, picks: [], total_respondents: 0 });
     }
+
+    // Total completed sessions for the round — drives the NPS lift
+    // projection on the frontend (lift = 0.5 × affected_detractors /
+    // total_respondents × 100).
+    const respondentRow = await db.get(
+      `SELECT COUNT(*) AS count FROM sessions
+       WHERE round_id = ? AND completed = TRUE AND is_mock IS NOT TRUE
+         AND is_test = ?`,
+      [round.id, req.isTestMode]
+    );
+    const totalRespondents = Number(respondentRow?.count || 0);
 
     let picks = [];
     try {
@@ -69,41 +80,61 @@ router.get("/brief", async (req, res) => {
       const recommended = Array.isArray(insights?.recommended_actions)
         ? insights.recommended_actions
         : [];
-      // Map insightGenerator's output schema to the brief's pick shape.
-      // The synthesis pass produces {action, priority, impact, rationale}.
-      // Older versions or hand-edited insights may use {theme, title,
-      // summary, body}; we accept those as fallbacks.
       picks = recommended.slice(0, 3).map((r, i) => ({
         rank: i + 1,
-        // Theme is the recommendation TEXT — that's the matching key
-        // against actions.theme. Without this, every pick falls
-        // through to "Pick 1/2/3" and matching to logged actions
-        // breaks.
+        // Theme is the recommendation TEXT — matching key against
+        // actions.theme and recommendation_decisions.theme.
         theme: r.action || r.theme || r.title || r.headline || `Pick ${i + 1}`,
         summary: r.impact || r.summary || r.description || r.body || "",
         priority: r.priority || null,
         rationale: r.rationale || r.evidence || null,
+        // Surfaces drive the NPS-lift projection. Older insights
+        // generated before topic_themes shipped won't carry these.
+        affected_count: typeof r.affected_count === "number" ? r.affected_count : null,
+        affected_detractor_count:
+          typeof r.affected_detractor_count === "number" ? r.affected_detractor_count : null,
       }));
     } catch {
-      // insights_json malformed — return an empty brief rather than 500.
       picks = [];
     }
 
-    // Mark which themes already have a logged action.
     if (picks.length > 0) {
       const themes = picks.map((p) => p.theme);
+
+      // Match logged actions by theme.
       const logged = await db.all(
-        `SELECT theme FROM actions
+        `SELECT id, theme, status FROM actions
          WHERE client_id = ? AND theme = ANY($2::text[])`,
         [req.clientId, themes]
       );
-      const loggedThemes = new Set(logged.map((row) => row.theme));
-      picks = picks.map((p) => ({ ...p, has_action: loggedThemes.has(p.theme) }));
+      const loggedByTheme = new Map(logged.map((row) => [row.theme, row]));
+
+      // Match accept/reject decisions for THIS round's picks.
+      const decisions = await db.all(
+        `SELECT theme, decision, decided_at FROM recommendation_decisions
+         WHERE round_id = ? AND client_id = ?`,
+        [round.id, req.clientId]
+      );
+      const decisionByTheme = new Map(decisions.map((d) => [d.theme, d]));
+
+      picks = picks.map((p) => {
+        const l = loggedByTheme.get(p.theme);
+        const d = decisionByTheme.get(p.theme);
+        return {
+          ...p,
+          has_action: !!l,
+          logged_action_id: l?.id || null,
+          logged_action_status: l?.status || null,
+          decision: d?.decision || null,
+          decided_at: d?.decided_at || null,
+        };
+      });
     }
 
     res.json({
       round: { id: round.id, round_number: round.round_number, concluded_at: round.concluded_at },
       picks,
+      total_respondents: totalRespondents,
     });
   } catch (err) {
     logger.error({ err }, "Error loading actions brief");
