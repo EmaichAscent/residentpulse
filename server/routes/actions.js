@@ -89,10 +89,13 @@ router.get("/brief", async (req, res) => {
         priority: r.priority || null,
         rationale: r.rationale || r.evidence || null,
         // Surfaces drive the NPS-lift projection. Older insights
-        // generated before topic_themes shipped won't carry these.
+        // generated before these prompts shipped won't carry them.
         affected_count: typeof r.affected_count === "number" ? r.affected_count : null,
         affected_detractor_count:
           typeof r.affected_detractor_count === "number" ? r.affected_detractor_count : null,
+        mentions: typeof r.mentions === "number" ? r.mentions : null,
+        community_count: typeof r.community_count === "number" ? r.community_count : null,
+        nps_when_raised: typeof r.nps_when_raised === "number" ? r.nps_when_raised : null,
       }));
     } catch {
       picks = [];

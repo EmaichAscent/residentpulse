@@ -4,6 +4,36 @@ import logger from "./logger.js";
 import { createMessage } from "./anthropicClient.js";
 const MODEL = "claude-sonnet-4-5-20250929";
 
+/**
+ * Defensive normalizer for topic_themes output. The prompt asks for
+ * 1–3 word labels but Claude sometimes returns full sentences when
+ * the input feedback is verbose. This squeezes any long theme into a
+ * short label for the bar chart while preserving the original prose
+ * in `evidence` (for the expandable detail panel below the row).
+ *
+ *   theme = "Strong community managers are a decisive ..."
+ *     → theme = "Strong community" (or first 3 words, max 24 chars)
+ *     → evidence = the original sentence (preserved)
+ *
+ * If `evidence` already exists, the original prose isn't overwritten.
+ */
+function compactizeTheme(t) {
+  if (!t || typeof t !== "object") return t;
+  const original = typeof t.theme === "string" ? t.theme.trim() : "";
+  if (!original || original.length <= 24) return t;
+  const words = original.replace(/\s+/g, " ").split(" ");
+  const out = words.slice(0, 3).join(" ");
+  const finalShort = out.length > 24 ? `${out.slice(0, 23)}…` : `${out}…`;
+  return {
+    ...t,
+    theme: finalShort,
+    // Preserve the long phrasing in evidence so the row's expand
+    // panel still has the full context. Don't overwrite if the AI
+    // already produced a separate evidence field.
+    evidence: t.evidence || original,
+  };
+}
+
 /** Resilient JSON parser — handles truncated or wrapped JSON from LLM responses */
 function safeParseJSON(text, fallback) {
   // Try direct parse
@@ -310,8 +340,11 @@ Community Patterns: ${JSON.stringify(cs.community_patterns || [])}`
     synthesis = await runSynthesis(synthesisContext, findings, actions, callouts);
     // topic_themes isn't part of synthesis — it's a structured side
     // output. Stash it onto the synthesis for the storage step below.
-    synthesis.promoter_themes = themes?.promoter_themes || [];
-    synthesis.detractor_themes = themes?.detractor_themes || [];
+    // Defensive truncation in case the model produced long phrases:
+    // keep the original full text in `evidence` for the expand panel
+    // and short-form in `theme` for the bar-chart label.
+    synthesis.promoter_themes = (themes?.promoter_themes || []).map(compactizeTheme);
+    synthesis.detractor_themes = (themes?.detractor_themes || []).map(compactizeTheme);
   }
 
   // Store insights
@@ -369,8 +402,11 @@ Return a JSON array of 3 actions, each with:
 - "rationale": Why this action matters based on the feedback
 - "affected_count": Number of board-member sessions whose feedback informed this recommendation (count distinct respondents, not mentions). Estimate from the chunk-level positive/negative themes if exact counts aren't available.
 - "affected_detractor_count": Subset of affected_count who scored 0-6 (detractors). The dashboard uses this to project an NPS lift estimate, so be honest — it should NEVER exceed affected_count, and should generally be lower.
+- "mentions": Total times this issue was raised across all transcripts (a count of mentions, not distinct sessions — same person mentioning it twice counts as 2). If unsure, use affected_count × 1.5 as a rough estimate.
+- "community_count": Distinct communities whose board members raised this issue. Always ≤ affected_count.
+- "nps_when_raised": Average NPS score of the sessions that raised this theme. For "keep_doing" picks reinforcing promoter feedback this should be high (8-10); for high-priority detractor concerns it should be low (2-5). Range: 0-10 integer.
 
-Both counts must be integers. If a recommendation is a "keep doing" reinforcing what promoters praised, set affected_detractor_count to 0 and use affected_count for the promoter count.
+All five counts must be integers. If a recommendation is a "keep doing" reinforcing what promoters praised, set affected_detractor_count to 0 and use affected_count for the promoter count; nps_when_raised should reflect the promoter average.
 
 Only output valid JSON array, no other text.
 
@@ -466,7 +502,7 @@ ${context}
 Produce a final JSON object with these fields:
 1. "executive_summary": A 2-4 sentence narrative overview. Lead with something positive, then address the key concern, then the path forward. This sets the tone — balanced, not doom-and-gloom.
 2. "key_findings": 4-5 findings max (deduplicated, refined). At least 1-2 MUST be positive. Each: {"finding", "evidence", "severity"}
-3. "recommended_actions": 3 actions max (the company can only implement 1-3 changes per quarter). Include 1 "keep_doing" action. Each: {"action", "priority", "impact", "rationale", "affected_count", "affected_detractor_count"}. Preserve the integer counts from the input — they drive the NPS-lift projection on the dashboard.
+3. "recommended_actions": 3 actions max (the company can only implement 1-3 changes per quarter). Include 1 "keep_doing" action. Each: {"action", "priority", "impact", "rationale", "affected_count", "affected_detractor_count", "mentions", "community_count", "nps_when_raised"}. Preserve the integer counts from the input — they drive the NPS-lift projection on the dashboard and the "N mentions · M communities · NPS X when raised" line on the Home page.
 4. "cam_ascent_callouts": 1-2 focused callouts (deduplicated, refined). Each: {"area", "opportunity", "suggested_service"}
 
 Deduplicate overlapping items. Be tight and high-impact — less is more. Only output valid JSON, no other text.`;
