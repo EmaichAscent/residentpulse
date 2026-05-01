@@ -294,15 +294,24 @@ Community Patterns: ${JSON.stringify(cs.community_patterns || [])}`
   )
   .join("\n\n")}`;
 
-    // Run the 3 analysis passes on the combined chunk summaries
-    const [findings, actions, callouts] = await Promise.all([
+    // Run the 4 analysis passes on the combined chunk summaries.
+    // topic_themes is a separate pass (rather than rolled into synthesis)
+    // because its output schema is fundamentally different — it's
+    // weighted topic frequencies for the dashboard's "What boards are
+    // talking about" section, not narrative findings.
+    const [findings, actions, callouts, themes] = await Promise.all([
       runAnalysisPass(synthesisContext, "key_findings"),
       runAnalysisPass(synthesisContext, "recommended_actions"),
       runAnalysisPass(synthesisContext, "cam_ascent_callouts"),
+      runAnalysisPass(synthesisContext, "topic_themes"),
     ]);
 
     // Final synthesis
     synthesis = await runSynthesis(synthesisContext, findings, actions, callouts);
+    // topic_themes isn't part of synthesis — it's a structured side
+    // output. Stash it onto the synthesis for the storage step below.
+    synthesis.promoter_themes = themes?.promoter_themes || [];
+    synthesis.detractor_themes = themes?.detractor_themes || [];
   }
 
   // Store insights
@@ -311,6 +320,8 @@ Community Patterns: ${JSON.stringify(cs.community_patterns || [])}`
     recommended_actions: synthesis.recommended_actions,
     cam_ascent_callouts: synthesis.cam_ascent_callouts,
     executive_summary: synthesis.executive_summary,
+    promoter_themes: synthesis.promoter_themes || [],
+    detractor_themes: synthesis.detractor_themes || [],
     nps_score: npsScore,
     response_count: sessions.length,
     chunks_analyzed: chunks.length,
@@ -373,7 +384,46 @@ Return a JSON array of 1-2 callouts (keep it focused), each with:
 Only output valid JSON array, no other text.
 
 ${context}`,
+
+    topic_themes: `Analyze the chunk-level theme summaries below and produce two ranked lists of TOPICS that distinguish promoters from detractors. These power the "What boards are talking about" visualization on the round dashboard — bar chart with weighted bars, plus one sample quote per side.
+
+Look across all batches. The "positive_themes" lists in each batch are what promoters/passives praised. The "negative_themes" lists are what detractors/passives complained about. Aggregate by topic, count frequency, and produce a single ranked list for each side.
+
+Topics should be SHORT — single words or 1–3 word phrases. Examples of good topics: "responsive", "communication", "vendors", "transparency", "fees", "slow response", "manager turnover". Examples of BAD topics: full sentences, generic words like "service" without qualifier, internal HR detail.
+
+Return a JSON object with this exact shape:
+{
+  "promoter_themes": [
+    {
+      "theme": "responsive",
+      "weight": 95,
+      "sample_quote": "Our manager Sarah is the most responsive person I've ever worked with — same day, every time.",
+      "sample_attribution": "Aspen Park board, NPS 9"
+    }
+  ],
+  "detractor_themes": [
+    {
+      "theme": "slow response",
+      "weight": 92,
+      "sample_quote": "We've had three pool issues this year and the response is always 'we'll look into it.' Then nothing happens.",
+      "sample_attribution": "Crystal Heights board, NPS 1"
+    }
+  ]
+}
+
+Rules:
+- Provide 5-8 themes per side (whichever side has more signal — if there's not enough material for 5 detractor themes, fewer is fine).
+- weight is 0-100. The HIGHEST-frequency theme on each side gets the highest weight (90-100). Subsequent themes scale down by relative frequency. This drives the bar fill widths on the dashboard.
+- sample_quote is a SHORT (under 30 words) verbatim or near-verbatim quote pulled from the notable_feedback or evidence in the chunk summaries. Avoid composite paraphrasing — pick the strongest single quote.
+- sample_attribution: format as "{community name} board, NPS {score}" if you have it, or just "Anonymous, NPS {score}" if not. Pick the source for the sample_quote.
+- Sort each list by weight descending.
+- Only output valid JSON object, no preamble.
+
+${context}`,
   };
+
+  // topic_themes returns an object, not an array — use the right default.
+  const fallback = passType === "topic_themes" ? { promoter_themes: [], detractor_themes: [] } : [];
 
   const response = await createMessage({
     model: MODEL,
@@ -382,7 +432,7 @@ ${context}`,
   });
 
   const text = response.content[0].text.trim();
-  return safeParseJSON(text, []);
+  return safeParseJSON(text, fallback);
 }
 
 /**

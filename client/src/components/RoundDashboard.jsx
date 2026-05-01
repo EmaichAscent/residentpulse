@@ -311,9 +311,12 @@ export default function RoundDashboard() {
   const atRisk = communitiesForRoster.filter((c) => c.nps <= -10).sort((a, b) => a.nps - b.nps);
   const champions = communitiesForRoster.filter((c) => c.nps >= 25).sort((a, b) => b.nps - a.nps);
 
-  // Manager movers — split into top + bottom by `change` (round-over-round
-  // delta). Some payloads use { manager, nps, change } and some use
-  // { name, nps, prev }; normalize before sorting.
+  // Manager movers — the API ships {manager, nps, communities, respondents}
+  // without round-over-round change data. Normalize, then split into
+  // top + bottom by whatever signal we have:
+  //   • If `change` is present, sort by change (highest delta = "going up")
+  //   • Otherwise sort by NPS (highest score = "going up", lowest = "going down")
+  // The change-pill in the UI hides when change is null.
   const managers = (community_analytics?.manager_performance || []).map((m) => ({
     name: m.name || m.manager,
     avatar: m.avatar || (m.name || m.manager || "??").slice(0, 2).toUpperCase(),
@@ -322,24 +325,53 @@ export default function RoundDashboard() {
     change: m.change != null ? m.change : m.prev != null ? m.nps - m.prev : null,
     communities: m.communities,
   }));
-  const sortedByChange = managers.filter((m) => m.change != null);
-  const topMgrs = [...sortedByChange].sort((a, b) => b.change - a.change).slice(0, 3);
-  const bottomMgrs = [...sortedByChange].sort((a, b) => a.change - b.change).slice(0, 3);
+  const hasChangeData = managers.some((m) => m.change != null);
+  const topMgrs = hasChangeData
+    ? [...managers]
+        .filter((m) => m.change != null)
+        .sort((a, b) => b.change - a.change)
+        .slice(0, 3)
+    : [...managers].sort((a, b) => b.nps - a.nps).slice(0, 3);
+  const bottomMgrs = hasChangeData
+    ? [...managers]
+        .filter((m) => m.change != null)
+        .sort((a, b) => a.change - b.change)
+        .slice(0, 3)
+    : [...managers].sort((a, b) => a.nps - b.nps).slice(0, 3);
 
-  // Themes — derive promoter / detractor "topics" from the AI insights
-  // when available. The current /dashboard payload doesn't ship explicit
-  // promoter-vs-detractor topic extraction (a future backend
-  // enhancement); for now use insights.key_findings split by sentiment
-  // tone, falling back to nothing if the payload is empty.
-  const positiveFindings = (insights?.key_findings || []).filter(
-    (f) => f.severity === "positive" || f.severity === "good"
-  );
-  const negativeFindings = (insights?.key_findings || []).filter(
-    (f) => f.severity === "concerning" || f.severity === "critical" || f.severity === "negative"
-  );
+  // Themes — prefer the structured promoter_themes / detractor_themes
+  // shape produced by insightGenerator's topic_themes pass (added in
+  // this PR alongside the dashboard rebuild). Fall back to splitting
+  // key_findings by severity for rounds whose insights were generated
+  // before the topic_themes pass shipped (so older rounds still render
+  // something reasonable).
+  const promoterThemes =
+    insights?.promoter_themes && insights.promoter_themes.length > 0
+      ? insights.promoter_themes
+      : (insights?.key_findings || [])
+          .filter((f) => f.severity === "positive" || f.severity === "good")
+          .map((f, i, arr) => ({
+            theme: f.finding,
+            weight: Math.round(((arr.length - i) / arr.length) * 95),
+            sample_quote: f.evidence,
+          }));
+  const detractorThemes =
+    insights?.detractor_themes && insights.detractor_themes.length > 0
+      ? insights.detractor_themes
+      : (insights?.key_findings || [])
+          .filter(
+            (f) =>
+              f.severity === "concerning" || f.severity === "critical" || f.severity === "negative"
+          )
+          .map((f, i, arr) => ({
+            theme: f.finding,
+            weight: Math.round(((arr.length - i) / arr.length) * 95),
+            sample_quote: f.evidence,
+          }));
 
-  // Sample quotes — pick the highest-scoring promoter session and
-  // lowest-scoring detractor session to feature.
+  // Sample quote tiles — when topic_themes ships sample_quote +
+  // sample_attribution we use those directly. As a fallback, pick the
+  // highest-/lowest-scoring complete session from the current round.
   const sortedByScore = [...completedSessions].sort(
     (a, b) => (b.nps_score ?? 0) - (a.nps_score ?? 0)
   );
@@ -347,6 +379,22 @@ export default function RoundDashboard() {
   const detractorSample = [...sortedByScore]
     .reverse()
     .find((s) => s.nps_score != null && s.nps_score <= 6);
+  const promoterTopQuote =
+    promoterThemes[0]?.sample_quote != null
+      ? {
+          summary: promoterThemes[0].sample_quote,
+          community_name: promoterThemes[0].sample_attribution || "",
+          nps_score: null,
+        }
+      : promoterSample;
+  const detractorTopQuote =
+    detractorThemes[0]?.sample_quote != null
+      ? {
+          summary: detractorThemes[0].sample_quote,
+          community_name: detractorThemes[0].sample_attribution || "",
+          nps_score: null,
+        }
+      : detractorSample;
 
   // ────────────────────────────────────────────────────────────────────
   // Print / PDF export — exact copy from the previous implementation,
@@ -1046,7 +1094,11 @@ export default function RoundDashboard() {
         </div>
       )}
 
-      {/* 6. MANAGER PERFORMANCE — top + bottom movers */}
+      {/* 6. MANAGER PERFORMANCE — top + bottom movers
+            When the API doesn't ship round-over-round `change` data
+            (current state), we sort by NPS instead and the change pill
+            is hidden. Once a future backend PR adds prev-round NPS to
+            manager_performance, the change pills auto-light up. */}
       {(topMgrs.length > 0 || bottomMgrs.length > 0) && (
         <Card padding={22}>
           <SectionHeader noOuterMargin>
@@ -1054,7 +1106,7 @@ export default function RoundDashboard() {
               className="font-semibold text-[15px]"
               style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
             >
-              Manager performance · biggest movers
+              Manager performance · {hasChangeData ? "biggest movers" : "ranked by NPS"}
             </h3>
             {managers.length > 6 && (
               <button
@@ -1068,23 +1120,30 @@ export default function RoundDashboard() {
           </SectionHeader>
           <div className="grid gap-6" style={{ gridTemplateColumns: "1fr 1fr" }}>
             <ManagerColumn
-              label="↑ Going up"
+              label={hasChangeData ? "↑ Going up" : "↑ Highest NPS"}
               labelColor="var(--pulse-deep)"
-              managers={showAllManagers ? sortedByChange : topMgrs}
+              managers={showAllManagers ? [...managers].sort((a, b) => b.nps - a.nps) : topMgrs}
               changeIsPositive
+              hasChangeData={hasChangeData}
             />
             <ManagerColumn
-              label="↓ Going down"
+              label={hasChangeData ? "↓ Going down" : "↓ Lowest NPS"}
               labelColor="var(--coral)"
-              managers={showAllManagers ? [...sortedByChange].reverse() : bottomMgrs}
+              managers={showAllManagers ? [...managers].sort((a, b) => a.nps - b.nps) : bottomMgrs}
               changeIsPositive={false}
+              hasChangeData={hasChangeData}
             />
           </div>
         </Card>
       )}
 
-      {/* 7. THEMES — what promoters love / what detractors hate */}
-      {(positiveFindings.length > 0 || negativeFindings.length > 0) && (
+      {/* 7. THEMES — what promoters love / what detractors hate
+            Renders the spec's weighted-bar + sample-quote layout when
+            the AI extraction (insights.promoter_themes / detractor_themes)
+            is available. Falls back to a deduced version from
+            key_findings for rounds whose insights were generated before
+            this PR shipped. */}
+      {(promoterThemes.length > 0 || detractorThemes.length > 0) && (
         <Card padding={22}>
           <SectionHeader noOuterMargin>
             <h3
@@ -1103,16 +1162,16 @@ export default function RoundDashboard() {
               color="var(--pulse-deep)"
               tint="var(--pulse-tint)"
               soft="var(--pulse-soft)"
-              findings={positiveFindings.slice(0, 6)}
-              sample={promoterSample}
+              themes={promoterThemes.slice(0, 6)}
+              sample={promoterTopQuote}
             />
             <ThemesColumn
               title="⚠ What detractors hate"
               color="var(--coral)"
               tint="var(--coral-tint)"
               soft="var(--coral-soft)"
-              findings={negativeFindings.slice(0, 6)}
-              sample={detractorSample}
+              themes={detractorThemes.slice(0, 6)}
+              sample={detractorTopQuote}
             />
           </div>
         </Card>
@@ -1499,7 +1558,7 @@ function RosterCard({
   );
 }
 
-function ManagerColumn({ label, labelColor, managers, changeIsPositive }) {
+function ManagerColumn({ label, labelColor, managers, changeIsPositive, hasChangeData }) {
   return (
     <div>
       <div
@@ -1513,7 +1572,7 @@ function ManagerColumn({ label, labelColor, managers, changeIsPositive }) {
           key={m.name}
           className="grid items-center gap-3 py-2.5"
           style={{
-            gridTemplateColumns: "32px 1fr auto auto",
+            gridTemplateColumns: hasChangeData ? "32px 1fr auto auto" : "32px 1fr auto",
             borderBottom: i < arr.length - 1 ? "1px solid var(--line)" : "none",
           }}
         >
@@ -1546,24 +1605,37 @@ function ManagerColumn({ label, labelColor, managers, changeIsPositive }) {
               {m.nps}
             </span>
           </div>
-          <span
-            className="text-[11.5px] font-bold rounded-full"
-            style={{
-              color: changeIsPositive ? "var(--pulse-deep)" : "var(--coral)",
-              backgroundColor: changeIsPositive ? "var(--pulse-tint)" : "var(--coral-tint)",
-              padding: "2px 7px",
-            }}
-          >
-            {m.change > 0 ? "+" : ""}
-            {m.change}
-          </span>
+          {hasChangeData && m.change != null && (
+            <span
+              className="text-[11.5px] font-bold rounded-full"
+              style={{
+                color: changeIsPositive ? "var(--pulse-deep)" : "var(--coral)",
+                backgroundColor: changeIsPositive ? "var(--pulse-tint)" : "var(--coral-tint)",
+                padding: "2px 7px",
+              }}
+            >
+              {m.change > 0 ? "+" : ""}
+              {m.change}
+            </span>
+          )}
         </div>
       ))}
     </div>
   );
 }
 
-function ThemesColumn({ title, color, tint, soft, findings, sample }) {
+/**
+ * ThemesColumn — renders the polished spec layout:
+ *   theme word ─── ━━━━━━━━━━ ━━━━ ── weight number
+ *
+ * Each row: theme label on the left (single word/short phrase),
+ * weighted bar in the middle filling proportional to weight (0-100),
+ * weight number in mono font on the right. Below the list: a sample
+ * quote tile in tinted paper with attribution.
+ *
+ * Themes shape: [{ theme, weight, sample_quote?, sample_attribution? }]
+ */
+function ThemesColumn({ title, color, tint, soft, themes, sample }) {
   return (
     <div>
       <div
@@ -1573,45 +1645,54 @@ function ThemesColumn({ title, color, tint, soft, findings, sample }) {
         {title}
       </div>
       <div className="flex flex-col gap-1.5">
-        {findings.map((f, i) => (
+        {themes.map((t, i) => (
           <div
             key={i}
             className="grid items-center gap-2.5 text-[13px]"
-            style={{ gridTemplateColumns: "1fr auto" }}
+            style={{ gridTemplateColumns: "minmax(80px, 100px) 1fr auto" }}
           >
-            <div>
-              <span className="font-semibold" style={{ color: "var(--ink)" }}>
-                {f.finding}
-              </span>
-              {f.evidence && (
-                <div className="text-[11.5px]" style={{ color: "var(--ink-3)" }}>
-                  {f.evidence}
-                </div>
-              )}
-            </div>
-            {f.weight != null && (
+            <span
+              className="font-semibold truncate"
+              style={{ color: "var(--ink)" }}
+              title={t.theme}
+            >
+              {t.theme}
+            </span>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: soft }}>
               <div
-                className="h-1.5 rounded-full overflow-hidden"
-                style={{ width: 80, background: soft }}
-              >
-                <div
-                  className="h-full rounded-full"
-                  style={{ width: `${f.weight}%`, background: color }}
-                />
-              </div>
-            )}
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${Math.max(0, Math.min(100, t.weight ?? 0))}%`,
+                  background: color,
+                }}
+              />
+            </div>
+            <span
+              className="font-mono font-semibold text-[11.5px]"
+              style={{ color: "var(--ink-3)" }}
+            >
+              {t.weight ?? ""}
+            </span>
           </div>
         ))}
       </div>
-      {sample && (sample.summary || sample.interview_text) && (
+      {sample && (sample.summary || sample.interview_text || sample.sample_quote) && (
         <div
           className="mt-3.5 p-3 rounded-xl text-[12.5px] italic"
           style={{ background: tint, color: "var(--ink-2)", lineHeight: 1.5 }}
         >
-          &ldquo;{(sample.summary || sample.interview_text).slice(0, 180)}
-          {(sample.summary || sample.interview_text).length > 180 ? "…" : ""}&rdquo;
+          &ldquo;
+          {(sample.summary || sample.interview_text || sample.sample_quote || "").slice(0, 200)}
+          {(sample.summary || sample.interview_text || sample.sample_quote || "").length > 200
+            ? "…"
+            : ""}
+          &rdquo;
           <div className="text-[11px] mt-1" style={{ color: "var(--ink-4)", fontStyle: "normal" }}>
-            — {sample.community_name || "Anonymous"}, NPS {sample.nps_score}
+            —{" "}
+            {sample.community_name
+              ? sample.community_name
+              : sample.sample_attribution || "Anonymous"}
+            {sample.nps_score != null && `, NPS ${sample.nps_score}`}
           </div>
         </div>
       )}
