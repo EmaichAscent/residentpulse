@@ -40,8 +40,17 @@ export default function RoundsLanding() {
   const [closing, setClosing] = useState(null);
   const [confirmClose, setConfirmClose] = useState(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  // When configuring an existing planned round (vs scheduling a new one),
+  // we open the same modal pre-filled. The modal sends a PATCH to
+  // /reschedule for the date when configuring; POST /custom when new.
+  const [configuringRound, setConfiguringRound] = useState(null);
   const [reschedulingId, setReschedulingId] = useState(null);
   const [rescheduleDate, setRescheduleDate] = useState("");
+  // Latest concluded round's recommended_actions_status. Lets the
+  // operator triage decisions (accept/reject) without drilling into
+  // /admin/rounds/:id. Hydrated from a second fetch when there's at
+  // least one concluded round.
+  const [latestRoundData, setLatestRoundData] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -91,6 +100,88 @@ export default function RoundsLanding() {
       cancelled = true;
     };
   }, [next?.id]);
+
+  // Load the latest concluded round's dashboard so we can surface
+  // pending recommendations (accept/reject) right on the landing page.
+  // Skipped when there are no concluded rounds.
+  const latestConcluded = rounds
+    .filter((r) => r.status === "concluded")
+    .sort((a, b) => b.round_number - a.round_number)[0];
+
+  useEffect(() => {
+    if (!latestConcluded) {
+      setLatestRoundData(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/admin/survey-rounds/${latestConcluded.id}/dashboard`, {
+      credentials: "include",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((d) => {
+        if (!cancelled) setLatestRoundData(d);
+      })
+      .catch(() => {
+        if (!cancelled) setLatestRoundData(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [latestConcluded?.id]);
+
+  // Decision handlers — same shape as RoundDashboard's. We optimistically
+  // update local state so the UI flips immediately.
+  const handleDecisionForLatest = async (theme, decision) => {
+    if (!theme || !latestConcluded) return;
+    try {
+      const res = await fetch("/api/admin/actions/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ round_id: latestConcluded.id, theme, decision }),
+      });
+      if (res.ok) {
+        setLatestRoundData((prev) =>
+          prev
+            ? {
+                ...prev,
+                recommended_actions_status: (prev.recommended_actions_status || []).map((p) =>
+                  p.action === theme ? { ...p, decision, decided_at: new Date().toISOString() } : p
+                ),
+              }
+            : prev
+        );
+      }
+    } catch (err) {
+      console.error("Failed to record decision:", err);
+    }
+  };
+
+  const handleUndoDecisionForLatest = async (theme) => {
+    if (!theme || !latestConcluded) return;
+    try {
+      const res = await fetch("/api/admin/actions/decisions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ round_id: latestConcluded.id, theme }),
+      });
+      if (res.ok) {
+        setLatestRoundData((prev) =>
+          prev
+            ? {
+                ...prev,
+                recommended_actions_status: (prev.recommended_actions_status || []).map((p) =>
+                  p.action === theme ? { ...p, decision: null, decided_at: null } : p
+                ),
+              }
+            : prev
+        );
+      }
+    } catch (err) {
+      console.error("Failed to undo decision:", err);
+    }
+  };
 
   // ────────────────────────────────────────────────────────────────────
   // Handlers
@@ -243,9 +334,13 @@ export default function RoundsLanding() {
   // ────────────────────────────────────────────────────────────────────
 
   const concludedCount = concluded.length;
-  const totalResponses = concluded.reduce((s, r) => s + (r.responses_completed || 0), 0);
+  // Postgres returns COUNT(*) and other numeric aggregates as STRINGS.
+  // Without the explicit Number() cast `s + r.responses_completed`
+  // string-concatenates ("0" + "45" + "64" + …), producing the
+  // "27663179%" garbage rate Mike spotted.
+  const totalResponses = concluded.reduce((s, r) => s + Number(r.responses_completed || 0), 0);
   const totalInvited = concluded.reduce(
-    (s, r) => s + (r.members_invited || r.invitations_sent || 0),
+    (s, r) => s + Number(r.members_invited || r.invitations_sent || 0),
     0
   );
   const avgResponsePct = totalInvited > 0 ? Math.round((totalResponses / totalInvited) * 100) : 0;
@@ -329,10 +424,7 @@ export default function RoundsLanding() {
           preflight={preflight}
           launching={launching === next.id}
           onLaunch={() => handleLaunch(next.id)}
-          onConfigure={() => {
-            setReschedulingId(next.id);
-            setRescheduleDate(next.scheduled_date?.slice(0, 10) || "");
-          }}
+          onConfigure={() => setConfiguringRound(next)}
         />
       ) : (
         <ScheduleNextCta onSchedule={() => setScheduleOpen(true)} />
@@ -346,6 +438,98 @@ export default function RoundsLanding() {
           closing={closing === live.id}
           onView={() => navigate(`/admin/rounds/${live.id}`)}
         />
+      )}
+
+      {/* 3c. PENDING RECOMMENDATIONS — Latest concluded round's
+            AI-generated recommendations awaiting an accept/reject
+            decision. Surfaced on the landing page so operators don't
+            have to drill into Round Results to triage. NPS-lift
+            projections shown per pick. */}
+      {latestRoundData?.recommended_actions_status?.some((p) => !p.decision) && (
+        <div>
+          <SectionHeader>
+            <h3
+              className="font-semibold text-[15px]"
+              style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
+            >
+              From Round {latestRoundData.round?.round_number} · decisions pending
+            </h3>
+            <div className="flex items-center gap-2.5">
+              <span
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-bold uppercase"
+                style={{
+                  backgroundColor: "var(--coral-tint)",
+                  color: "var(--coral)",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                {latestRoundData.recommended_actions_status.filter((p) => !p.decision).length}{" "}
+                awaiting decision
+              </span>
+              <button
+                onClick={() => navigate(`/admin/rounds/${latestRoundData.round.id}`)}
+                className="btn-ghost-sm"
+                type="button"
+              >
+                Open round →
+              </button>
+            </div>
+          </SectionHeader>
+          <div
+            className="rounded-2xl bg-white overflow-hidden"
+            style={{ border: "1px solid var(--line)", boxShadow: "var(--shadow-sm)" }}
+          >
+            {latestRoundData.recommended_actions_status
+              .filter((p) => !p.decision && p.logged_action_id == null)
+              .map((pick, i, arr) => (
+                <PendingPickRow
+                  key={i}
+                  pick={pick}
+                  totalRespondents={
+                    latestRoundData.response_rate?.completed ||
+                    latestRoundData.recommended_actions_status.length
+                  }
+                  isLast={i === arr.length - 1}
+                  onAccept={() => handleDecisionForLatest(pick.action, "accepted")}
+                  onReject={() => handleDecisionForLatest(pick.action, "rejected")}
+                  onOpenRound={() => navigate(`/admin/rounds/${latestRoundData.round.id}`)}
+                />
+              ))}
+          </div>
+          {/* Surface rejected/accepted picks for awareness with an undo
+              affordance. Keeps the pile from re-appearing on next load. */}
+          {latestRoundData.recommended_actions_status.some((p) => p.decision) && (
+            <div
+              className="mt-2 text-[11.5px] flex items-center gap-2 flex-wrap"
+              style={{ color: "var(--ink-4)" }}
+            >
+              {latestRoundData.recommended_actions_status
+                .filter((p) => p.decision)
+                .map((p, i) => (
+                  <span key={i} className="inline-flex items-center gap-1">
+                    <span
+                      style={{
+                        color: p.decision === "accepted" ? "var(--pulse-deep)" : "var(--ink-4)",
+                      }}
+                    >
+                      {p.decision === "accepted" ? "✓" : "✕"} {truncate(p.action, 40)}
+                    </span>
+                    <button
+                      onClick={() => handleUndoDecisionForLatest(p.action)}
+                      className="underline"
+                      style={{ color: "var(--ink-4)" }}
+                      type="button"
+                    >
+                      undo
+                    </button>
+                    {i <
+                      latestRoundData.recommended_actions_status.filter((x) => x.decision).length -
+                        1 && " · "}
+                  </span>
+                ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* 4. COMPLETED ROUNDS LIST */}
@@ -434,14 +618,30 @@ export default function RoundsLanding() {
         </div>
       )}
 
-      {/* 6. SCHEDULE ROUND MODAL */}
+      {/* 6. SCHEDULE ROUND MODAL — also reused for "Configure" on the
+            next-round hero, in which case we pre-fill from the existing
+            round and PATCH /reschedule on save instead of POST /custom. */}
       {scheduleOpen && (
         <ScheduleRoundModal
+          mode="create"
           nextRoundNumber={maxRoundNumber(rounds) + 1}
           defaultDate={defaultNextDate(rounds, account?.survey_cadence || 2)}
           audience={preflight?.audience}
           onCancel={() => setScheduleOpen(false)}
           onSubmit={handleScheduleSubmit}
+        />
+      )}
+      {configuringRound && (
+        <ScheduleRoundModal
+          mode="configure"
+          nextRoundNumber={configuringRound.round_number}
+          defaultDate={configuringRound.scheduled_date?.slice(0, 10) || ""}
+          audience={preflight?.audience}
+          onCancel={() => setConfiguringRound(null)}
+          onSubmit={async (data) => {
+            await handleReschedule(configuringRound.id, data.scheduled_date);
+            setConfiguringRound(null);
+          }}
         />
       )}
 
@@ -594,9 +794,14 @@ function NextRoundHero({ next, preflight, launching, onLaunch, onConfigure }) {
             </span>
             {" · "}
             {audience.invitees ?? "—"} invitees across {audience.communities ?? "—"} communities
-            {audience.window_days && ` · ${audience.window_days}-day window`}
-            {audience.reminder_days?.length > 0 &&
-              ` · reminders at ${audience.reminder_days.join(", ")}d`}
+            {/* Window + resident follow-up cadence (NOT the admin
+                pre-launch reminders, which are a separate schedule
+                shown in the pre-flight strip below). The actual code
+                in surveyRounds.js → POST /:id/launch sets closes_at to
+                +30 days; scheduler.js sends resident follow-ups on
+                day 10 and day 20 of the open window. */}
+            {audience.window_days && ` · ${audience.window_days}-day response window`}
+            {" · resident follow-ups at days 10 & 20"}
           </div>
         </div>
         <div className="flex flex-col gap-2 items-end flex-shrink-0">
@@ -662,9 +867,13 @@ function preflightChecks(preflight) {
       detail: `${preflight.prompt_version || "default"} ${preflight.prompt_approved ? "approved" : "default"}`,
     },
     {
-      label: "Reminder schedule set",
+      // Admin alerts before the round LAUNCHES (so the operator
+      // remembers to review). Resident follow-ups DURING the round
+      // are days 10 + 20 of the open window — separate cadence,
+      // surfaced in the hero subtitle above.
+      label: "Admin alerts set",
       state: preflight.reminders_set ? "ok" : "warn",
-      detail: preflight.reminders_set ? "14 / 7 / 1 days" : "Not configured",
+      detail: preflight.reminders_set ? "14 / 7 / 1 days before launch" : "Not configured",
     },
     {
       label: "Communities with contacts",
@@ -912,7 +1121,14 @@ function PlannedRoundRow({
   );
 }
 
-function ScheduleRoundModal({ nextRoundNumber, defaultDate, audience, onCancel, onSubmit }) {
+function ScheduleRoundModal({
+  mode = "create",
+  nextRoundNumber,
+  defaultDate,
+  audience,
+  onCancel,
+  onSubmit,
+}) {
   // The backend `/custom` endpoint only takes scheduled_date today. We
   // collect name + window in the modal for forward compatibility, but
   // only the date is sent. A future backend PR can accept label and
@@ -920,6 +1136,7 @@ function ScheduleRoundModal({ nextRoundNumber, defaultDate, audience, onCancel, 
   const [name, setName] = useState(`Round ${nextRoundNumber}`);
   const [date, setDate] = useState(defaultDate);
   const [windowDays, setWindowDays] = useState(30);
+  const isConfigure = mode === "configure";
 
   return (
     <div
@@ -941,11 +1158,12 @@ function ScheduleRoundModal({ nextRoundNumber, defaultDate, audience, onCancel, 
             color: "var(--ink)",
           }}
         >
-          Schedule round
+          {isConfigure ? `Configure Round ${nextRoundNumber}` : "Schedule round"}
         </h3>
         <p className="text-[13px] mb-5" style={{ color: "var(--ink-3)" }}>
-          Add a one-off round to the calendar. Cadence-driven planned rounds adjust automatically
-          when this is launched.
+          {isConfigure
+            ? "Adjust this round's settings before it launches. Resident follow-ups send at days 10 and 20 of the response window."
+            : "Add a one-off round to the calendar. Cadence-driven planned rounds adjust automatically when this is launched."}
         </p>
 
         <Field label="Round name">
@@ -1021,7 +1239,7 @@ function ScheduleRoundModal({ nextRoundNumber, defaultDate, audience, onCancel, 
             className="btn-pulse"
             type="button"
           >
-            Schedule round
+            {isConfigure ? "Save changes" : "Schedule round"}
           </button>
         </div>
       </div>
@@ -1231,4 +1449,114 @@ function csvEscape(v) {
     return `"${s.replace(/"/g, '""')}"`;
   }
   return s;
+}
+
+function truncate(s, max) {
+  if (!s) return "";
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+/**
+ * Pending pick row on the Rounds landing page. Compact version of the
+ * dashboard's RecommendedActionRow — same data shape, but Accept /
+ * Reject only (no inline ActionDrawer flow; the user clicks "Open
+ * round" to flesh out an accepted pick).
+ *
+ * Includes the same NPS-lift projection: 0.5 × affected_detractors /
+ * total_respondents × 100 (conservative model: detractors most likely
+ * become passives when the issue is addressed).
+ */
+function PendingPickRow({ pick, totalRespondents, isLast, onAccept, onReject, onOpenRound }) {
+  const priorityLabel =
+    pick.priority === "high"
+      ? "HIGH PRIORITY"
+      : pick.priority === "medium"
+        ? "MEDIUM"
+        : pick.priority === "low"
+          ? "LOW"
+          : pick.priority === "keep_doing"
+            ? "KEEP DOING"
+            : null;
+  const priorityColor =
+    pick.priority === "high"
+      ? "var(--coral)"
+      : pick.priority === "keep_doing"
+        ? "var(--pulse-deep)"
+        : pick.priority === "medium"
+          ? "var(--amber)"
+          : "var(--ink-4)";
+
+  const lift =
+    typeof pick.affected_detractor_count === "number" && totalRespondents > 0
+      ? Math.round((0.5 * pick.affected_detractor_count * 100) / totalRespondents)
+      : null;
+
+  return (
+    <div
+      className="grid items-start gap-4 px-5 py-3.5"
+      style={{
+        gridTemplateColumns: "1fr auto",
+        borderBottom: isLast ? "none" : "1px solid var(--line)",
+      }}
+    >
+      <div>
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          {priorityLabel && (
+            <span
+              className="text-[10px] font-bold uppercase"
+              style={{ color: priorityColor, letterSpacing: "0.08em" }}
+            >
+              {priorityLabel}
+            </span>
+          )}
+          {lift != null && lift > 0 && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full"
+              style={{
+                backgroundColor: "var(--pulse-tint)",
+                color: "var(--pulse-deep)",
+                padding: "2px 8px",
+              }}
+              title={`Conservative projection: ${pick.affected_detractor_count} detractors mentioned this. Assumes 50% convert from detractor → passive when the issue is addressed.`}
+            >
+              ↑ +{lift} NPS projected
+            </span>
+          )}
+        </div>
+        <div
+          className="font-semibold text-[13.5px]"
+          style={{ color: "var(--ink)", lineHeight: 1.45 }}
+        >
+          {pick.action}
+        </div>
+        {pick.impact && (
+          <div className="text-[12px] mt-1" style={{ color: "var(--ink-3)", lineHeight: 1.5 }}>
+            {pick.impact}
+          </div>
+        )}
+        {lift != null && pick.affected_detractor_count != null && (
+          <div className="text-[11px] mt-1.5" style={{ color: "var(--ink-4)" }}>
+            Based on {pick.affected_detractor_count} detractors of {totalRespondents} respondents ·
+            50% conversion to passive
+          </div>
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5" style={{ minWidth: 130 }}>
+        <button onClick={onAccept} className="btn-pulse-sm" type="button">
+          Accept
+        </button>
+        <button onClick={onReject} className="btn-ghost-sm" type="button">
+          Reject
+        </button>
+        <button
+          onClick={onOpenRound}
+          className="text-[11px] underline"
+          style={{ color: "var(--ink-4)" }}
+          type="button"
+        >
+          See round detail
+        </button>
+      </div>
+    </div>
+  );
 }

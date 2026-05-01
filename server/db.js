@@ -155,6 +155,32 @@ async function initializeSchema() {
       ON actions (client_id, created_at DESC)
     `);
 
+    // recommendation_decisions — per-pick accept/reject state for
+    // AI-generated recommended_actions on a round. Decoupled from
+    // the actions table so we can track rejections (which never
+    // become an action record) without polluting the action journal.
+    //
+    // Matching: same convention as actions.theme — the recommendation
+    // text serves as the natural key alongside round_id. Unique
+    // (round_id, theme) so a user can't accept and reject the same
+    // pick simultaneously; updates flip the decision.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS recommendation_decisions (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+        round_id INTEGER NOT NULL REFERENCES survey_rounds(id) ON DELETE CASCADE,
+        theme TEXT NOT NULL,
+        decision TEXT NOT NULL CHECK (decision IN ('accepted', 'rejected')),
+        decided_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        decided_by TEXT,
+        UNIQUE (round_id, theme)
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_rec_decisions_round
+      ON recommendation_decisions (round_id)
+    `);
+
     // Create users table (board members)
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (

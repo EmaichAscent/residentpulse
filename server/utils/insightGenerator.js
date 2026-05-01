@@ -367,6 +367,10 @@ Return a JSON array of 3 actions, each with:
 - "priority": "high" | "medium" | "low" | "keep_doing"
 - "impact": Brief description of expected impact if implemented
 - "rationale": Why this action matters based on the feedback
+- "affected_count": Number of board-member sessions whose feedback informed this recommendation (count distinct respondents, not mentions). Estimate from the chunk-level positive/negative themes if exact counts aren't available.
+- "affected_detractor_count": Subset of affected_count who scored 0-6 (detractors). The dashboard uses this to project an NPS lift estimate, so be honest — it should NEVER exceed affected_count, and should generally be lower.
+
+Both counts must be integers. If a recommendation is a "keep doing" reinforcing what promoters praised, set affected_detractor_count to 0 and use affected_count for the promoter count.
 
 Only output valid JSON array, no other text.
 
@@ -462,7 +466,7 @@ ${context}
 Produce a final JSON object with these fields:
 1. "executive_summary": A 2-4 sentence narrative overview. Lead with something positive, then address the key concern, then the path forward. This sets the tone — balanced, not doom-and-gloom.
 2. "key_findings": 4-5 findings max (deduplicated, refined). At least 1-2 MUST be positive. Each: {"finding", "evidence", "severity"}
-3. "recommended_actions": 3 actions max (the company can only implement 1-3 changes per quarter). Include 1 "keep_doing" action. Each: {"action", "priority", "impact", "rationale"}
+3. "recommended_actions": 3 actions max (the company can only implement 1-3 changes per quarter). Include 1 "keep_doing" action. Each: {"action", "priority", "impact", "rationale", "affected_count", "affected_detractor_count"}. Preserve the integer counts from the input — they drive the NPS-lift projection on the dashboard.
 4. "cam_ascent_callouts": 1-2 focused callouts (deduplicated, refined). Each: {"area", "opportunity", "suggested_service"}
 
 Deduplicate overlapping items. Be tight and high-impact — less is more. Only output valid JSON, no other text.`;

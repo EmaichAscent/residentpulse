@@ -175,6 +175,54 @@ export default function RoundDashboard() {
     }
   };
 
+  // Accept/reject decisions on AI-recommended actions. The decision is
+  // POSTed to the backend (recommendation_decisions table) and we
+  // optimistically update local state so the UI flips immediately
+  // without waiting for the next dashboard refetch.
+  const handleDecision = async (theme, decision) => {
+    if (!theme) return;
+    try {
+      const res = await fetch("/api/admin/actions/decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ round_id: data.round.id, theme, decision }),
+      });
+      if (res.ok) {
+        setData((prev) => ({
+          ...prev,
+          recommended_actions_status: (prev.recommended_actions_status || []).map((p) =>
+            p.action === theme ? { ...p, decision, decided_at: new Date().toISOString() } : p
+          ),
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to record decision:", err);
+    }
+  };
+
+  const handleUndoDecision = async (theme) => {
+    if (!theme) return;
+    try {
+      const res = await fetch("/api/admin/actions/decisions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ round_id: data.round.id, theme }),
+      });
+      if (res.ok) {
+        setData((prev) => ({
+          ...prev,
+          recommended_actions_status: (prev.recommended_actions_status || []).map((p) =>
+            p.action === theme ? { ...p, decision: null, decided_at: null } : p
+          ),
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to undo decision:", err);
+    }
+  };
+
   const handleSolveAlert = async (alertId) => {
     setSolving(alertId);
     try {
@@ -808,6 +856,55 @@ export default function RoundDashboard() {
             looking for var(--font-display), var(--plum-tint), and "The
             round in 60 seconds", all of which need to live within the
             same node. */}
+      {/* Empty / error state: concluded round but no insights yet.
+            Shows a generate-analysis card with a button — previously
+            the regenerate button only existed inside the narrative
+            card, so rounds that errored or never generated had no
+            way to retry from the dashboard. */}
+      {isConcluded && (!insights?.executive_summary || insights.error) && (
+        <div
+          className="rounded-2xl bg-white overflow-hidden"
+          style={{ border: "1px solid var(--line)", boxShadow: "var(--shadow-sm)" }}
+        >
+          <div
+            className="flex items-center justify-between px-5 py-3.5"
+            style={{
+              background: "linear-gradient(90deg, var(--plum-tint), transparent)",
+              borderBottom: "1px solid var(--line)",
+            }}
+          >
+            <div className="flex items-center gap-2.5">
+              <SparkleBadge />
+              <div className="font-semibold text-[13.5px]" style={{ color: "var(--ink)" }}>
+                AI analysis
+              </div>
+            </div>
+            <div className="text-[11px]" style={{ color: "var(--ink-4)" }}>
+              {completedSessions.length} conversations
+            </div>
+          </div>
+          <div className="px-6 py-6 text-center">
+            <div className="text-[14px] mb-1.5 font-semibold" style={{ color: "var(--ink)" }}>
+              {insights?.error
+                ? "Analysis didn't complete last time."
+                : "No analysis has run for this round yet."}
+            </div>
+            <div className="text-[12.5px] mb-4" style={{ color: "var(--ink-3)" }}>
+              {insights?.error
+                ? "The AI hit an error synthesizing this round. Try regenerating to see findings, recommended actions, and what boards are talking about."
+                : "Generate AI analysis to see the round summary, recommended actions, and themes."}
+            </div>
+            <button
+              onClick={handleRegenerate}
+              disabled={regenerating}
+              className="btn-pulse"
+              type="button"
+            >
+              {regenerating ? "Generating…" : "Generate analysis"}
+            </button>
+          </div>
+        </div>
+      )}
       {isConcluded && insights?.executive_summary && !insights.error && (
         <div
           className="rounded-2xl bg-white overflow-hidden"
@@ -871,10 +968,27 @@ export default function RoundDashboard() {
               Recommended actions · this round
             </h3>
             <div className="flex items-center gap-2.5">
-              <Pill variant="neutral">
-                {recommendedActionsStatus.filter((p) => p.logged_action_id != null).length} of{" "}
-                {recommendedActionsStatus.length} logged
-              </Pill>
+              {(() => {
+                const total = recommendedActionsStatus.length;
+                const pending = recommendedActionsStatus.filter((p) => !p.decision).length;
+                if (pending > 0)
+                  return (
+                    <Pill variant="warn">
+                      {pending} of {total} awaiting decision
+                    </Pill>
+                  );
+                const accepted = recommendedActionsStatus.filter(
+                  (p) => p.decision === "accepted"
+                ).length;
+                const logged = recommendedActionsStatus.filter(
+                  (p) => p.logged_action_id != null
+                ).length;
+                return (
+                  <Pill variant="neutral">
+                    {logged} of {accepted} accepted logged
+                  </Pill>
+                );
+              })()}
               <button
                 onClick={() => navigate("/admin/actions")}
                 className="btn-ghost-sm"
@@ -890,13 +1004,17 @@ export default function RoundDashboard() {
                 key={i}
                 pick={pick}
                 isLast={i === arr.length - 1}
-                onLog={() =>
+                totalRespondents={completedSessions.length}
+                onAccept={() => handleDecision(pick.action, "accepted")}
+                onReject={() => handleDecision(pick.action, "rejected")}
+                onUndoDecision={() => handleUndoDecision(pick.action)}
+                onConfigure={() =>
                   setPromoteSeed({
                     theme: pick.action,
                     title: pick.action,
                     details:
                       [pick.impact, pick.rationale].filter(Boolean).join(" · ") ||
-                      "Generated from round insights.",
+                      `Round ${round.round_number} · Generated from AI insights.`,
                     source_round_id: round.id,
                   })
                 }
@@ -1824,23 +1942,39 @@ function ThemesColumn({ title, color, tint, soft, themes, sample }) {
  * from the recommendation. Already-logged picks deep-link to the
  * Actions screen.
  */
-function RecommendedActionRow({ pick, isLast, onLog, onView }) {
+/**
+ * Recommended action row — three accept/reject states plus a logged-
+ * action sub-state, plus an optional NPS-lift estimate.
+ *
+ *   • decision == null + no logged action  → Accept / Reject buttons
+ *   • decision == "accepted" + no logged action  → "Accepted ✓" pill +
+ *     "Configure & assign →" button (opens ActionDrawer)
+ *   • logged_action_id != null  → status pill + "View →" deep link
+ *   • decision == "rejected"  → muted "Rejected" pill + small Undo
+ *
+ * NPS lift estimate is shown when affected_detractor_count is present.
+ * Conservative model: assume 50% of mentioned-detractors convert from
+ * detractor → passive when the issue is addressed (Mike's directive:
+ * "naturals being the most likely conversion"). The 0.5 conversion
+ * rate keeps the projection honest — it's halfway between "no one
+ * changes" and "everyone converts to a passive".
+ */
+function RecommendedActionRow({
+  pick,
+  isLast,
+  totalRespondents,
+  onAccept,
+  onReject,
+  onUndoDecision,
+  onConfigure,
+  onView,
+}) {
   const isLogged = pick.logged_action_id != null;
   const status = pick.logged_action_status;
-  const statusLabel = isLogged
-    ? status === "completed"
-      ? "Completed"
-      : status === "cancelled"
-        ? "Cancelled"
-        : "In progress"
-    : "Not yet logged";
-  const statusVariant = isLogged
-    ? status === "completed"
-      ? "good"
-      : status === "cancelled"
-        ? "neutral"
-        : "neutral"
-    : "neutral";
+  const decision = pick.decision;
+  const isRejected = decision === "rejected";
+  const isAccepted = decision === "accepted";
+
   const priorityLabel =
     pick.priority === "high"
       ? "HIGH PRIORITY"
@@ -1860,16 +1994,38 @@ function RecommendedActionRow({ pick, isLast, onLog, onView }) {
           ? "var(--amber)"
           : "var(--ink-4)";
 
+  // Status pill text/variant — only meaningful when accepted+logged.
+  const statusLabel = isLogged
+    ? status === "completed"
+      ? "Completed"
+      : status === "cancelled"
+        ? "Cancelled"
+        : "In progress"
+    : null;
+
+  // Decision/status pill — what's the current state?
+  const headPill = isLogged
+    ? { label: statusLabel, variant: status === "completed" ? "good" : "neutral", check: true }
+    : isAccepted
+      ? { label: "Accepted", variant: "good", check: true }
+      : isRejected
+        ? { label: "Rejected", variant: "neutral", check: false }
+        : { label: "Pending decision", variant: "neutral", check: false };
+
+  // NPS lift projection. See comment above for the model.
+  const liftPoints = computeNpsLift(pick.affected_detractor_count, totalRespondents);
+
   return (
     <div
       className="grid items-start gap-4 px-5 py-3.5"
       style={{
         gridTemplateColumns: "1fr auto",
         borderBottom: isLast ? "none" : "1px solid var(--line)",
+        opacity: isRejected ? 0.55 : 1,
       }}
     >
       <div>
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
           {priorityLabel && (
             <span
               className="text-[10px] font-bold uppercase"
@@ -1878,8 +2034,8 @@ function RecommendedActionRow({ pick, isLast, onLog, onView }) {
               {priorityLabel}
             </span>
           )}
-          <Pill variant={statusVariant}>
-            {isLogged && (
+          <Pill variant={headPill.variant}>
+            {headPill.check && (
               <svg
                 width="10"
                 height="10"
@@ -1894,8 +2050,21 @@ function RecommendedActionRow({ pick, isLast, onLog, onView }) {
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             )}
-            {statusLabel}
+            {headPill.label}
           </Pill>
+          {liftPoints != null && liftPoints > 0 && !isRejected && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full"
+              style={{
+                backgroundColor: "var(--pulse-tint)",
+                color: "var(--pulse-deep)",
+                padding: "2px 8px",
+              }}
+              title={`Conservative projection: ${pick.affected_detractor_count} detractors mentioned this. Assumes 50% convert from detractor → passive when the issue is addressed.`}
+            >
+              ↑ +{liftPoints} NPS projected
+            </span>
+          )}
         </div>
         <div
           className="font-semibold text-[13.5px]"
@@ -1908,18 +2077,71 @@ function RecommendedActionRow({ pick, isLast, onLog, onView }) {
             {pick.impact}
           </div>
         )}
+        {liftPoints != null && pick.affected_detractor_count != null && !isRejected && (
+          <div className="text-[11px] mt-1.5" style={{ color: "var(--ink-4)" }}>
+            Based on {pick.affected_detractor_count} detractors of {totalRespondents} respondents ·
+            50% conversion to passive
+          </div>
+        )}
       </div>
-      <div className="flex flex-col gap-1.5" style={{ minWidth: 110 }}>
+      <div className="flex flex-col gap-1.5" style={{ minWidth: 130 }}>
         {isLogged ? (
           <button onClick={onView} className="btn-ghost-sm" type="button">
             View →
           </button>
-        ) : (
-          <button onClick={onLog} className="btn-pulse-sm" type="button">
-            Log this
+        ) : isRejected ? (
+          <button onClick={onUndoDecision} className="btn-ghost-sm" type="button">
+            Undo
           </button>
+        ) : isAccepted ? (
+          <>
+            <button onClick={onConfigure} className="btn-pulse-sm" type="button">
+              Configure & assign →
+            </button>
+            <button
+              onClick={onUndoDecision}
+              className="text-[11px] underline"
+              style={{ color: "var(--ink-4)" }}
+              type="button"
+            >
+              Change my mind
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={onAccept} className="btn-pulse-sm" type="button">
+              Accept
+            </button>
+            <button onClick={onReject} className="btn-ghost-sm" type="button">
+              Reject
+            </button>
+          </>
         )}
       </div>
     </div>
   );
+}
+
+/**
+ * NPS lift projection — conservative.
+ *   liftPoints = 0.5 × affected_detractors / total_respondents × 100
+ *
+ * The 0.5 conversion rate models Mike's "naturals being the most
+ * likely conversion" — when an issue is addressed, the most likely
+ * outcome is that affected detractors become passives (not promoters),
+ * and not all of them are fully won over. Half is a defensible middle
+ * ground. The frontend rounds to integer points and only displays
+ * when both inputs are present and the lift is positive.
+ */
+function computeNpsLift(affectedDetractors, totalRespondents) {
+  if (
+    typeof affectedDetractors !== "number" ||
+    typeof totalRespondents !== "number" ||
+    totalRespondents <= 0
+  ) {
+    return null;
+  }
+  const conversionRate = 0.5;
+  const lift = (conversionRate * affectedDetractors * 100) / totalRespondents;
+  return Math.round(lift);
 }
