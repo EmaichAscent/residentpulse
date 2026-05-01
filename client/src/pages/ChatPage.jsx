@@ -346,28 +346,30 @@ export default function ChatPage() {
         background: "linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%)",
       }}
     >
-      {/* Card sized to match the polished spec exactly:
-            420px wide × 720px tall, phone-shaped vertical card centered
-            on the page. On mobile (< 420px viewport) the card fills the
-            screen via w-full + max-w-[420px]. The design treats the
-            resident chat as a mobile-first surface — the desktop view
-            is a phone-frame card with paper background visible around
-            it, not a wide desktop document. (See
-            DESIGN/design_handoff_clientapp/src/screens/ChatPrototype.jsx
-            line 107.) */}
+      {/* Card. Spec is 420×720 (phone-shaped) but that frame was
+            designed inside a phone-sized preview — at desktop browser
+            scale the card looks anemic. Compromise: 480px max-width,
+            720px max-height. Still phone-card-shaped (aspect ratio
+            ~2:3), still centers nicely with paper visible around it,
+            but has enough presence at full desktop zoom that bubbles
+            don't feel cramped. On mobile (< 480px viewport) the card
+            fills the screen via w-full. */}
       <div
         className="flex flex-col w-full rounded-[22px] overflow-hidden bg-white my-auto"
         style={{
           boxShadow: "var(--shadow-lg)",
           border: "1px solid var(--line)",
-          maxWidth: 420,
+          maxWidth: 480,
           maxHeight: "min(720px, 100vh - 80px)",
-          // Trust gate / NPS picker: card sizes to content so the
-          // welcome bubble + CTA don't sit above a sea of dead space.
+          // Trust gate / NPS picker: small min-height so the card has
+          // some presence even when content is short, but still grows
+          // naturally with the welcome → NPS picker progression.
           // Conversation: lock to the spec's full 720px so the input
           // stays pinned at the bottom and the messages have stable
           // scroll real estate.
-          ...(npsSubmitted ? { height: "min(720px, 100vh - 80px)" } : { minHeight: 0 }),
+          ...(npsSubmitted
+            ? { height: "min(720px, 100vh - 80px)" }
+            : { minHeight: "min(420px, 100vh - 80px)" }),
         }}
         data-testid="chat-card"
       >
@@ -809,10 +811,18 @@ function ChatMessage({ role, content, timestamp }) {
       {!isUser && <PulseAvatar />}
       <div
         className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}
-        style={{ maxWidth: isUser ? 280 : 310 }}
+        // Bubble max-widths bumped from spec's 280/310 to 320/360 to
+        // match the wider card (480px instead of 420px) and to give
+        // the assistant bubble more breathing room — long-context
+        // replies were cramped at 310px.
+        style={{ maxWidth: isUser ? 320 : 360 }}
       >
         <div
-          className="text-[14px] leading-[1.5] whitespace-pre-wrap break-words"
+          // Text size bumped from spec's 14px to 15px for desktop
+          // readability — 14px is fine in the phone-sized preview but
+          // hard to read in a real browser, especially for the older
+          // HOA board demographic this is targeting.
+          className="text-[15px] leading-[1.5] whitespace-pre-wrap break-words"
           style={
             isUser
               ? {
