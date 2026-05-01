@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import OwnerPicker from "./OwnerPicker";
 
 /**
  * ActionDrawer — slide-in form for logging an action against a brief pick
@@ -22,12 +23,15 @@ export default function ActionDrawer({ isOpen, onClose, onSaved, seed, ownerDefa
   const [error, setError] = useState(null);
   const titleRef = useRef(null);
 
-  // When drawer opens, hydrate from seed.
+  // When drawer opens, hydrate from seed. Edit mode prefills owner
+  // from the seed itself (not the current user) so reassigning during
+  // an "Add update" flow is one click instead of an accidental
+  // overwrite to the editor's email.
   useEffect(() => {
     if (isOpen && seed) {
       setTitle(seed.title || "");
       setDetails(seed.details || "");
-      setOwner(ownerDefault || "");
+      setOwner(seed.mode === "edit" ? seed.owner_email || "" : ownerDefault || "");
       setError(null);
       const t = setTimeout(() => titleRef.current?.focus(), 50);
       return () => clearTimeout(t);
@@ -55,20 +59,30 @@ export default function ActionDrawer({ isOpen, onClose, onSaved, seed, ownerDefa
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/actions", {
-        method: "POST",
+      const isEdit = seed?.mode === "edit" && seed?.actionId;
+      const url = isEdit ? `/api/admin/actions/${seed.actionId}` : "/api/admin/actions";
+      const method = isEdit ? "PATCH" : "POST";
+      const body = isEdit
+        ? {
+            title: title.trim(),
+            details: details.trim() || null,
+            owner_email: owner.trim() || null,
+          }
+        : {
+            theme: seed?.theme || "Untagged",
+            title: title.trim(),
+            details: details.trim() || undefined,
+            owner_email: owner.trim() || undefined,
+          };
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          theme: seed?.theme || "Untagged",
-          title: title.trim(),
-          details: details.trim() || undefined,
-          owner_email: owner.trim() || undefined,
-        }),
+        body: JSON.stringify(body),
         credentials: "include",
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Save failed");
+        const respBody = await res.json().catch(() => ({}));
+        throw new Error(respBody.error || "Save failed");
       }
       onSaved?.();
     } catch (err) {
@@ -99,7 +113,9 @@ export default function ActionDrawer({ isOpen, onClose, onSaved, seed, ownerDefa
             className="text-[11px] font-semibold uppercase tracking-wider mb-1"
             style={{ color: "var(--ink-4)", letterSpacing: "0.12em" }}
           >
-            Log an action {seed?.theme && `· ${seed.theme}`}
+            {seed?.mode === "edit"
+              ? `Update action${seed?.theme ? ` · ${seed.theme}` : ""}`
+              : `Log an action${seed?.theme ? ` · ${seed.theme}` : ""}`}
           </p>
           <h2
             id="action-drawer-title"
@@ -110,7 +126,7 @@ export default function ActionDrawer({ isOpen, onClose, onSaved, seed, ownerDefa
               color: "var(--ink)",
             }}
           >
-            What are you doing about it?
+            {seed?.mode === "edit" ? "Update progress" : "What are you doing about it?"}
           </h2>
         </div>
 
@@ -146,15 +162,10 @@ export default function ActionDrawer({ isOpen, onClose, onSaved, seed, ownerDefa
           </Field>
 
           <Field label="Owner" hint="Who's accountable for this action?">
-            <input
-              type="email"
-              value={owner}
-              onChange={(e) => setOwner(e.target.value)}
-              disabled={saving}
-              className="w-full px-3 py-2 text-sm rounded-md border outline-none transition disabled:opacity-50"
-              style={{ borderColor: "var(--line-2)", color: "var(--ink)" }}
-              placeholder="email@example.com"
-            />
+            {/* Replaces a free-text email field. Browses admin users
+                from the Account page so we never end up assigning to an
+                email that doesn't sign in. */}
+            <OwnerPicker value={owner} onChange={setOwner} />
           </Field>
 
           <div
@@ -191,7 +202,7 @@ export default function ActionDrawer({ isOpen, onClose, onSaved, seed, ownerDefa
             className="text-sm px-4 py-2 rounded-lg text-white font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ backgroundColor: "var(--pulse)" }}
           >
-            {saving ? "Saving…" : "Log action"}
+            {saving ? "Saving…" : seed?.mode === "edit" ? "Save update" : "Log action"}
           </button>
         </div>
       </div>
