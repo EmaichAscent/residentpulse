@@ -2044,20 +2044,17 @@ function NotificationsSection({ detractorThreshold, savingThreshold, onSaveThres
               />
             }
             channels={["Email"]}
-            stub
           />
           <NotifRow
             title="Critical issue mentioned"
             sub="AI detected language about lawsuits, safety, board turnover, or contract termination."
             extra={<Pill tone="ai">AI</Pill>}
             channels={["Email"]}
-            stub
           />
           <NotifRow
             title="Round completed"
             sub="Sent when a survey round closes and final results are ready to review."
             channels={["Email"]}
-            stub
           />
         </CardBody>
       </Card>
@@ -2073,27 +2070,24 @@ function NotificationsSection({ detractorThreshold, savingThreshold, onSaveThres
             title="Weekly portfolio digest"
             sub="Every Monday — response rate, NPS movement, top emerging concerns."
             channels={["Email"]}
-            stub
           />
           <NotifRow
             title="Renewal risk report"
             sub="Monthly list of communities flagged at risk based on sentiment and contract date."
             channels={["Email"]}
-            stub
           />
         </CardBody>
       </Card>
 
       <ComingSoonNote>
-        Channel pills (Email / Slack / SMS) and integrations (Slack channel, MS Teams) ship in Phase
-        B once the notification preferences schema lands. Detractor threshold above is fully live
-        today.
+        Per-row enable/disable and digest scheduling ship in Phase B. Detractor threshold above is
+        fully live today.
       </ComingSoonNote>
     </>
   );
 }
 
-function NotifRow({ title, sub, extra, channels = [], stub = false }) {
+function NotifRow({ title, sub, extra, channels = [] }) {
   return (
     <div
       className="flex items-start justify-between gap-4"
@@ -2109,44 +2103,27 @@ function NotifRow({ title, sub, extra, channels = [], stub = false }) {
       </div>
       <div className="flex items-center gap-3 flex-shrink-0">
         {extra}
-        <ChannelPills channels={channels} disabled={stub} />
+        {channels.includes("Email") && <ChannelTag>Email</ChannelTag>}
       </div>
     </div>
   );
 }
 
-function ChannelPills({ channels, disabled }) {
-  const all = ["Email", "Slack", "SMS"];
+function ChannelTag({ children }) {
   return (
-    <div
-      className="inline-flex rounded-lg p-0.5"
+    <span
+      className="inline-flex items-center rounded-md"
       style={{
+        padding: "4px 10px",
+        fontSize: 11,
+        fontWeight: 600,
         backgroundColor: "var(--paper-2)",
+        color: "var(--ink-2)",
         border: "1px solid var(--line)",
-        opacity: disabled ? 0.6 : 1,
       }}
-      title={disabled ? "Channel selection ships in Phase B" : ""}
     >
-      {all.map((c) => {
-        const on = channels.includes(c);
-        return (
-          <span
-            key={c}
-            style={{
-              padding: "4px 10px",
-              fontSize: 11,
-              fontWeight: 600,
-              borderRadius: 6,
-              backgroundColor: on ? "white" : "transparent",
-              color: on ? "var(--ink)" : "var(--ink-4)",
-              boxShadow: on ? "var(--shadow-sm)" : "none",
-            }}
-          >
-            {c}
-          </span>
-        );
-      })}
-    </div>
+      {children}
+    </span>
   );
 }
 
@@ -2345,17 +2322,11 @@ function SecuritySection({ onChangePassword }) {
           right={<Pill tone="warn">Not enabled</Pill>}
         />
         <CardBody>
-          <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 14 }}>
+          <div className="grid grid-cols-1" style={{ gap: 14 }}>
             <MiniCard
               title="Authenticator app"
               sub="Use Google Authenticator, 1Password, or similar."
               action={<Btn variant="pulse">Set up</Btn>}
-              disabled
-            />
-            <MiniCard
-              title="SMS verification"
-              sub="Receive a code by text message at sign-in."
-              action={<Btn variant="ghost">Set up</Btn>}
               disabled
             />
           </div>
