@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { ArchiveIconButton, ArchiveModal, SearchInput, FilterSelect, FieldInput } from "./Members";
+import {
+  ArchiveIconButton,
+  ArchiveModal,
+  SearchInput,
+  FilterSelect,
+  FieldInput,
+  ViewToggle,
+} from "./Members";
 
 /**
  * Communities — full rebuild matching DESIGN/design_handoff_clientapp/
@@ -49,6 +56,7 @@ export default function Communities() {
   const [editingId, setEditingId] = useState(null);
   const [archiveTarget, setArchiveTarget] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [view, setView] = useState("active");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,6 +126,22 @@ export default function Communities() {
     }
   };
 
+  // Reactivate hits the same toggle endpoint as archive, but without
+  // the confirm modal — bringing a community back into rotation is
+  // low-risk and the user already explicitly clicked "Reactivate".
+  const handleReactivate = async (id) => {
+    try {
+      const res = await fetch(`/api/admin/communities/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to reactivate");
+      await load();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   const handleSaveEdit = async (id, patch) => {
     try {
       const res = await fetch(`/api/admin/communities/${id}`, {
@@ -171,10 +195,12 @@ export default function Communities() {
     return <p className="text-center py-10 text-red-500">{error}</p>;
   }
 
-  // Show only ACTIVE communities by default. Deactivated ones are out of
-  // scope here — they're kept in the DB to preserve historical data and
-  // can be reactivated via the existing endpoint.
-  const active = communities.filter((c) => c.status !== "deactivated");
+  // 'active' shows the working roster; 'archived' shows deactivated
+  // communities (still in the DB for historical reporting). Both are
+  // returned by GET /communities — we just filter client-side.
+  const active = communities.filter((c) =>
+    view === "archived" ? c.status === "deactivated" : c.status !== "deactivated"
+  );
 
   // Build per-community metrics by name match against the cohorts.
   const cohortByName = mapByName(latestCohorts);
@@ -246,11 +272,13 @@ export default function Communities() {
             Communities
           </h1>
           <div className="text-[13px] mt-1" style={{ color: "var(--ink-3)" }}>
-            {active.length} communities. Quick visual of where things stand — details and data
-            hygiene live here.
+            {view === "archived"
+              ? `${active.length} archived. Reactivate to bring back into the active roster.`
+              : `${active.length} communities. Quick visual of where things stand — details and data hygiene live here.`}
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <ViewToggle value={view} onChange={setView} />
           <a
             href="/api/admin/communities/export"
             className="btn-ghost"
@@ -329,12 +357,14 @@ export default function Communities() {
                 key={c.id}
                 community={c}
                 locations={locations}
+                view={view}
                 isLast={i === sorted.length - 1}
                 isEditing={editingId === c.id}
                 onStartEdit={() => setEditingId(c.id)}
                 onCancelEdit={() => setEditingId(null)}
                 onSave={(patch) => handleSaveEdit(c.id, patch)}
                 onArchive={() => setArchiveTarget(c)}
+                onReactivate={() => handleReactivate(c.id)}
               />
             ))
           )}
@@ -393,12 +423,14 @@ function CommunityTableHeader() {
 function CommunityRow({
   community,
   locations,
+  view,
   isLast,
   isEditing,
   onStartEdit,
   onCancelEdit,
   onSave,
   onArchive,
+  onReactivate,
 }) {
   if (isEditing) {
     return (
@@ -485,10 +517,21 @@ function CommunityRow({
         {c.issue || "—"}
       </span>
       <div className="flex items-center gap-1.5" style={{ width: 110, justifyContent: "flex-end" }}>
-        <button onClick={onStartEdit} className="btn-ghost-sm" type="button">
-          Edit
-        </button>
-        <ArchiveIconButton onClick={onArchive} title="Archive community" />
+        {view === "archived" ? (
+          // The community DELETE endpoint toggles status — calling it
+          // again on a deactivated community reactivates it. Direct
+          // call (no confirm modal) since reactivation is low-risk.
+          <button onClick={onReactivate} className="btn-pulse-sm" type="button">
+            Reactivate
+          </button>
+        ) : (
+          <>
+            <button onClick={onStartEdit} className="btn-ghost-sm" type="button">
+              Edit
+            </button>
+            <ArchiveIconButton onClick={onArchive} title="Archive community" />
+          </>
+        )}
       </div>
     </div>
   );
