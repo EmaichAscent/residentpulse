@@ -30,12 +30,18 @@ export default function Members() {
   const [editingId, setEditingId] = useState(null);
   const [archiveTarget, setArchiveTarget] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
+  // 'active' shows the working roster; 'archived' shows soft-deleted
+  // members from /board-members/inactive with a Reactivate action in
+  // place of Archive.
+  const [view, setView] = useState("active");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/board-members", { credentials: "include" });
+      const url =
+        view === "archived" ? "/api/admin/board-members/inactive" : "/api/admin/board-members";
+      const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load members");
       setMembers(await res.json());
     } catch (err) {
@@ -43,7 +49,7 @@ export default function Members() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     load();
@@ -78,6 +84,22 @@ export default function Members() {
         throw new Error(body.error || "Failed to save");
       }
       setEditingId(null);
+      await load();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleReactivate = async (id) => {
+    try {
+      const res = await fetch(`/api/admin/board-members/${id}/reactivate`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to reactivate");
+      }
       await load();
     } catch (err) {
       alert(err.message);
@@ -165,11 +187,13 @@ export default function Members() {
             Board members
           </h1>
           <div className="text-[13px] mt-1" style={{ color: "var(--ink-3)" }}>
-            {members.length} members across the portfolio. Quick visual of who's responded — details
-            and data hygiene live here.
+            {view === "archived"
+              ? `${members.length} archived. Reactivate to bring back into the active roster.`
+              : `${members.length} members across the portfolio. Quick visual of who's responded — details and data hygiene live here.`}
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <ViewToggle value={view} onChange={setView} />
           <a
             href="/api/admin/board-members/export"
             className="btn-ghost"
@@ -194,13 +218,16 @@ export default function Members() {
         </div>
       </div>
 
-      {/* Stat strip */}
-      <div className="grid gap-3 mb-3.5" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
-        <StatCard label="Responded" n={stats.responded} color="var(--pulse)" />
-        <StatCard label="Flagged (NPS ≤ 6)" n={stats.flagged} color="var(--coral)" />
-        <StatCard label="Pending" n={stats.pending} color="var(--amber)" />
-        <StatCard label="Unsubscribed" n={stats.unsubscribed} color="var(--ink-3)" />
-      </div>
+      {/* Stat strip — only relevant on the Active view (archived
+            members don't carry latest_nps / delivery_status). */}
+      {view === "active" && (
+        <div className="grid gap-3 mb-3.5" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+          <StatCard label="Responded" n={stats.responded} color="var(--pulse)" />
+          <StatCard label="Flagged (NPS ≤ 6)" n={stats.flagged} color="var(--coral)" />
+          <StatCard label="Pending" n={stats.pending} color="var(--amber)" />
+          <StatCard label="Unsubscribed" n={stats.unsubscribed} color="var(--ink-3)" />
+        </div>
+      )}
 
       {/* Filters + table */}
       <div
@@ -241,12 +268,14 @@ export default function Members() {
               <MemberRow
                 key={m.id}
                 member={m}
+                view={view}
                 isLast={i === filtered.length - 1}
                 isEditing={editingId === m.id}
                 onStartEdit={() => setEditingId(m.id)}
                 onCancelEdit={() => setEditingId(null)}
                 onSave={(patch) => handleSaveEdit(m.id, patch)}
                 onArchive={() => setArchiveTarget(m)}
+                onReactivate={() => handleReactivate(m.id)}
               />
             ))
           )}
@@ -300,7 +329,17 @@ function TableHeader() {
   );
 }
 
-function MemberRow({ member, isLast, isEditing, onStartEdit, onCancelEdit, onSave, onArchive }) {
+function MemberRow({
+  member,
+  view,
+  isLast,
+  isEditing,
+  onStartEdit,
+  onCancelEdit,
+  onSave,
+  onArchive,
+  onReactivate,
+}) {
   if (isEditing) {
     return (
       <MemberEditRow member={member} isLast={isLast} onCancel={onCancelEdit} onSave={onSave} />
@@ -352,11 +391,55 @@ function MemberRow({ member, isLast, isEditing, onStartEdit, onCancelEdit, onSav
         {member.updated_at ? formatRelative(member.updated_at) : "—"}
       </span>
       <div className="flex items-center gap-1.5" style={{ width: 110, justifyContent: "flex-end" }}>
-        <button onClick={onStartEdit} className="btn-ghost-sm" type="button">
-          Edit
-        </button>
-        <ArchiveIconButton onClick={onArchive} title="Archive member" />
+        {view === "archived" ? (
+          <button onClick={onReactivate} className="btn-pulse-sm" type="button">
+            Reactivate
+          </button>
+        ) : (
+          <>
+            <button onClick={onStartEdit} className="btn-ghost-sm" type="button">
+              Edit
+            </button>
+            <ArchiveIconButton onClick={onArchive} title="Archive member" />
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Active / Archived view switcher. Used on both Members and
+ * Communities for consistency. Same visual as the cadence toggle on
+ * the Rounds page.
+ */
+export function ViewToggle({ value, onChange }) {
+  return (
+    <div
+      className="inline-flex rounded-lg p-0.5"
+      style={{ backgroundColor: "var(--paper-2)", border: "1px solid var(--line)" }}
+    >
+      {[
+        { v: "active", label: "Active" },
+        { v: "archived", label: "Archived" },
+      ].map((o) => {
+        const isActive = value === o.v;
+        return (
+          <button
+            key={o.v}
+            onClick={() => !isActive && onChange(o.v)}
+            type="button"
+            className="px-3 py-1.5 text-[12px] font-semibold rounded-md transition"
+            style={{
+              backgroundColor: isActive ? "white" : "transparent",
+              color: isActive ? "var(--ink)" : "var(--ink-3)",
+              boxShadow: isActive ? "var(--shadow-sm)" : "none",
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -429,6 +429,7 @@ router.get("/trends", async (req, res) => {
       const npsScores = completed.filter((s) => s.nps_score != null).map((s) => s.nps_score);
       const promoters = npsScores.filter((n) => n >= 9).length;
       const detractors = npsScores.filter((n) => n <= 6).length;
+      const passives = npsScores.length - promoters - detractors;
       const npsScore =
         npsScores.length > 0
           ? Math.round(((promoters - detractors) / npsScores.length) * 100)
@@ -582,6 +583,11 @@ router.get("/trends", async (req, res) => {
         launched_at: round.launched_at,
         concluded_at: round.concluded_at,
         nps_score: npsScore,
+        // Per-cohort respondent counts — drive the Trends page
+        // "Cohort movement" stacked bars and the AI narrative copy.
+        promoters,
+        passives,
+        detractors,
         response_count: completed.length,
         invited_count: round.members_invited || 0,
         response_rate:
