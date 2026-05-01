@@ -216,17 +216,9 @@ export default function Actions() {
           action={action}
           totalRespondents={brief.total_respondents}
           onMarkComplete={() => setCompleteTarget(action)}
-          onAddUpdate={() =>
-            setDrawerSeed({
-              mode: "edit",
-              actionId: action.id,
-              theme: pick.theme,
-              title: action.title,
-              details: action.details || "",
-              owner_email: action.owner_email || "",
-              providence: pick,
-            })
-          }
+          // Inline "Add update" form posts to /:id/updates itself; the
+          // parent just refetches so the new update appears at top.
+          onAddUpdate={load}
           onReassign={(email) => updateAction(action.id, { owner_email: email })}
           onDelete={() => setDeleteTarget(action)}
         />
@@ -238,16 +230,7 @@ export default function Actions() {
           key={action.id}
           action={action}
           onMarkComplete={() => setCompleteTarget(action)}
-          onAddUpdate={() =>
-            setDrawerSeed({
-              mode: "edit",
-              actionId: action.id,
-              theme: action.theme,
-              title: action.title,
-              details: action.details || "",
-              owner_email: action.owner_email || "",
-            })
-          }
+          onAddUpdate={load}
           onReassign={(email) => updateAction(action.id, { owner_email: email })}
           onDelete={() => setDeleteTarget(action)}
         />
@@ -485,21 +468,17 @@ function PickCard({
 
       {isActive ? (
         <>
-          {/* In-flight: the *action title* (what the user committed
-              to) is the headline. The pick theme drops to a small
-              eyebrow above so the lineage stays visible — but the
-              focal content is the work itself. */}
-          <div
-            className="text-[11.5px] font-semibold uppercase mt-2"
-            style={{ letterSpacing: "0.08em", color: "var(--ink-4)" }}
-          >
-            From pick · {pick.theme}
-          </div>
+          {/* In-flight: action.title (what the user committed to)
+              is the headline. The pick.theme is normally identical
+              at acceptance time (we prefilled the title with it), so
+              we don't repeat it as an eyebrow — the original
+              recommendation lives in the collapsed provenance footer
+              when the user wants to see lineage. */}
           <Title>{action.title}</Title>
           <ActiveBody
             action={action}
-            onMarkComplete={onMarkComplete}
             onAddUpdate={onAddUpdate}
+            onMarkComplete={onMarkComplete}
             onReassign={onReassign}
             onDelete={onDelete}
             provenance={
@@ -596,14 +575,51 @@ function ActionCard({ action, onMarkComplete, onAddUpdate, onReassign, onDelete 
 // State B body — owner, latest update, CTAs, provenance footer
 // ──────────────────────────────────────────────────────────────────────
 
-function ActiveBody({ action, onMarkComplete, onAddUpdate, onReassign, onDelete, provenance }) {
+function ActiveBody({ action, onAddUpdate, onMarkComplete, onReassign, onDelete, provenance }) {
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeBody, setComposeBody] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [postError, setPostError] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const updates = Array.isArray(action.updates) ? action.updates : [];
+  const latest = updates[0] || null; // server returns newest-first
+  const earlier = updates.slice(1);
+
+  const submitUpdate = async () => {
+    const body = composeBody.trim();
+    if (!body) return;
+    setPosting(true);
+    setPostError(null);
+    try {
+      const res = await fetch(`/api/admin/actions/${action.id}/updates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ body }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "Failed to add update");
+      }
+      setComposeBody("");
+      setComposeOpen(false);
+      // Bubble up so the parent reloads /actions and the new update
+      // shows up in the list.
+      onAddUpdate?.();
+    } catch (err) {
+      setPostError(err.message);
+    } finally {
+      setPosting(false);
+    }
+  };
+
   return (
     <>
-      {/* Latest update — uses the action's `details` field as the
-          single most-recent note. A future PR can layer a real updates
-          table; for now, "Add update" overwrites the same field via
-          the drawer in edit mode. */}
-      {action.details && (
+      {/* Latest update — first in the chronological list. Earlier
+          updates collapse behind a "View N earlier updates" expander
+          so the card stays compact when an action has run for weeks. */}
+      {latest && (
         <div
           className="rounded-xl"
           style={{
@@ -613,26 +629,158 @@ function ActiveBody({ action, onMarkComplete, onAddUpdate, onReassign, onDelete,
             borderLeft: "2px solid var(--pulse-soft)",
           }}
         >
-          <div
-            className="text-[10.5px] font-semibold uppercase mb-1"
-            style={{ letterSpacing: "0.1em", color: "var(--pulse-deep)" }}
-          >
-            Latest update
+          <div className="flex items-center justify-between" style={{ gap: 8, marginBottom: 6 }}>
+            <div
+              className="text-[10.5px] font-semibold uppercase"
+              style={{ letterSpacing: "0.1em", color: "var(--pulse-deep)" }}
+            >
+              Latest update
+            </div>
+            {updates.length > 1 && (
+              <span
+                className="text-[10.5px]"
+                style={{ color: "var(--ink-4)", fontFamily: "var(--font-mono)" }}
+              >
+                {updates.length} total
+              </span>
+            )}
           </div>
-          <p
-            className="text-[13px]"
-            style={{
-              color: "var(--ink-2)",
-              lineHeight: 1.5,
-              fontStyle: "italic",
-              margin: 0,
-            }}
+          <UpdateBody update={latest} />
+
+          {earlier.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                onClick={() => setShowHistory((v) => !v)}
+                className="font-semibold inline-flex items-center"
+                style={{
+                  background: "transparent",
+                  border: 0,
+                  padding: 0,
+                  fontSize: 11.5,
+                  color: "var(--pulse-deep)",
+                  cursor: "pointer",
+                  gap: 6,
+                }}
+              >
+                <span>{showHistory ? "▾" : "▸"}</span>
+                {showHistory
+                  ? `Hide earlier ${earlier.length === 1 ? "update" : "updates"}`
+                  : `View ${earlier.length} earlier ${earlier.length === 1 ? "update" : "updates"}`}
+              </button>
+              {showHistory && (
+                <div
+                  className="flex flex-col"
+                  style={{
+                    gap: 12,
+                    marginTop: 10,
+                    paddingTop: 10,
+                    borderTop: "1px solid var(--pulse-soft)",
+                  }}
+                >
+                  {earlier.map((u) => (
+                    <UpdateBody key={u.id} update={u} dim />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!latest && (
+        <p
+          className="text-[12.5px]"
+          style={{ color: "var(--ink-4)", marginTop: 14, fontStyle: "italic" }}
+        >
+          No updates yet — log the first one below.
+        </p>
+      )}
+
+      {/* Add-update inline form. Clicking "Add update" expands a
+          textarea here. Posting hits POST /actions/:id/updates. */}
+      {composeOpen && (
+        <div
+          className="rounded-xl"
+          style={{
+            border: "1px solid var(--line)",
+            backgroundColor: "white",
+            padding: 14,
+            marginTop: 12,
+          }}
+        >
+          <div
+            className="text-[10.5px] font-semibold uppercase mb-2"
+            style={{ letterSpacing: "0.1em", color: "var(--ink-3)" }}
           >
-            "{action.details}"
-          </p>
-          <div className="text-[11px] mt-2" style={{ color: "var(--ink-4)" }}>
-            {action.owner_email ? `${action.owner_email} · ` : ""}
-            logged {formatRelativeDate(action.created_at)}
+            New update
+          </div>
+          <textarea
+            value={composeBody}
+            onChange={(e) => setComposeBody(e.target.value)}
+            placeholder="Quick note on progress, blockers, or what changed since the last update."
+            rows={3}
+            autoFocus
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              fontSize: 13,
+              border: "1px solid var(--line-2)",
+              borderRadius: 8,
+              outline: "none",
+              resize: "vertical",
+              color: "var(--ink)",
+              fontFamily: "var(--font-sans)",
+            }}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submitUpdate();
+            }}
+          />
+          {postError && (
+            <p className="text-[11.5px] mt-1.5" style={{ color: "var(--coral)" }}>
+              {postError}
+            </p>
+          )}
+          <div className="flex items-center mt-2" style={{ gap: 8 }}>
+            <button
+              type="button"
+              onClick={submitUpdate}
+              disabled={!composeBody.trim() || posting}
+              className="font-semibold rounded-lg transition disabled:opacity-50"
+              style={{
+                backgroundColor: "var(--pulse)",
+                color: "white",
+                padding: "7px 12px",
+                fontSize: 12,
+                border: "1px solid var(--pulse)",
+                cursor: posting || !composeBody.trim() ? "not-allowed" : "pointer",
+              }}
+            >
+              {posting ? "Posting…" : "Post update"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setComposeOpen(false);
+                setComposeBody("");
+                setPostError(null);
+              }}
+              disabled={posting}
+              className="font-semibold transition"
+              style={{
+                background: "transparent",
+                color: "var(--ink-4)",
+                padding: "7px 4px",
+                fontSize: 12,
+                border: 0,
+                cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+            <span className="text-[10.5px]" style={{ color: "var(--ink-4)", marginLeft: "auto" }}>
+              ⌘+Enter to post
+            </span>
           </div>
         </div>
       )}
@@ -660,21 +808,23 @@ function ActiveBody({ action, onMarkComplete, onAddUpdate, onReassign, onDelete,
         >
           Mark complete
         </button>
-        <button
-          type="button"
-          onClick={onAddUpdate}
-          className="font-semibold rounded-lg transition"
-          style={{
-            backgroundColor: "white",
-            color: "var(--ink)",
-            padding: "8px 14px",
-            fontSize: 12.5,
-            border: "1px solid var(--line-2)",
-            cursor: "pointer",
-          }}
-        >
-          {action.details ? "Edit update" : "Add update"}
-        </button>
+        {!composeOpen && (
+          <button
+            type="button"
+            onClick={() => setComposeOpen(true)}
+            className="font-semibold rounded-lg transition"
+            style={{
+              backgroundColor: "white",
+              color: "var(--ink)",
+              padding: "8px 14px",
+              fontSize: 12.5,
+              border: "1px solid var(--line-2)",
+              cursor: "pointer",
+            }}
+          >
+            + Add update
+          </button>
+        )}
         <button
           type="button"
           onClick={onDelete}
@@ -695,6 +845,36 @@ function ActiveBody({ action, onMarkComplete, onAddUpdate, onReassign, onDelete,
 
       {provenance}
     </>
+  );
+}
+
+// Single update row — body + author + relative timestamp. Used both
+// for the latest update (full color) and earlier history (dim).
+function UpdateBody({ update, dim = false }) {
+  return (
+    <div>
+      <p
+        className="text-[13px]"
+        style={{
+          color: dim ? "var(--ink-3)" : "var(--ink-2)",
+          lineHeight: 1.5,
+          fontStyle: "italic",
+          margin: 0,
+        }}
+      >
+        "{update.body}"
+      </p>
+      <div
+        className="text-[11px]"
+        style={{ color: "var(--ink-4)", marginTop: 4, display: "flex", gap: 6 }}
+      >
+        <span style={{ fontWeight: 600 }}>{update.created_by_email || "unknown"}</span>
+        <span>·</span>
+        <span title={new Date(update.created_at).toLocaleString()}>
+          {formatRelativeDate(update.created_at)}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -1113,17 +1293,27 @@ function DoneRow({ action }) {
           <p className="mb-3" style={{ margin: 0, color: "var(--ink-2)" }}>
             {action.theme}
           </p>
-          {action.details && (
+          {Array.isArray(action.updates) && action.updates.length > 0 && (
             <>
               <div
                 className="text-[10.5px] font-semibold uppercase mb-1.5 mt-3"
                 style={{ letterSpacing: "0.08em", color: "var(--ink-4)" }}
               >
-                Final note
+                Update history · {action.updates.length}
               </div>
-              <p style={{ margin: 0, color: "var(--ink-2)", fontStyle: "italic" }}>
-                "{action.details}"
-              </p>
+              <div className="flex flex-col" style={{ gap: 10 }}>
+                {action.updates.map((u, i) => (
+                  <div
+                    key={u.id}
+                    style={{
+                      paddingTop: i === 0 ? 0 : 10,
+                      borderTop: i === 0 ? "none" : "1px solid var(--line)",
+                    }}
+                  >
+                    <UpdateBody update={u} dim={i > 0} />
+                  </div>
+                ))}
+              </div>
             </>
           )}
           <div className="text-[11px] mt-3" style={{ color: "var(--ink-4)" }}>

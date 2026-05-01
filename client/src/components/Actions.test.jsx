@@ -96,16 +96,12 @@ describe("Actions screen", () => {
     expect(await screen.findByText("Actions")).toBeInTheDocument();
     // Eyebrow: round + concluded date
     expect(screen.getByText(/Round 3/i)).toBeInTheDocument();
-    // Pick #1 has a logged action → State B. The card eyebrow reads
-    // "From pick · Maintenance ticket response time" — broken across
-    // spans, so match with a regex.
-    expect(screen.getByText(/Maintenance ticket response time/i)).toBeInTheDocument();
+    // Pick #1 has a logged action → State B. The action's own title
+    // (the user's logged commitment) is the card headline.
+    expect(screen.getByText("Roll out 48-hour SLA dashboard")).toBeInTheDocument();
     // Pick #2 has no action → State A; theme is the headline.
     expect(screen.getByText("Special-assessment communication")).toBeInTheDocument();
-    // The active action's own title (the user's logged commitment) is
-    // now the State B card headline.
-    expect(screen.getByText("Roll out 48-hour SLA dashboard")).toBeInTheDocument();
-    // Done section row title
+    // Done section row title (collapsed one-liner)
     expect(screen.getByText("Pilot text-message updates with 3 boards")).toBeInTheDocument();
   });
 
