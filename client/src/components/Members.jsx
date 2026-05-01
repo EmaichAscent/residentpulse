@@ -366,6 +366,13 @@ function MemberEditRow({ member, isLast, onCancel, onSave }) {
   const [lastName, setLastName] = useState(member.last_name || "");
   const [email, setEmail] = useState(member.email || "");
   const [community, setCommunity] = useState(member.community_name || "");
+  // The user-level "office" is stored as `management_company` on the
+  // users table — a legacy text field that gets canonicalized into
+  // the locations table on save via autoCreateLocationIfNeeded. Most
+  // members inherit their office through their community's location
+  // (preferred), but this field lets data-hygiene fix mis-attributed
+  // rows directly.
+  const [office, setOffice] = useState(member.management_company || "");
 
   return (
     <div
@@ -377,12 +384,13 @@ function MemberEditRow({ member, isLast, onCancel, onSave }) {
     >
       <div
         className="grid gap-3 items-end"
-        style={{ gridTemplateColumns: "1fr 1fr 1.6fr 1.4fr auto" }}
+        style={{ gridTemplateColumns: "1fr 1fr 1.6fr 1.4fr 1.2fr auto" }}
       >
         <FieldInput label="First name" value={firstName} onChange={setFirstName} />
         <FieldInput label="Last name" value={lastName} onChange={setLastName} />
         <FieldInput label="Email" value={email} onChange={setEmail} />
         <FieldInput label="Community" value={community} onChange={setCommunity} />
+        <FieldInput label="Office" value={office} onChange={setOffice} />
         <div className="flex gap-1.5">
           <button
             onClick={() =>
@@ -391,6 +399,7 @@ function MemberEditRow({ member, isLast, onCancel, onSave }) {
                 last_name: lastName.trim() || null,
                 email: email.trim(),
                 community_name: community.trim() || null,
+                management_company: office.trim() || null,
               })
             }
             className="btn-pulse-sm"
@@ -412,6 +421,7 @@ function MemberModal({ initial, onCancel, onSave }) {
   const [lastName, setLastName] = useState(initial?.last_name || "");
   const [email, setEmail] = useState(initial?.email || "");
   const [community, setCommunity] = useState(initial?.community_name || "");
+  const [office, setOffice] = useState(initial?.management_company || "");
 
   return (
     <div
@@ -435,7 +445,10 @@ function MemberModal({ initial, onCancel, onSave }) {
           <FieldInput label="Last name" value={lastName} onChange={setLastName} />
         </div>
         <FieldInput label="Email" value={email} onChange={setEmail} />
-        <FieldInput label="Community" value={community} onChange={setCommunity} />
+        <div className="grid grid-cols-2 gap-3">
+          <FieldInput label="Community" value={community} onChange={setCommunity} />
+          <FieldInput label="Office" value={office} onChange={setOffice} />
+        </div>
         <div className="flex justify-end gap-2 mt-4">
           <button onClick={onCancel} className="btn-ghost" type="button">
             Cancel
@@ -451,6 +464,7 @@ function MemberModal({ initial, onCancel, onSave }) {
                 last_name: lastName.trim() || null,
                 email: email.trim(),
                 community_name: community.trim() || null,
+                management_company: office.trim() || null,
               });
             }}
             className="btn-pulse"
