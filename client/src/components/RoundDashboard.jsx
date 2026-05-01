@@ -258,6 +258,7 @@ export default function RoundDashboard() {
     filter_options,
     alerts,
     insights,
+    recommended_actions_status: recommendedActionsStatus,
   } = data;
 
   const formatCurrency = (val) =>
@@ -853,6 +854,57 @@ export default function RoundDashboard() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* 3b. RECOMMENDED ACTIONS — AI-generated picks for this round
+            with status tracking. Sits between the narrative and the
+            warnings because they share the same "this is what came out
+            of the round" frame. Warnings are ad-hoc per-community
+            issues; these are the AI's portfolio-wide picks. */}
+      {recommendedActionsStatus && recommendedActionsStatus.length > 0 && (
+        <>
+          <SectionHeader>
+            <h3
+              className="font-semibold text-[15px]"
+              style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
+            >
+              Recommended actions · this round
+            </h3>
+            <div className="flex items-center gap-2.5">
+              <Pill variant="neutral">
+                {recommendedActionsStatus.filter((p) => p.logged_action_id != null).length} of{" "}
+                {recommendedActionsStatus.length} logged
+              </Pill>
+              <button
+                onClick={() => navigate("/admin/actions")}
+                className="btn-ghost-sm"
+                type="button"
+              >
+                View all actions →
+              </button>
+            </div>
+          </SectionHeader>
+          <Card padding={0}>
+            {recommendedActionsStatus.map((pick, i, arr) => (
+              <RecommendedActionRow
+                key={i}
+                pick={pick}
+                isLast={i === arr.length - 1}
+                onLog={() =>
+                  setPromoteSeed({
+                    theme: pick.action,
+                    title: pick.action,
+                    details:
+                      [pick.impact, pick.rationale].filter(Boolean).join(" · ") ||
+                      "Generated from round insights.",
+                    source_round_id: round.id,
+                  })
+                }
+                onView={() => navigate("/admin/actions")}
+              />
+            ))}
+          </Card>
+        </>
       )}
 
       {/* 4. WARNINGS — per-community accordion */}
@@ -1635,7 +1687,24 @@ function ManagerColumn({ label, labelColor, managers, changeIsPositive, hasChang
  *
  * Themes shape: [{ theme, weight, sample_quote?, sample_attribution? }]
  */
+/**
+ * ThemesColumn — list of weighted theme rows, each clickable to expand
+ * a per-theme detail panel underneath. Plus a featured quote tile at
+ * the bottom for the top-weighted theme.
+ *
+ * The label column uses a fixed minmax that gives readable themes
+ * room without truncating too aggressively. When the AI produces a
+ * longer phrase ("community manager turnover" vs "turnover") it wraps
+ * to a second line rather than getting clipped — but the topic_themes
+ * prompt has been tightened to prefer 1-3 word labels.
+ *
+ * Per-row expand shows: full theme phrase, weight, the row's
+ * sample_quote + sample_attribution. Useful when several themes share
+ * a topic area and the operator wants to see what each one covers.
+ */
 function ThemesColumn({ title, color, tint, soft, themes, sample }) {
+  const [expandedIdx, setExpandedIdx] = useState(null);
+
   return (
     <div>
       <div
@@ -1644,38 +1713,86 @@ function ThemesColumn({ title, color, tint, soft, themes, sample }) {
       >
         {title}
       </div>
-      <div className="flex flex-col gap-1.5">
-        {themes.map((t, i) => (
-          <div
-            key={i}
-            className="grid items-center gap-2.5 text-[13px]"
-            style={{ gridTemplateColumns: "minmax(80px, 100px) 1fr auto" }}
-          >
-            <span
-              className="font-semibold truncate"
-              style={{ color: "var(--ink)" }}
-              title={t.theme}
-            >
-              {t.theme}
-            </span>
-            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: soft }}>
-              <div
-                className="h-full rounded-full transition-all"
+      <div className="flex flex-col">
+        {themes.map((t, i) => {
+          const isExpanded = expandedIdx === i;
+          const hasDetail = !!(t.sample_quote || t.evidence);
+          return (
+            <div key={i}>
+              <button
+                type="button"
+                onClick={() => hasDetail && setExpandedIdx(isExpanded ? null : i)}
+                className="w-full grid items-center gap-2.5 text-[13px] py-1.5 text-left"
                 style={{
-                  width: `${Math.max(0, Math.min(100, t.weight ?? 0))}%`,
-                  background: color,
+                  gridTemplateColumns: "minmax(120px, 160px) 1fr auto auto",
+                  cursor: hasDetail ? "pointer" : "default",
                 }}
-              />
+                disabled={!hasDetail}
+              >
+                <span
+                  className="font-semibold leading-tight"
+                  style={{ color: "var(--ink)", wordBreak: "break-word", hyphens: "auto" }}
+                >
+                  {t.theme}
+                </span>
+                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: soft }}>
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.max(0, Math.min(100, t.weight ?? 0))}%`,
+                      background: color,
+                    }}
+                  />
+                </div>
+                <span
+                  className="font-mono font-semibold text-[11.5px]"
+                  style={{ color: "var(--ink-3)" }}
+                >
+                  {t.weight ?? ""}
+                </span>
+                {hasDetail ? (
+                  <Chevron rotate={isExpanded ? 90 : 0} color="var(--ink-4)" />
+                ) : (
+                  <span style={{ width: 12, display: "inline-block" }} />
+                )}
+              </button>
+              {isExpanded && hasDetail && (
+                <div
+                  className="mt-1 mb-2 p-3 rounded-xl text-[12.5px]"
+                  style={{
+                    background: tint,
+                    color: "var(--ink-2)",
+                    lineHeight: 1.55,
+                    marginLeft: 0,
+                  }}
+                >
+                  {t.evidence && (
+                    <div className="mb-2" style={{ color: "var(--ink-2)" }}>
+                      {t.evidence}
+                    </div>
+                  )}
+                  {t.sample_quote && (
+                    <div className="italic" style={{ color: "var(--ink-2)" }}>
+                      &ldquo;{t.sample_quote}&rdquo;
+                      {t.sample_attribution && (
+                        <div
+                          className="text-[11px] mt-1"
+                          style={{ color: "var(--ink-4)", fontStyle: "normal" }}
+                        >
+                          — {t.sample_attribution}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <span
-              className="font-mono font-semibold text-[11.5px]"
-              style={{ color: "var(--ink-3)" }}
-            >
-              {t.weight ?? ""}
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
+      {/* Featured quote tile — the top-weighted theme's sample, or
+          the highest-/lowest-scoring session as a fallback for older
+          insights that don't carry per-theme samples. */}
       {sample && (sample.summary || sample.interview_text || sample.sample_quote) && (
         <div
           className="mt-3.5 p-3 rounded-xl text-[12.5px] italic"
@@ -1696,6 +1813,113 @@ function ThemesColumn({ title, color, tint, soft, themes, sample }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * RecommendedActionRow — one AI-recommended action shown on the round
+ * dashboard with its current logged status. Clicking "Log this" opens
+ * the existing ActionDrawer (via setPromoteSeed in the parent) seeded
+ * from the recommendation. Already-logged picks deep-link to the
+ * Actions screen.
+ */
+function RecommendedActionRow({ pick, isLast, onLog, onView }) {
+  const isLogged = pick.logged_action_id != null;
+  const status = pick.logged_action_status;
+  const statusLabel = isLogged
+    ? status === "completed"
+      ? "Completed"
+      : status === "cancelled"
+        ? "Cancelled"
+        : "In progress"
+    : "Not yet logged";
+  const statusVariant = isLogged
+    ? status === "completed"
+      ? "good"
+      : status === "cancelled"
+        ? "neutral"
+        : "neutral"
+    : "neutral";
+  const priorityLabel =
+    pick.priority === "high"
+      ? "HIGH PRIORITY"
+      : pick.priority === "medium"
+        ? "MEDIUM"
+        : pick.priority === "low"
+          ? "LOW"
+          : pick.priority === "keep_doing"
+            ? "KEEP DOING"
+            : null;
+  const priorityColor =
+    pick.priority === "high"
+      ? "var(--coral)"
+      : pick.priority === "keep_doing"
+        ? "var(--pulse-deep)"
+        : pick.priority === "medium"
+          ? "var(--amber)"
+          : "var(--ink-4)";
+
+  return (
+    <div
+      className="grid items-start gap-4 px-5 py-3.5"
+      style={{
+        gridTemplateColumns: "1fr auto",
+        borderBottom: isLast ? "none" : "1px solid var(--line)",
+      }}
+    >
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          {priorityLabel && (
+            <span
+              className="text-[10px] font-bold uppercase"
+              style={{ color: priorityColor, letterSpacing: "0.08em" }}
+            >
+              {priorityLabel}
+            </span>
+          )}
+          <Pill variant={statusVariant}>
+            {isLogged && (
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ marginRight: 3 }}
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
+            {statusLabel}
+          </Pill>
+        </div>
+        <div
+          className="font-semibold text-[13.5px]"
+          style={{ color: "var(--ink)", lineHeight: 1.45 }}
+        >
+          {pick.action}
+        </div>
+        {pick.impact && (
+          <div className="text-[12px] mt-1" style={{ color: "var(--ink-3)", lineHeight: 1.5 }}>
+            {pick.impact}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5" style={{ minWidth: 110 }}>
+        {isLogged ? (
+          <button onClick={onView} className="btn-ghost-sm" type="button">
+            View →
+          </button>
+        ) : (
+          <button onClick={onLog} className="btn-pulse-sm" type="button">
+            Log this
+          </button>
+        )}
+      </div>
     </div>
   );
 }

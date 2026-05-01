@@ -385,11 +385,18 @@ Only output valid JSON array, no other text.
 
 ${context}`,
 
-    topic_themes: `Analyze the chunk-level theme summaries below and produce two ranked lists of TOPICS that distinguish promoters from detractors. These power the "What boards are talking about" visualization on the round dashboard — bar chart with weighted bars, plus one sample quote per side.
+    topic_themes: `Analyze the chunk-level theme summaries below and produce two ranked lists of TOPICS that distinguish promoters from detractors. These power the "What boards are talking about" visualization on the round dashboard — bar chart with weighted bars, plus an expandable detail panel per row.
 
 Look across all batches. The "positive_themes" lists in each batch are what promoters/passives praised. The "negative_themes" lists are what detractors/passives complained about. Aggregate by topic, count frequency, and produce a single ranked list for each side.
 
-Topics should be SHORT — single words or 1–3 word phrases. Examples of good topics: "responsive", "communication", "vendors", "transparency", "fees", "slow response", "manager turnover". Examples of BAD topics: full sentences, generic words like "service" without qualifier, internal HR detail.
+CRITICAL — theme labels must be SHORT:
+  • 1 word ideal, 2 words acceptable, 3 words MAX.
+  • Hard cap: 25 characters.
+  • GOOD examples: "responsive", "communication", "vendors", "fees", "slow response", "manager turnover", "budget process".
+  • BAD examples (DO NOT do this): "Strong individual managers" (4 words), "Community manager turnover" (3 words but 26+ chars), "Systemic budget process issues" (full phrase), "Communication breakdown patterns" (paraphrase).
+  • Picture it as a column header in a table — if it doesn't fit, it's too long.
+
+If you find yourself wanting a longer phrase, split it into two themes (e.g. "manager turnover" + "continuity") rather than concatenating. The detail panel below each row is where nuance lives, not the label.
 
 Return a JSON object with this exact shape:
 {
@@ -397,6 +404,7 @@ Return a JSON object with this exact shape:
     {
       "theme": "responsive",
       "weight": 95,
+      "evidence": "47 promoter sessions cited fast manager response times across 12 communities. Most-cited example: emergency maintenance dispatched within hours.",
       "sample_quote": "Our manager Sarah is the most responsive person I've ever worked with — same day, every time.",
       "sample_attribution": "Aspen Park board, NPS 9"
     }
@@ -405,6 +413,7 @@ Return a JSON object with this exact shape:
     {
       "theme": "slow response",
       "weight": 92,
+      "evidence": "28 detractor sessions complained about days-long delays on routine maintenance and communication.",
       "sample_quote": "We've had three pool issues this year and the response is always 'we'll look into it.' Then nothing happens.",
       "sample_attribution": "Crystal Heights board, NPS 1"
     }
@@ -414,6 +423,7 @@ Return a JSON object with this exact shape:
 Rules:
 - Provide 5-8 themes per side (whichever side has more signal — if there's not enough material for 5 detractor themes, fewer is fine).
 - weight is 0-100. The HIGHEST-frequency theme on each side gets the highest weight (90-100). Subsequent themes scale down by relative frequency. This drives the bar fill widths on the dashboard.
+- evidence is a 1-2 sentence summary of WHY this theme ranks where it does — quantify if possible (e.g. "47 sessions across 12 communities") and reference the specific behavior. This shows in the row's expanded detail panel.
 - sample_quote is a SHORT (under 30 words) verbatim or near-verbatim quote pulled from the notable_feedback or evidence in the chunk summaries. Avoid composite paraphrasing — pick the strongest single quote.
 - sample_attribution: format as "{community name} board, NPS {score}" if you have it, or just "Anonymous, NPS {score}" if not. Pick the source for the sample_quote.
 - Sort each list by weight descending.

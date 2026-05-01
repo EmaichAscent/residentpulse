@@ -52,16 +52,22 @@ describe("RoundDashboard refresh — structural guards", () => {
 
   it("'Promote to Action' button seeds the drawer with theme + alert details", () => {
     expect(source).toMatch(/Promote to Action/);
-    // The setPromoteSeed call exists somewhere with the expected fields.
-    // We don't fix the relative ordering — Prettier may reformat the line
-    // structure, so search the whole file instead.
-    const seedSetterMatch = source.match(/setPromoteSeed\(\{[\s\S]*?\}\)/);
-    expect(seedSetterMatch).not.toBeNull();
-    const seedSetter = seedSetterMatch[0];
-    expect(seedSetter).toMatch(/theme:/);
-    expect(seedSetter).toMatch(/alert\.alert_type/);
-    expect(seedSetter).toMatch(/details:/);
-    expect(seedSetter).toMatch(/round\.round_number/);
+    // The dashboard now has TWO call sites that seed the action drawer:
+    //   1. The warnings accordion's "Promote to Action" button (uses
+    //      alert.alert_type and round.round_number).
+    //   2. The recommended-actions row's "Log this" button (uses
+    //      pick.action and round.id).
+    // This test guards specifically the warnings flow — find a
+    // setPromoteSeed call that references alert fields and verify its
+    // shape.
+    const allSeedCalls = [...source.matchAll(/setPromoteSeed\(\{[\s\S]*?\}\)/g)];
+    expect(allSeedCalls.length).toBeGreaterThan(0);
+    const warningsSeed = allSeedCalls.map((m) => m[0]).find((s) => /alert\.alert_type/.test(s));
+    expect(warningsSeed).toBeDefined();
+    expect(warningsSeed).toMatch(/theme:/);
+    expect(warningsSeed).toMatch(/alert\.alert_type/);
+    expect(warningsSeed).toMatch(/details:/);
+    expect(warningsSeed).toMatch(/round\.round_number/);
   });
 
   it("ActionDrawer is rendered with onSaved that redirects to /admin/actions", () => {

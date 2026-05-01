@@ -913,6 +913,44 @@ router.get("/:id/dashboard", async (req, res) => {
     // Insights (concluded rounds only)
     const insights = round.insights_json || null;
 
+    // Recommended actions + their logged-action status. The Round
+    // Results page uses this to show "of the 3 AI-recommended actions,
+    // 1 is in progress, 1 hasn't been logged yet". Without this view
+    // there's no visual link between a round's AI suggestions and the
+    // Actions screen — operators had to navigate over and remember
+    // which round each pick came from.
+    //
+    // Matching: actions.theme === recommended_action.action (the full
+    // recommendation text). The /api/admin/actions/brief endpoint uses
+    // the same convention, so logging from either surface stays in
+    // sync.
+    let recommendedActionsStatus = [];
+    if (insights?.recommended_actions && Array.isArray(insights.recommended_actions)) {
+      const recs = insights.recommended_actions;
+      const themes = recs.map((r) => r.action || r.theme).filter(Boolean);
+      const loggedActions =
+        themes.length > 0
+          ? await db.all(
+              "SELECT id, theme, status FROM actions WHERE client_id = ? AND theme = ANY($2::text[])",
+              [req.clientId, themes]
+            )
+          : [];
+      const loggedByTheme = new Map(loggedActions.map((a) => [a.theme, a]));
+      recommendedActionsStatus = recs.map((r, i) => {
+        const theme = r.action || r.theme;
+        const logged = theme ? loggedByTheme.get(theme) : null;
+        return {
+          rank: i + 1,
+          action: theme || `Pick ${i + 1}`,
+          priority: r.priority || "medium",
+          impact: r.impact || null,
+          rationale: r.rationale || null,
+          logged_action_id: logged?.id || null,
+          logged_action_status: logged?.status || null,
+        };
+      });
+    }
+
     // Interview summary (customer's stated goals)
     const interviewResult = await db.get(
       "SELECT interview_summary FROM admin_interviews WHERE client_id = ? AND status = 'completed' ORDER BY completed_at DESC LIMIT 1",
@@ -955,6 +993,7 @@ router.get("/:id/dashboard", async (req, res) => {
       alerts,
       word_frequencies: wordFrequencies,
       insights,
+      recommended_actions_status: recommendedActionsStatus,
       interview_summary: interviewResult?.interview_summary || null,
       delivery,
     });
