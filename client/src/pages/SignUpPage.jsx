@@ -143,10 +143,10 @@ export default function SignUpPage() {
         color: "var(--ink)",
       }}
     >
-      <div className="grid min-h-screen" style={{ gridTemplateColumns: "360px 1fr" }}>
+      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[360px_1fr]">
         <LeftRail />
 
-        <main className="px-12 py-10 mx-auto w-full" style={{ maxWidth: 920 }}>
+        <main className="w-full px-6 py-8 sm:px-10 sm:py-10 lg:px-12" style={{ maxWidth: 920 }}>
           <div className="flex items-center justify-between mb-3">
             <div
               className="text-[11px] font-semibold uppercase"
@@ -193,7 +193,7 @@ export default function SignUpPage() {
                 Loading plans…
               </p>
             ) : (
-              <div className="grid grid-cols-3 gap-3 mb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
                 {plans.map((p) => (
                   <PlanTile
                     key={p.id}
@@ -211,7 +211,7 @@ export default function SignUpPage() {
                 This appears on surveys and invitations.
               </span>
             </SectionHeading>
-            <div className="grid grid-cols-2 gap-3 mb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
               <FieldLabel label="Management company name" required>
                 <input
                   className="auth-input"
@@ -249,7 +249,7 @@ export default function SignUpPage() {
                 placeholder="Suite, floor, etc."
               />
             </FieldLabel>
-            <div className="grid gap-3 mb-2" style={{ gridTemplateColumns: "2fr 1fr 1fr" }}>
+            <div className="grid gap-3 mb-2 grid-cols-1 sm:grid-cols-[2fr_1fr_1fr]">
               <FieldLabel label="City" required>
                 <input
                   className="auth-input"
@@ -301,7 +301,7 @@ export default function SignUpPage() {
                 You'll be the workspace owner.
               </span>
             </SectionHeading>
-            <div className="grid grid-cols-2 gap-3 mb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
               <FieldLabel label="First name" required>
                 <input
                   className="auth-input"
@@ -332,7 +332,7 @@ export default function SignUpPage() {
                 autoComplete="email"
               />
             </FieldLabel>
-            <div className="grid grid-cols-2 gap-3 mb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
               <FieldLabel label="Password" required>
                 <input
                   className="auth-input"
@@ -488,11 +488,8 @@ export default function SignUpPage() {
 function LeftRail() {
   return (
     <aside
-      className="px-10 py-10 flex flex-col"
+      className="flex flex-col px-6 py-8 sm:px-10 sm:py-10 lg:sticky lg:top-0 lg:h-screen"
       style={{
-        position: "sticky",
-        top: 0,
-        height: "100vh",
         borderRight: "1px solid var(--line)",
         backgroundColor: "var(--paper)",
       }}
