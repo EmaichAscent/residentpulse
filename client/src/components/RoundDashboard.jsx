@@ -1893,6 +1893,22 @@ function ThemesColumn({ title, color, tint, soft, themes, sample }) {
                     marginLeft: 0,
                   }}
                 >
+                  {/* Full theme title at top of the expanded panel.
+                      The collapsed row truncates long themes (some are
+                      full sentences) — once the user opens the detail
+                      panel, show the full headline so they don't have
+                      to hover/peek to see what the row is about. */}
+                  <div
+                    className="font-semibold mb-2"
+                    style={{
+                      color,
+                      fontSize: 13,
+                      lineHeight: 1.4,
+                      letterSpacing: "-0.005em",
+                    }}
+                  >
+                    {t.theme}
+                  </div>
                   {t.evidence && (
                     <div className="mb-2" style={{ color: "var(--ink-2)" }}>
                       {t.evidence}
