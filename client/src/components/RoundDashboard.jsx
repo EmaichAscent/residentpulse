@@ -1842,16 +1842,25 @@ function ThemesColumn({ title, color, tint, soft, themes, sample }) {
                 onClick={() => hasDetail && setExpandedIdx(isExpanded ? null : i)}
                 className="w-full grid items-center gap-2.5 text-[13px] py-1.5 text-left"
                 style={{
-                  gridTemplateColumns: "minmax(120px, 160px) 1fr auto auto",
+                  gridTemplateColumns: "minmax(110px, 140px) 1fr auto auto",
                   cursor: hasDetail ? "pointer" : "default",
                 }}
                 disabled={!hasDetail}
               >
+                {/* Compact label rendering — single-line, truncated.
+                    Some legacy rounds had the AI return full-sentence
+                    themes (50–200 chars) which previously wrapped to
+                    4–5 lines and broke the layout. Truncating to a
+                    short phrase keeps the row compact regardless of
+                    what the AI returned. The full theme is in `title`
+                    on hover, and the inline expand panel below shows
+                    evidence + quote for the long version. */}
                 <span
-                  className="font-semibold leading-tight"
-                  style={{ color: "var(--ink)", wordBreak: "break-word", hyphens: "auto" }}
+                  className="font-semibold truncate"
+                  style={{ color: "var(--ink)" }}
+                  title={t.theme}
                 >
-                  {t.theme}
+                  {compactThemeLabel(t.theme)}
                 </span>
                 <div className="h-1.5 rounded-full overflow-hidden" style={{ background: soft }}>
                   <div
@@ -2133,6 +2142,38 @@ function RecommendedActionRow({
  * ground. The frontend rounds to integer points and only displays
  * when both inputs are present and the lift is positive.
  */
+/**
+ * Squeeze a theme label down to a compact bar-chart-friendly phrase.
+ *
+ * Legacy rounds (generated before the topic_themes prompt was tightened)
+ * sometimes return full-sentence themes 50-200 chars long, which wrap
+ * into 4-5 lines and destroy the column alignment. New rounds get
+ * 1-3 word labels. This function gives both the same compact
+ * presentation:
+ *
+ *   • "responsive"                                       → "responsive"
+ *   • "communication gaps"                                → "communication gaps"
+ *   • "Strong community managers are a decisive ..."      → "Strong community…"
+ *
+ * Strategy: take the first 3 meaningful words (up to 24 chars),
+ * trimming filler at the start and ellipsizing if there's more.
+ * The full text remains accessible via the title attribute on the
+ * span, and the inline detail panel still shows the long-form theme
+ * via t.evidence / t.sample_quote.
+ */
+function compactThemeLabel(raw) {
+  if (!raw) return "";
+  const cleaned = raw.trim().replace(/\s+/g, " ");
+  // Already short — let it through.
+  if (cleaned.length <= 24) return cleaned;
+  // Strip trailing punctuation and clauses; keep up to 3 words.
+  const words = cleaned.split(" ");
+  const out = words.slice(0, 3).join(" ");
+  // If even the first 3 words are too long, hard-truncate.
+  const final = out.length > 24 ? out.slice(0, 23) : out;
+  return `${final}…`;
+}
+
 function computeNpsLift(affectedDetractors, totalRespondents) {
   if (
     typeof affectedDetractors !== "number" ||

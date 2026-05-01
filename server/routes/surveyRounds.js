@@ -178,6 +178,60 @@ router.post("/schedule", async (req, res) => {
 });
 
 /**
+ * Recent activity feed for the Home page. Returns the most recent
+ * completed survey responses across all rounds, with sentiment
+ * (good/mid/bad based on NPS bucket) and a flagged boolean if there's
+ * an active critical alert tied to the session.
+ */
+router.get("/recent-activity", async (req, res) => {
+  try {
+    const limit = Math.min(20, Number(req.query.limit) || 8);
+    const sessions = await db.all(
+      `SELECT s.id, s.nps_score, s.created_at,
+              COALESCE(u.first_name, '') AS first_name,
+              COALESCE(u.last_name, '') AS last_name,
+              COALESCE(c.community_name, s.community_name) AS community_name,
+              EXISTS(
+                SELECT 1 FROM critical_alerts ca
+                WHERE ca.session_id = s.id
+                  AND ca.dismissed = FALSE
+                  AND COALESCE(ca.solved, FALSE) = FALSE
+              ) AS flagged
+       FROM sessions s
+       LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN communities c ON c.id = s.community_id
+       WHERE s.client_id = ? AND s.is_test = ?
+         AND s.completed = TRUE
+         AND s.is_mock IS NOT TRUE
+         AND s.nps_score IS NOT NULL
+       ORDER BY s.created_at DESC
+       LIMIT ?`,
+      [req.clientId, req.isTestMode, limit]
+    );
+
+    const enriched = sessions.map((s) => {
+      const score = Number(s.nps_score);
+      const tone = score >= 9 ? "good" : score <= 6 ? "bad" : "mid";
+      return {
+        id: s.id,
+        first_name: s.first_name,
+        last_name: s.last_name,
+        community_name: s.community_name,
+        nps_score: score,
+        flagged: !!s.flagged,
+        tone,
+        created_at: s.created_at,
+      };
+    });
+
+    res.json(enriched);
+  } catch (err) {
+    logger.error({ err }, "Error loading recent activity");
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * Schedule a single off-cycle round at a custom date.
  *
  * Distinct from POST /schedule (which is the very first round + auto-fills
@@ -1076,13 +1130,17 @@ router.get("/:id/dashboard", async (req, res) => {
           priority: r.priority || "medium",
           impact: r.impact || null,
           rationale: r.rationale || null,
-          // Surfaces drive the NPS-lift projection. Older insights
-          // generated before this PR shipped won't carry these counts;
-          // the frontend handles null gracefully (no lift estimate
-          // shown).
+          // Surfaces drive the NPS-lift projection on Round Results
+          // and the "N mentions · M communities · NPS X when raised"
+          // metric line on Home. Older insights generated before
+          // these prompts shipped won't carry them; the frontend
+          // handles null gracefully.
           affected_count: typeof r.affected_count === "number" ? r.affected_count : null,
           affected_detractor_count:
             typeof r.affected_detractor_count === "number" ? r.affected_detractor_count : null,
+          mentions: typeof r.mentions === "number" ? r.mentions : null,
+          community_count: typeof r.community_count === "number" ? r.community_count : null,
+          nps_when_raised: typeof r.nps_when_raised === "number" ? r.nps_when_raised : null,
           logged_action_id: logged?.id || null,
           logged_action_status: logged?.status || null,
           decision: decision?.decision || null,
