@@ -210,6 +210,75 @@ router.patch("/:id", async (req, res) => {
 });
 
 /**
+ * Recommendation decisions — accept/reject state per AI-generated
+ * recommendation on a concluded round. The Round Results page surfaces
+ * picks with these three states:
+ *   • no decision yet  → Accept / Reject buttons
+ *   • accepted, no logged action → "Configure & assign →" button
+ *   • accepted + logged action → "View →" deep-link
+ *   • rejected → muted "Rejected" pill with Undo
+ */
+router.post("/decisions", async (req, res) => {
+  const { round_id, theme, decision } = req.body || {};
+
+  if (!round_id || !theme || !theme.trim()) {
+    return res.status(400).json({ error: "round_id and theme are required" });
+  }
+  if (!["accepted", "rejected"].includes(decision)) {
+    return res.status(400).json({ error: "decision must be 'accepted' or 'rejected'" });
+  }
+
+  try {
+    // Confirm the round belongs to this client (don't let one tenant
+    // record decisions on another's rounds).
+    const round = await db.get("SELECT id FROM survey_rounds WHERE id = ? AND client_id = ?", [
+      Number(round_id),
+      req.clientId,
+    ]);
+    if (!round) {
+      return res.status(404).json({ error: "Round not found" });
+    }
+
+    // Upsert by (round_id, theme) — flipping a previous decision
+    // overwrites it.
+    await db.run(
+      `INSERT INTO recommendation_decisions
+         (client_id, round_id, theme, decision, decided_by)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (round_id, theme) DO UPDATE
+         SET decision = EXCLUDED.decision,
+             decided_at = CURRENT_TIMESTAMP,
+             decided_by = EXCLUDED.decided_by`,
+      [req.clientId, Number(round_id), theme.trim(), decision, req.userEmail || null]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "Error recording recommendation decision");
+    res.status(500).json({ error: "Failed to record decision" });
+  }
+});
+
+router.delete("/decisions", async (req, res) => {
+  const { round_id, theme } = req.body || {};
+
+  if (!round_id || !theme || !theme.trim()) {
+    return res.status(400).json({ error: "round_id and theme are required" });
+  }
+
+  try {
+    await db.run(
+      `DELETE FROM recommendation_decisions
+       WHERE client_id = ? AND round_id = ? AND theme = ?`,
+      [req.clientId, Number(round_id), theme.trim()]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "Error clearing recommendation decision");
+    res.status(500).json({ error: "Failed to clear decision" });
+  }
+});
+
+/**
  * DELETE /api/admin/actions/:id
  *
  * Hard delete. The journal isn't append-only — admins can prune entries

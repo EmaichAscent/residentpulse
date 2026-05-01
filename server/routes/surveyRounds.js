@@ -1055,17 +1055,38 @@ router.get("/:id/dashboard", async (req, res) => {
             )
           : [];
       const loggedByTheme = new Map(loggedActions.map((a) => [a.theme, a]));
+
+      // Accept/reject decisions for this round's picks. Joined here so
+      // the frontend can show the right UI state per pick without a
+      // second roundtrip.
+      const decisions = await db.all(
+        `SELECT theme, decision, decided_at FROM recommendation_decisions
+         WHERE round_id = ? AND client_id = ?`,
+        [roundId, req.clientId]
+      );
+      const decisionByTheme = new Map(decisions.map((d) => [d.theme, d]));
+
       recommendedActionsStatus = recs.map((r, i) => {
         const theme = r.action || r.theme;
         const logged = theme ? loggedByTheme.get(theme) : null;
+        const decision = theme ? decisionByTheme.get(theme) : null;
         return {
           rank: i + 1,
           action: theme || `Pick ${i + 1}`,
           priority: r.priority || "medium",
           impact: r.impact || null,
           rationale: r.rationale || null,
+          // Surfaces drive the NPS-lift projection. Older insights
+          // generated before this PR shipped won't carry these counts;
+          // the frontend handles null gracefully (no lift estimate
+          // shown).
+          affected_count: typeof r.affected_count === "number" ? r.affected_count : null,
+          affected_detractor_count:
+            typeof r.affected_detractor_count === "number" ? r.affected_detractor_count : null,
           logged_action_id: logged?.id || null,
           logged_action_status: logged?.status || null,
+          decision: decision?.decision || null,
+          decided_at: decision?.decided_at || null,
         };
       });
     }
