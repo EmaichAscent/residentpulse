@@ -89,4 +89,57 @@ describe("admin actions endpoints — structural guards", () => {
     expect(body).toMatch(/Number\.isInteger\(id\)/);
     expect(body).toMatch(/id <= 0/);
   });
+
+  it("PATCH accepts owner_email reassignment and persists null on empty", () => {
+    const start = source.indexOf('router.patch("/:id"');
+    const body = source.slice(start, source.indexOf("router.", start + 1));
+    expect(body).toMatch(/owner_email/);
+    expect(body).toMatch(/owner_email = \?/);
+    // empty / whitespace-only emails should clear the owner
+    expect(body).toMatch(/trimmed \|\| null/);
+  });
+
+  it("GET / returns each action with its updates array attached", () => {
+    const start = source.indexOf('router.get("/"');
+    const body = source.slice(start, source.indexOf("router.", start + 1));
+    expect(body).toMatch(/FROM action_updates/);
+    expect(body).toMatch(/WHERE client_id = \?/);
+    expect(body).toMatch(/updates: byAction\.get\(a\.id\)/);
+  });
+
+  it("GET / sorts updates newest first via SQL", () => {
+    const start = source.indexOf('router.get("/"');
+    const body = source.slice(start, source.indexOf("router.", start + 1));
+    expect(body).toMatch(/ORDER BY created_at DESC/);
+  });
+
+  it("POST /:id/updates requires a non-empty body", () => {
+    const start = source.indexOf('router.post("/:id/updates"');
+    const body = source.slice(start, source.indexOf("router.", start + 1));
+    expect(body).toMatch(/Update body is required/);
+    expect(body).toMatch(/!body\.trim\(\)/);
+  });
+
+  it("POST /:id/updates checks the action belongs to the requesting client", () => {
+    const start = source.indexOf('router.post("/:id/updates"');
+    const body = source.slice(start, source.indexOf("router.", start + 1));
+    expect(body).toMatch(/FROM actions WHERE id = \? AND client_id = \?/);
+    expect(body).toMatch(/Action not found/);
+  });
+
+  it("POST /:id/updates stamps created_by_email from the session, not the body", () => {
+    const start = source.indexOf('router.post("/:id/updates"');
+    const body = source.slice(start, source.indexOf("router.", start + 1));
+    // author comes from req.userEmail (the auth middleware), never trusted
+    // input. Body destructure only takes `body` — never created_by_email.
+    expect(body).toMatch(/req\.userEmail/);
+    expect(body).not.toMatch(/req\.body\.created_by_email/);
+  });
+
+  it("POST / seeds the first action_update from initial details", () => {
+    const start = source.indexOf('router.post("/"');
+    const body = source.slice(start, source.indexOf("router.", start + 1));
+    expect(body).toMatch(/INSERT INTO action_updates/);
+    expect(body).toMatch(/detailsTrimmed/);
+  });
 });

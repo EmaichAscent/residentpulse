@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route, Outlet } from "react-router-dom";
 import Actions from "./Actions";
 
@@ -185,5 +185,185 @@ describe("Actions screen", () => {
     globalThis.fetch = vi.fn(() => Promise.resolve({ ok: false }));
     renderActions();
     expect(await screen.findByTestId("actions-error")).toBeInTheDocument();
+  });
+
+  // ── Updates thread (action_updates) ──────────────────────────────────
+  describe("Update thread on State B card", () => {
+    const sampleActionsWithUpdates = [
+      {
+        id: 1,
+        theme: "Maintenance ticket response time",
+        title: "Roll out 48-hour SLA dashboard",
+        details: null,
+        owner_email: "tom@camascent.com",
+        status: "in_progress",
+        created_at: "2026-04-20T10:00:00Z",
+        updates: [
+          {
+            id: 11,
+            action_id: 1,
+            body: "Beta deployed to 3 regions; tracking response time daily.",
+            created_at: "2026-04-25T10:00:00Z",
+            created_by_email: "tom@camascent.com",
+          },
+          {
+            id: 10,
+            action_id: 1,
+            body: "Vendor SOW signed. Kickoff Friday.",
+            created_at: "2026-04-22T10:00:00Z",
+            created_by_email: "mike@camascent.com",
+          },
+        ],
+      },
+    ];
+
+    it("renders the latest update prominently with author + relative timestamp", async () => {
+      globalThis.fetch = vi.fn((url) => {
+        if (url.includes("/brief")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleBrief) });
+        }
+        if (url.endsWith("/actions")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(sampleActionsWithUpdates),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      });
+
+      renderActions();
+      // Latest update body
+      expect(await screen.findByText(/Beta deployed to 3 regions/i)).toBeInTheDocument();
+      // Author of the latest update is in the byline. The owner email
+      // also renders in the OwnerPicker chip below — both expected, so
+      // assert at least one match (≥2 in practice).
+      expect(screen.getAllByText("tom@camascent.com").length).toBeGreaterThanOrEqual(1);
+      // "2 total" counter when more than one update exists
+      expect(screen.getByText(/2 total/i)).toBeInTheDocument();
+    });
+
+    it("hides earlier updates behind an expander, shows them on click", async () => {
+      globalThis.fetch = vi.fn((url) => {
+        if (url.includes("/brief")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleBrief) });
+        }
+        if (url.endsWith("/actions")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(sampleActionsWithUpdates),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      });
+
+      renderActions();
+      // The earlier update body is NOT in the DOM until the expander
+      // is clicked.
+      await screen.findByText(/Beta deployed to 3 regions/i);
+      expect(screen.queryByText(/Vendor SOW signed/i)).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByText(/View 1 earlier update/i));
+      expect(await screen.findByText(/Vendor SOW signed/i)).toBeInTheDocument();
+    });
+
+    it("shows the empty 'No updates yet' note when an action has zero updates", async () => {
+      const actionNoUpdates = [
+        {
+          id: 1,
+          theme: "Maintenance ticket response time",
+          title: "Roll out 48-hour SLA dashboard",
+          details: null,
+          owner_email: "tom@camascent.com",
+          status: "in_progress",
+          created_at: "2026-04-20T10:00:00Z",
+          updates: [],
+        },
+      ];
+      globalThis.fetch = vi.fn((url) => {
+        if (url.includes("/brief")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleBrief) });
+        }
+        if (url.endsWith("/actions")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(actionNoUpdates) });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      });
+
+      renderActions();
+      expect(
+        await screen.findByText(/No updates yet — log the first one below/i)
+      ).toBeInTheDocument();
+    });
+
+    it("posts a new update via /:id/updates and reloads the list", async () => {
+      const postSpy = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }));
+      let actionsCall = 0;
+      globalThis.fetch = vi.fn((url, opts) => {
+        if (url.includes("/brief")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleBrief) });
+        }
+        if (url.endsWith("/api/admin/actions")) {
+          actionsCall++;
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(sampleActionsWithUpdates),
+          });
+        }
+        if (url.match(/\/actions\/\d+\/updates$/) && opts?.method === "POST") {
+          return postSpy(url, opts);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      });
+
+      renderActions();
+      await screen.findByText(/Beta deployed to 3 regions/i);
+
+      fireEvent.click(screen.getByText(/\+ Add update/i));
+      const textarea = await screen.findByPlaceholderText(/Quick note on progress/i);
+      fireEvent.change(textarea, { target: { value: "Pilot showing 18% improvement." } });
+      fireEvent.click(screen.getByText(/Post update/i));
+
+      await waitFor(() => {
+        expect(postSpy).toHaveBeenCalled();
+      });
+      const [postUrl, postOpts] = postSpy.mock.calls[0];
+      expect(postUrl).toMatch(/\/actions\/1\/updates$/);
+      expect(JSON.parse(postOpts.body)).toEqual({ body: "Pilot showing 18% improvement." });
+
+      // Parent reloaded /actions after the post — verifies the
+      // onAddUpdate callback wired to load() actually fired.
+      await waitFor(() => {
+        expect(actionsCall).toBeGreaterThanOrEqual(2);
+      });
+    });
+
+    it("disables Post button until the textarea has non-whitespace content", async () => {
+      globalThis.fetch = vi.fn((url) => {
+        if (url.includes("/brief")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleBrief) });
+        }
+        if (url.endsWith("/actions")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(sampleActionsWithUpdates),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      });
+
+      renderActions();
+      await screen.findByText(/Beta deployed to 3 regions/i);
+      fireEvent.click(screen.getByText(/\+ Add update/i));
+
+      const post = await screen.findByText(/Post update/i);
+      expect(post).toBeDisabled();
+
+      const textarea = screen.getByPlaceholderText(/Quick note on progress/i);
+      fireEvent.change(textarea, { target: { value: "   " } });
+      expect(post).toBeDisabled();
+
+      fireEvent.change(textarea, { target: { value: "Real content" } });
+      expect(post).not.toBeDisabled();
+    });
   });
 });
