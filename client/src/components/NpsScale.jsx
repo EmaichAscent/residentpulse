@@ -37,7 +37,12 @@ export default function NpsScale({ onSelect }) {
         <span>Not at all</span>
         <span>Extremely likely</span>
       </div>
-      <div className="flex gap-1.5 justify-between mb-3">
+      {/* CSS grid with 11 equal columns — buttons scale to fit any
+          container width without overflowing. The previous flex
+          layout had min-w-[34px] on each button which forced a
+          ≥498px total width and clipped buttons 9 and 10 inside the
+          420–480px card. */}
+      <div className="grid grid-cols-11 gap-1 mb-3">
         {Array.from({ length: 11 }, (_, i) => {
           const isSelected = selected === i;
           return (
@@ -45,7 +50,7 @@ export default function NpsScale({ onSelect }) {
               key={i}
               onClick={() => handleSelect(i)}
               disabled={confirmed && !isSelected}
-              className="flex-1 aspect-square min-w-[34px] max-w-[44px] rounded-lg text-sm font-semibold transition-colors disabled:opacity-40"
+              className="aspect-square rounded-lg text-sm font-semibold transition-colors disabled:opacity-40"
               style={{
                 border: `1.5px solid ${isSelected ? "var(--ink)" : "var(--line-2)"}`,
                 backgroundColor: isSelected ? "var(--ink)" : "white",
