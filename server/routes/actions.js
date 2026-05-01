@@ -69,12 +69,20 @@ router.get("/brief", async (req, res) => {
       const recommended = Array.isArray(insights?.recommended_actions)
         ? insights.recommended_actions
         : [];
+      // Map insightGenerator's output schema to the brief's pick shape.
+      // The synthesis pass produces {action, priority, impact, rationale}.
+      // Older versions or hand-edited insights may use {theme, title,
+      // summary, body}; we accept those as fallbacks.
       picks = recommended.slice(0, 3).map((r, i) => ({
         rank: i + 1,
-        // Insights schema varies; normalize to {theme, summary} shape.
-        theme: r.theme || r.title || r.headline || `Pick ${i + 1}`,
-        summary: r.summary || r.description || r.body || "",
-        evidence: r.evidence || null,
+        // Theme is the recommendation TEXT — that's the matching key
+        // against actions.theme. Without this, every pick falls
+        // through to "Pick 1/2/3" and matching to logged actions
+        // breaks.
+        theme: r.action || r.theme || r.title || r.headline || `Pick ${i + 1}`,
+        summary: r.impact || r.summary || r.description || r.body || "",
+        priority: r.priority || null,
+        rationale: r.rationale || r.evidence || null,
       }));
     } catch {
       // insights_json malformed — return an empty brief rather than 500.
