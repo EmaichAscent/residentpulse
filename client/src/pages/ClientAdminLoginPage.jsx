@@ -383,7 +383,7 @@ export function Footer() {
       style={{ color: "var(--ink-4)" }}
     >
       <div className="flex gap-4">
-        <span>© 2026 AscentCAM, Inc.</span>
+        <span>© 2026 CAM Ascent, LLC.</span>
         <a href="#" style={{ color: "var(--ink-4)" }}>
           Privacy
         </a>
