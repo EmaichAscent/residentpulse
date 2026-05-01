@@ -35,6 +35,7 @@ import { ArchiveIconButton, ArchiveModal, SearchInput, FilterSelect, FieldInput 
  */
 export default function Communities() {
   const [communities, setCommunities] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [latestCohorts, setLatestCohorts] = useState([]);
   const [previousCohorts, setPreviousCohorts] = useState([]);
   const [issues, setIssues] = useState({});
@@ -53,13 +54,15 @@ export default function Communities() {
     setLoading(true);
     setError(null);
     try {
-      const [cRes, rRes] = await Promise.all([
+      const [cRes, rRes, lRes] = await Promise.all([
         fetch("/api/admin/communities", { credentials: "include" }),
         fetch("/api/admin/survey-rounds", { credentials: "include" }),
+        fetch("/api/admin/locations", { credentials: "include" }),
       ]);
       if (!cRes.ok) throw new Error("Failed to load communities");
       const cs = await cRes.json();
       setCommunities(cs);
+      if (lRes.ok) setLocations(await lRes.json());
 
       // Merge in NPS data + warnings from the two most-recent concluded
       // rounds. Quietly skips if there's no round data yet — the table
@@ -325,6 +328,7 @@ export default function Communities() {
               <CommunityRow
                 key={c.id}
                 community={c}
+                locations={locations}
                 isLast={i === sorted.length - 1}
                 isEditing={editingId === c.id}
                 onStartEdit={() => setEditingId(c.id)}
@@ -339,7 +343,11 @@ export default function Communities() {
 
       {/* Add community modal */}
       {addOpen && (
-        <CommunityModal initial={{}} onCancel={() => setAddOpen(false)} onSave={handleCreate} />
+        <CommunityModal
+          locations={locations}
+          onCancel={() => setAddOpen(false)}
+          onSave={handleCreate}
+        />
       )}
 
       {/* Archive confirm */}
@@ -384,6 +392,7 @@ function CommunityTableHeader() {
 
 function CommunityRow({
   community,
+  locations,
   isLast,
   isEditing,
   onStartEdit,
@@ -395,6 +404,7 @@ function CommunityRow({
     return (
       <CommunityEditRow
         community={community}
+        locations={locations}
         isLast={isLast}
         onCancel={onCancelEdit}
         onSave={onSave}
@@ -484,28 +494,41 @@ function CommunityRow({
   );
 }
 
-function CommunityEditRow({ community, isLast, onCancel, onSave }) {
+function CommunityEditRow({ community, locations, isLast, onCancel, onSave }) {
   const [name, setName] = useState(community.community_name || "");
   const [manager, setManager] = useState(community.community_manager_name || "");
   const [type, setType] = useState(community.property_type || "");
   const [units, setUnits] = useState(community.number_of_units || "");
   const [contractValue, setContractValue] = useState(community.contract_value || "");
+  const [locationId, setLocationId] = useState(community.location_id || "");
+  const [renewalDate, setRenewalDate] = useState(
+    community.contract_renewal_date ? community.contract_renewal_date.slice(0, 10) : ""
+  );
+  const [monthToMonth, setMonthToMonth] = useState(!!community.contract_month_to_month);
 
   return (
     <div
-      className="px-5 py-4"
+      className="px-5 py-4 space-y-3"
       style={{
         backgroundColor: "var(--paper-2)",
         borderBottom: isLast ? "none" : "1px solid var(--line)",
       }}
     >
+      {/* Row 1: identity */}
       <div
         className="grid gap-3 items-end"
-        style={{ gridTemplateColumns: "1.5fr 1.2fr 1fr 0.7fr 0.9fr auto" }}
+        style={{ gridTemplateColumns: "1.6fr 1.2fr 1fr 1.2fr" }}
       >
         <FieldInput label="Community name" value={name} onChange={setName} />
         <FieldInput label="Manager" value={manager} onChange={setManager} />
         <PropertyTypeSelect value={type} onChange={setType} />
+        <LocationSelect locations={locations} value={locationId} onChange={setLocationId} />
+      </div>
+      {/* Row 2: contract details + Save/Cancel */}
+      <div
+        className="grid gap-3 items-end"
+        style={{ gridTemplateColumns: "0.7fr 0.9fr 1.1fr auto auto" }}
+      >
         <FieldInput label="Units" value={units} onChange={setUnits} type="number" />
         <FieldInput
           label="Contract $"
@@ -513,6 +536,13 @@ function CommunityEditRow({ community, isLast, onCancel, onSave }) {
           onChange={setContractValue}
           type="number"
         />
+        <FieldInput
+          label="Renewal date"
+          value={renewalDate}
+          onChange={setRenewalDate}
+          type="date"
+        />
+        <CheckboxField label="Month-to-month" checked={monthToMonth} onChange={setMonthToMonth} />
         <div className="flex gap-1.5">
           <button
             onClick={() =>
@@ -522,9 +552,11 @@ function CommunityEditRow({ community, isLast, onCancel, onSave }) {
                 property_type: type || null,
                 number_of_units: units ? Number(units) : null,
                 contract_value: contractValue ? Number(contractValue) : null,
-                location_id: community.location_id || null,
-                contract_renewal_date: community.contract_renewal_date || null,
-                contract_month_to_month: community.contract_month_to_month || false,
+                location_id: locationId ? Number(locationId) : null,
+                // If month-to-month is set, the renewal-date date doesn't
+                // apply — null it out to keep the data clean.
+                contract_renewal_date: monthToMonth ? null : renewalDate || null,
+                contract_month_to_month: monthToMonth,
               })
             }
             className="btn-pulse-sm"
@@ -541,11 +573,15 @@ function CommunityEditRow({ community, isLast, onCancel, onSave }) {
   );
 }
 
-function CommunityModal({ onCancel, onSave }) {
+function CommunityModal({ locations, onCancel, onSave }) {
   const [name, setName] = useState("");
   const [manager, setManager] = useState("");
   const [type, setType] = useState("");
   const [units, setUnits] = useState("");
+  const [locationId, setLocationId] = useState("");
+  const [contractValue, setContractValue] = useState("");
+  const [renewalDate, setRenewalDate] = useState("");
+  const [monthToMonth, setMonthToMonth] = useState(false);
 
   return (
     <div
@@ -554,7 +590,7 @@ function CommunityModal({ onCancel, onSave }) {
       onClick={onCancel}
     >
       <div
-        className="bg-white rounded-2xl p-6 max-w-md w-full"
+        className="bg-white rounded-2xl p-6 max-w-lg w-full"
         onClick={(e) => e.stopPropagation()}
         style={{ boxShadow: "var(--shadow-lg)" }}
       >
@@ -565,9 +601,29 @@ function CommunityModal({ onCancel, onSave }) {
           Add community
         </h3>
         <FieldInput label="Community name" value={name} onChange={setName} />
-        <FieldInput label="Community manager" value={manager} onChange={setManager} />
-        <PropertyTypeSelect value={type} onChange={setType} />
-        <FieldInput label="Number of units" value={units} onChange={setUnits} type="number" />
+        <div className="grid grid-cols-2 gap-3">
+          <FieldInput label="Manager" value={manager} onChange={setManager} />
+          <LocationSelect locations={locations} value={locationId} onChange={setLocationId} />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <PropertyTypeSelect value={type} onChange={setType} />
+          <FieldInput label="Units" value={units} onChange={setUnits} type="number" />
+          <FieldInput
+            label="Contract $"
+            value={contractValue}
+            onChange={setContractValue}
+            type="number"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3 items-end">
+          <FieldInput
+            label="Renewal date"
+            value={renewalDate}
+            onChange={setRenewalDate}
+            type="date"
+          />
+          <CheckboxField label="Month-to-month" checked={monthToMonth} onChange={setMonthToMonth} />
+        </div>
         <div className="flex justify-end gap-2 mt-4">
           <button onClick={onCancel} className="btn-ghost" type="button">
             Cancel
@@ -583,6 +639,10 @@ function CommunityModal({ onCancel, onSave }) {
                 community_manager_name: manager.trim() || null,
                 property_type: type || null,
                 number_of_units: units ? Number(units) : null,
+                contract_value: contractValue ? Number(contractValue) : null,
+                location_id: locationId ? Number(locationId) : null,
+                contract_renewal_date: monthToMonth ? null : renewalDate || null,
+                contract_month_to_month: monthToMonth,
               });
             }}
             className="btn-pulse"
@@ -592,6 +652,70 @@ function CommunityModal({ onCancel, onSave }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Location dropdown — pulls from /api/admin/locations. The
+ * locations table is the canonical source for office/region; the
+ * legacy management_company text on users gets canonicalized into
+ * locations via autoCreateLocationIfNeeded on save. New locations
+ * are created via POST /api/admin/locations (out of scope for this
+ * view; users type a free-text option for now and it auto-creates
+ * elsewhere).
+ */
+function LocationSelect({ locations, value, onChange }) {
+  return (
+    <div className="mb-3">
+      <label
+        className="block text-[10.5px] font-semibold uppercase mb-1"
+        style={{ letterSpacing: "0.08em", color: "var(--ink-4)" }}
+      >
+        Location / Office
+      </label>
+      <select
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-3 py-2 text-[13px] rounded-lg outline-none"
+        style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}
+      >
+        <option value="">— Unassigned —</option>
+        {(locations || []).map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * Boolean checkbox styled to match the rest of the form fields.
+ * Used here for "Month-to-month" — when checked, contract_renewal_date
+ * is cleared on save so we don't persist a stale date alongside an
+ * indefinite-renewal flag.
+ */
+function CheckboxField({ label, checked, onChange }) {
+  return (
+    <div className="mb-3">
+      <label
+        className="flex items-center gap-2 px-3 py-2 text-[13px] rounded-lg cursor-pointer"
+        style={{
+          border: "1px solid var(--line-2)",
+          color: "var(--ink-2)",
+          backgroundColor: "white",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={!!checked}
+          onChange={(e) => onChange(e.target.checked)}
+          style={{ accentColor: "var(--pulse)" }}
+        />
+        {label}
+      </label>
     </div>
   );
 }
