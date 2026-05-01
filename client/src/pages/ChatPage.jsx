@@ -346,22 +346,28 @@ export default function ChatPage() {
         background: "linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%)",
       }}
     >
+      {/* Card sized to match the polished spec exactly:
+            420px wide × 720px tall, phone-shaped vertical card centered
+            on the page. On mobile (< 420px viewport) the card fills the
+            screen via w-full + max-w-[420px]. The design treats the
+            resident chat as a mobile-first surface — the desktop view
+            is a phone-frame card with paper background visible around
+            it, not a wide desktop document. (See
+            DESIGN/design_handoff_clientapp/src/screens/ChatPrototype.jsx
+            line 107.) */}
       <div
-        className="flex flex-col w-full max-w-3xl rounded-2xl overflow-hidden bg-white my-auto"
+        className="flex flex-col w-full rounded-[22px] overflow-hidden bg-white my-auto"
         style={{
           boxShadow: "var(--shadow-lg)",
           border: "1px solid var(--line)",
+          maxWidth: 420,
           maxHeight: "min(720px, 100vh - 80px)",
-          // Pre-conversation (trust gate / NPS picker): card sizes to
-          // content so the welcome bubble + CTA don't sit above a sea
-          // of dead space.
-          //
-          // Conversation: a min-height so the card has presence when
-          // the conversation is short (otherwise a 2-message exchange
-          // floats in the middle of a tall card), plus the maxHeight
-          // above so it doesn't grow past the viewport. Messages
-          // container fills the gap with flex-1 + scrolls as needed.
-          ...(npsSubmitted ? { minHeight: "min(520px, 100vh - 80px)" } : { minHeight: 0 }),
+          // Trust gate / NPS picker: card sizes to content so the
+          // welcome bubble + CTA don't sit above a sea of dead space.
+          // Conversation: lock to the spec's full 720px so the input
+          // stays pinned at the bottom and the messages have stable
+          // scroll real estate.
+          ...(npsSubmitted ? { height: "min(720px, 100vh - 80px)" } : { minHeight: 0 }),
         }}
         data-testid="chat-card"
       >
@@ -381,24 +387,30 @@ export default function ChatPage() {
           />
         </div>
 
-        {/* Header — Polished variant: avatar + 2-line title + Confidential pill */}
+        {/* Header — matches spec line 81–94. Compact (10/16 padding),
+            small 30px avatar, two-line title, Confidential indicator as
+            inline text+icon (no pill background — the spec is more
+            understated than the previous pill design). */}
         <div
-          className="bg-white px-5 py-4 flex-shrink-0 flex items-center justify-between gap-3"
-          style={{ borderBottom: "1px solid var(--line)" }}
+          className="bg-white flex-shrink-0 flex items-center justify-between gap-2.5"
+          style={{
+            padding: "10px 16px",
+            borderBottom: "1px solid var(--line)",
+          }}
           data-testid="chat-header"
         >
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             <BrandAvatar hasLogo={hasLogo} clientId={clientId} companyName={companyName} />
             <div className="min-w-0">
               <p
-                className="text-sm font-semibold truncate"
+                className="text-[13.5px] font-semibold truncate leading-tight"
                 style={{ color: "var(--ink)" }}
                 title={company || ""}
               >
                 {company || "ResidentPulse"}
               </p>
               <p
-                className="text-xs truncate"
+                className="text-[11.5px] truncate leading-tight mt-0.5"
                 style={{ color: "var(--ink-3)" }}
                 title={headerSubtitle}
               >
@@ -407,8 +419,8 @@ export default function ChatPage() {
             </div>
           </div>
           <div
-            className="flex-shrink-0 flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full"
-            style={{ color: "var(--pulse-deep)", backgroundColor: "var(--pulse-tint)" }}
+            className="flex-shrink-0 flex items-center gap-1 text-[11px]"
+            style={{ color: "var(--ink-4)" }}
             title="Your responses are private. The management company sees a summary, not the transcript."
           >
             <svg
@@ -443,24 +455,27 @@ export default function ChatPage() {
         )}
 
         {/* Messages — flex-1 only after NPS so the area expands to fill
-            the locked card height; pre-NPS it stays at content size. */}
+            the locked card height; pre-NPS it stays at content size.
+            Padding matches spec line 111: 20px 16px, flat paper bg. */}
         <div
-          className={`${npsSubmitted ? "flex-1 overflow-y-auto" : ""} px-5 py-5`}
+          className={`${npsSubmitted ? "flex-1 overflow-y-auto" : ""}`}
           style={{
-            background: "linear-gradient(180deg, var(--paper-2) 0%, var(--paper) 100%)",
+            padding: "20px 16px",
+            background: "var(--paper)",
           }}
         >
-          {/* Phase 1: Trust gate — welcome bubble + Sounds good button */}
+          {/* Phase 1: Trust gate — welcome bubble + right-aligned CTA
+              (spec line 121: alignSelf flex-end, btn-pulse btn-sm) */}
           {!trustAccepted && (
             <>
               <ChatMessage role="assistant" content={welcomeContent} />
-              <div className="ml-10 mt-2 mb-2" data-testid="trust-gate-actions">
+              <div className="flex justify-end mt-2 mb-1" data-testid="trust-gate-actions">
                 <button
                   onClick={handleAcceptTrust}
-                  className="text-base font-semibold px-6 py-3 rounded-xl text-white transition hover:opacity-90"
+                  className="text-sm font-semibold px-4 py-2.5 rounded-xl text-white transition hover:opacity-90"
                   style={{
                     backgroundColor: "var(--pulse)",
-                    boxShadow: "var(--shadow-md)",
+                    boxShadow: "var(--shadow-sm)",
                   }}
                 >
                   Sounds good →
@@ -596,20 +611,29 @@ export default function ChatPage() {
         {/* Bottom bar: input + end chat (only after NPS picked) */}
         {npsSubmitted && !completed && (
           <div className="bg-white flex-shrink-0" style={{ borderTop: "1px solid var(--line)" }}>
-            <form onSubmit={handleSubmit} className="px-5 py-4 flex gap-3 items-end">
+            {/* Input row — spec line 202: padding 10px 12px, smaller
+                icon buttons so they don't dominate the 420px-wide card. */}
+            <form
+              onSubmit={handleSubmit}
+              className="flex gap-2 items-end"
+              style={{ padding: "10px 12px" }}
+            >
               <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Type your response…"
+                placeholder="Type your answer…"
                 disabled={loading}
-                rows={2}
-                className="flex-1 px-4 py-3 text-base rounded-xl outline-none resize-none disabled:bg-gray-50 transition"
+                rows={1}
+                className="flex-1 px-3 py-2.5 text-sm rounded-xl outline-none resize-none disabled:bg-gray-50 transition"
                 style={{
-                  border: "1.5px solid var(--line-2)",
-                  maxHeight: 150,
+                  border: "1px solid var(--line-2)",
+                  maxHeight: 100,
+                  minHeight: 38,
                   color: "var(--ink)",
+                  backgroundColor: "var(--paper)",
+                  lineHeight: 1.4,
                 }}
                 autoFocus
               />
@@ -620,7 +644,7 @@ export default function ChatPage() {
                     if (speechEnabled) stopSpeaking();
                     setSpeechEnabled((prev) => !prev);
                   }}
-                  className="p-3 rounded-xl transition"
+                  className="p-2 rounded-lg transition flex-shrink-0"
                   style={
                     speechEnabled
                       ? { backgroundColor: "var(--pulse-tint)", color: "var(--pulse-deep)" }
@@ -668,7 +692,7 @@ export default function ChatPage() {
                 <button
                   type="button"
                   onClick={toggleListening}
-                  className="p-3 rounded-xl transition"
+                  className="p-2 rounded-lg transition flex-shrink-0"
                   style={
                     listening
                       ? { backgroundColor: "var(--coral-tint)", color: "var(--coral)" }
@@ -699,49 +723,80 @@ export default function ChatPage() {
               <button
                 type="submit"
                 disabled={loading || !input.trim()}
-                className="px-5 py-3 text-sm font-semibold text-white rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3.5 py-2 text-sm font-semibold text-white rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
                 style={{ backgroundColor: "var(--pulse)" }}
               >
                 Send
               </button>
             </form>
-            <div className="px-5 pb-3 text-center">
+            {/* Bottom strip — spec line 227-230. Powered-by + End-early
+                on a single row inside the card, small tertiary type. */}
+            <div className="flex items-center justify-between px-3 pb-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10.5px]" style={{ color: "var(--ink-4)" }}>
+                  Powered by ResidentPulse
+                </span>
+                <span className="text-[10.5px]" style={{ color: "var(--ink-5)" }}>
+                  |
+                </span>
+                <img
+                  src="/CAMAscent.png"
+                  alt="CAM Ascent"
+                  className="h-3 object-contain opacity-70"
+                />
+              </div>
               <button
                 onClick={handleEndChat}
                 disabled={loading}
-                className="text-xs hover:underline transition disabled:opacity-50"
+                className="text-[10.5px] underline hover:opacity-80 transition disabled:opacity-50"
                 style={{ color: "var(--ink-4)" }}
               >
-                End chat early
+                End early
               </button>
             </div>
           </div>
         )}
-      </div>
 
-      {/* Powered-by — outside the card, on the page wrapper */}
-      <div className="flex items-center justify-center gap-2 mt-4 mb-2">
-        <span className="text-[11px]" style={{ color: "var(--ink-4)" }}>
-          Powered by
-        </span>
-        <span className="text-[11px] font-semibold" style={{ color: "var(--ink-3)" }}>
-          ResidentPulse
-        </span>
-        <span className="text-[11px]" style={{ color: "var(--ink-5)" }}>
-          |
-        </span>
-        <img src="/CAMAscent.png" alt="CAM Ascent" className="h-4 object-contain opacity-70" />
+        {/* Pre-NPS: minimal "powered by" line at the bottom of the card,
+            no End early button (the trust gate's own CTA is the only
+            action). Mirrors the spec's footer treatment. */}
+        {!npsSubmitted && !completed && (
+          <div
+            className="flex items-center justify-center gap-1.5 flex-shrink-0"
+            style={{ padding: "6px 12px 10px", borderTop: "1px solid var(--line)" }}
+          >
+            <span className="text-[10.5px]" style={{ color: "var(--ink-4)" }}>
+              Powered by ResidentPulse
+            </span>
+            <span className="text-[10.5px]" style={{ color: "var(--ink-5)" }}>
+              |
+            </span>
+            <img src="/CAMAscent.png" alt="CAM Ascent" className="h-3 object-contain opacity-70" />
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 /**
- * Inline chat message — design-token styled, distinct from the legacy
- * ChatBubble used in admin Test Interview UI. Renders a small pulse-mark
- * avatar for assistant messages and an ink-black bubble for user
- * messages. Bubbles cap at 85% so long responses can breathe but short
- * ones don't stretch awkwardly.
+ * Inline chat message — matches the polished spec exactly.
+ *
+ * Design references (DESIGN/design_handoff_clientapp/src/screens/ChatPrototype.jsx):
+ *   • Assistant bubble (line 115/129/169):
+ *       white background, padding 12px 14px, fontSize 14, lineHeight 1.5,
+ *       borderRadius '4px 14px 14px 14px' (sharp top-left near avatar),
+ *       maxWidth ~290–310px, shadow-sm, no border
+ *   • User bubble (line 164):
+ *       ink-black background, white text, padding 10px 14px,
+ *       borderRadius '14px 14px 4px 14px' (sharp bottom-right toward user),
+ *       maxWidth ~280px, no border, no shadow
+ *   • Avatar gap: 10px, flex-start alignment
+ *
+ * The asymmetric corner radii are what makes the bubbles read as
+ * speech bubbles "pointing" at their owner — sharp corner near the
+ * avatar/user. Distinct from the legacy admin ChatBubble which uses
+ * symmetric rounded-2xl with a slightly-flat tail corner.
  */
 function ChatMessage({ role, content, timestamp }) {
   const isUser = role === "user";
@@ -750,23 +805,27 @@ function ChatMessage({ role, content, timestamp }) {
     : null;
 
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-3`}>
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-3.5`}>
       {!isUser && <PulseAvatar />}
       <div
         className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}
-        style={{ maxWidth: "85%" }}
+        style={{ maxWidth: isUser ? 280 : 310 }}
       >
         <div
-          className={`px-4 py-3 text-base leading-relaxed whitespace-pre-wrap break-words ${
-            isUser ? "rounded-2xl rounded-br-md" : "rounded-2xl rounded-bl-md"
-          }`}
+          className="text-[14px] leading-[1.5] whitespace-pre-wrap break-words"
           style={
             isUser
-              ? { backgroundColor: "var(--ink)", color: "white" }
+              ? {
+                  backgroundColor: "var(--ink)",
+                  color: "white",
+                  padding: "10px 14px",
+                  borderRadius: "14px 14px 4px 14px",
+                }
               : {
                   backgroundColor: "white",
-                  border: "1px solid var(--line)",
                   color: "var(--ink)",
+                  padding: "12px 14px",
+                  borderRadius: "4px 14px 14px 14px",
                   boxShadow: "var(--shadow-sm)",
                 }
           }
@@ -811,7 +870,7 @@ function PulseAvatar() {
 }
 
 /**
- * BrandAvatar — small square logo block in the header.
+ * BrandAvatar — header logo block. 30px square per spec line 83.
  * Falls back to a pulse-green pulse-mark when no client logo is set.
  */
 function BrandAvatar({ hasLogo, clientId, companyName }) {
@@ -821,20 +880,24 @@ function BrandAvatar({ hasLogo, clientId, companyName }) {
       <img
         src={`/api/sessions/logo/${clientId}`}
         alt={companyName || "Company logo"}
-        className="h-9 w-9 object-contain rounded bg-white p-0.5"
-        style={{ border: "1px solid var(--line)" }}
+        className="object-contain rounded bg-white p-0.5 flex-shrink-0"
+        style={{ width: 30, height: 30, border: "1px solid var(--line)" }}
         onError={() => setLoaded(false)}
       />
     );
   }
   return (
     <div
-      className="h-9 w-9 rounded flex items-center justify-center text-white flex-shrink-0"
-      style={{ background: "linear-gradient(135deg, var(--pulse), var(--pulse-deep))" }}
+      className="rounded flex items-center justify-center text-white flex-shrink-0"
+      style={{
+        width: 30,
+        height: 30,
+        background: "linear-gradient(135deg, var(--pulse), var(--pulse-deep))",
+      }}
     >
       <svg
-        width="18"
-        height="18"
+        width="15"
+        height="15"
         viewBox="0 0 24 24"
         fill="none"
         stroke="white"
