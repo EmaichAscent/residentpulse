@@ -783,8 +783,11 @@ function DualCohortsCard({ latest }) {
   const detractors = latest.dual_detractors || [];
   const promoters = latest.dual_promoters || [];
   if (detractors.length === 0 && promoters.length === 0) return null;
+  // Stacked vertically (was side-by-side) so each row has full-width
+  // breathing room — community + manager + per-round chips + ARR + NPS
+  // + trend pill is too much content for half the viewport.
   return (
-    <div className="grid gap-3.5" style={{ gridTemplateColumns: "1fr 1fr" }}>
+    <div className="flex flex-col gap-3.5">
       <DualCohortPanel
         title="Dual detractors"
         sub="Two or more rounds in the detractor cohort — silent-churn watch list."

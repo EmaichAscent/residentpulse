@@ -216,6 +216,12 @@ export default function Communities() {
       nps,
       prev_nps: prevNps,
       delta_nps: nps != null && prevNps != null ? nps - prevNps : null,
+      // `cohort` (promoter/passive/detractor) is the source of truth for
+      // the at-risk roll-up below — must match Round Results + Home,
+      // both of which use cohort === 'detractor'. The per-row 🔥 tone
+      // can stay nps-based since the spec calls for an NPS threshold
+      // visual; the financial metric must be cohort-based.
+      cohort: latest?.cohort || null,
       detractors: latest?.detractors ?? null,
       passives: latest?.passives ?? null,
       promoters: latest?.promoters ?? null,
@@ -241,10 +247,14 @@ export default function Communities() {
   });
 
   // ARR roll-up: total contract value across the active roster, plus the
-  // share concentrated in at-risk (NPS ≤ -10) communities. Surfaces "$X
-  // at risk" so admins can see the dollar exposure at a glance.
+  // share concentrated in at-risk (detractor cohort) communities.
+  // MUST match the at-risk definition used by Round Results and Home —
+  // both pull from `community_analytics.revenue_at_risk` which is built
+  // server-side from `cohort === 'detractor' && contract_value`. Using
+  // an NPS threshold here drifted from that definition and caused the
+  // header rollup to over-count.
   const totalArr = enriched.reduce((sum, c) => sum + (Number(c.contract_value) || 0), 0);
-  const atRisk = enriched.filter((c) => c.nps != null && c.nps <= -10);
+  const atRisk = enriched.filter((c) => c.cohort === "detractor" && Number(c.contract_value) > 0);
   const atRiskArr = atRisk.reduce((sum, c) => sum + (Number(c.contract_value) || 0), 0);
 
   const sorted = [...filtered].sort((a, b) => {
@@ -476,7 +486,23 @@ function CommunityRow({
   }
 
   const c = community;
-  const tone = c.nps == null ? "neutral" : c.nps <= -10 ? "risk" : c.nps >= 25 ? "good" : "mid";
+  // Tone drives the 🔥 indicator + coral row tint + ARR coral-tint.
+  // Prefer cohort (matches Round Results + Home), fall back to NPS
+  // thresholds when a cohort entry isn't available.
+  const tone =
+    c.cohort === "detractor"
+      ? "risk"
+      : c.cohort === "promoter"
+        ? "good"
+        : c.cohort === "passive"
+          ? "mid"
+          : c.nps == null
+            ? "neutral"
+            : c.nps <= -10
+              ? "risk"
+              : c.nps >= 25
+                ? "good"
+                : "mid";
   const rowBg = tone === "risk" ? "var(--coral-tint)" : "transparent";
   const npsColor =
     tone === "risk" ? "var(--coral)" : tone === "good" ? "var(--pulse-deep)" : "var(--ink)";
