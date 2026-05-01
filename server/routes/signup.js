@@ -46,6 +46,10 @@ router.post("/register", signupLimiter, async (req, res) => {
     admin_email,
     password,
     plan_id,
+    // Optional bucket label from the signup dropdown ("1-10", "80-100",
+    // "250+", etc.). Helps us size the workspace and pick a plan
+    // recommendation; not required.
+    community_count_estimate,
   } = req.body;
 
   // Validate required fields
@@ -93,7 +97,7 @@ router.post("/register", signupLimiter, async (req, res) => {
     // Create client with pending status and unique code
     const clientCode = await generateClientCode();
     const clientResult = await db.run(
-      "INSERT INTO clients (company_name, address_line1, address_line2, city, state, zip, phone_number, status, client_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO clients (company_name, address_line1, address_line2, city, state, zip, phone_number, status, client_code, community_count_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         company_name,
         address_line1,
@@ -104,6 +108,7 @@ router.post("/register", signupLimiter, async (req, res) => {
         phone_number,
         "pending",
         clientCode,
+        community_count_estimate || null,
       ]
     );
     const clientId = clientResult.lastInsertRowid;
