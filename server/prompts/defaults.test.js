@@ -8,6 +8,7 @@ import {
   LEGACY_SYSTEM_PROMPT_V05,
   LEGACY_SYSTEM_PROMPT_V09,
   V2_SYSTEM_PROMPT_V20,
+  V2_SYSTEM_PROMPT_V21,
   V2_SYSTEM_PROMPT,
   V2_INTERVIEW_INITIAL,
   V2_PROMPT_GENERATION,
@@ -60,10 +61,10 @@ describe("V1 prompts (frozen — used as match keys by the migration)", () => {
   });
 });
 
-describe("V2 system prompt — board member interview", () => {
-  it("introduces the journalist persona", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/curious journalist/i);
+describe("V2 system prompt — board member interview (V2.2 current)", () => {
+  it("targets [CLIENT_NAME] and frames the role minimally", () => {
     expect(V2_SYSTEM_PROMPT).toMatch(/\[CLIENT_NAME\]/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/interviewing a board member/i);
   });
 
   it("encodes the anti-abstraction rule with the danger words", () => {
@@ -72,104 +73,126 @@ describe("V2 system prompt — board member interview", () => {
     expect(V2_SYSTEM_PROMPT).toMatch(/abstract noun/i);
   });
 
-  it("encodes the depth budget per NPS score band", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Depth budget/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/9.10.*PROMOTER/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/7.8.*PASSIVE/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/0.6.*DETRACTOR/);
-  });
-
-  it("encodes the forbidden-easy-answers list with re-asks", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Forbidden easy answers/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Better communication/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/More responsive/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Pretty good/);
-  });
-
-  it("includes sensitive-topic guidance for legal mentions", () => {
+  it("includes sensitive-topic guidance for legal + identity mentions", () => {
     expect(V2_SYSTEM_PROMPT).toMatch(/Sensitive topics/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Legal.*litigation.*attorney/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Race, gender, identity/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Legal.*litigation/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Identity-based complaints/i);
   });
 
   it("forbids identifying as an AI persona by name", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Never identify yourself by an AI persona name/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Identify yourself by an AI persona name/);
   });
 
-  it("is differentiated from V1", () => {
+  it("is differentiated from V1 (no 'data scientist' framing)", () => {
     expect(V2_SYSTEM_PROMPT).not.toEqual(V1_SYSTEM_PROMPT);
-    // V1 introduces itself as "a friendly, professional data scientist".
-    // V2 rejects that framing — the only mention of "data scientist" should
-    // be the explicit "not a data scientist" disclaimer.
     expect(V2_SYSTEM_PROMPT).not.toMatch(/professional data scientist/i);
-    expect(V2_SYSTEM_PROMPT).toMatch(/not a data scientist/i);
   });
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// V2.1 changes — forbidden first-sentence openers + post-NPS example +
-// oblique-history rule. Live testing on staging showed Claude Haiku 4.5
-// routinely opening replies with "Thanks for that…" and meta-narrating
-// prior session context ("I see you've been frustrated with…"), both of
-// which V2.0 forbade abstractly but never named explicitly.
+// V2.1 — frozen byte-perfect for migration matching. V2.1 was the
+// first prompt that named forbidden first-sentence openers and added
+// the worked post-NPS example, but live testing showed Haiku still
+// drilling single threads for 14+ turns. V2.2 fixes that with hard
+// caps + frustration handling.
 // ──────────────────────────────────────────────────────────────────────────
-describe("V2 system prompt — V2.1 anti-preamble hardening", () => {
-  it("V2_SYSTEM_PROMPT_V20 is preserved byte-perfect for migration matching", () => {
-    // V20 was the value seeded by the original 2026-04-30 migration. The
-    // V20 → V21 migration matches against this exact string, so any
-    // accidental drift (e.g. an editor changing a smart quote, or a stray
-    // space) would silently stop catching stale rows.
+describe("V2 system prompt — V2.0 + V2.1 frozen for migration matching", () => {
+  it("V2_SYSTEM_PROMPT_V20 is preserved byte-perfect", () => {
     expect(V2_SYSTEM_PROMPT_V20.length).toBeGreaterThan(5500);
     expect(V2_SYSTEM_PROMPT_V20).toMatch(/curious journalist/);
     expect(V2_SYSTEM_PROMPT_V20).toMatch(/Anti-abstraction rule/);
-    // V20 did NOT contain the new V2.1 sections — that's how we tell them
-    // apart for migration purposes.
     expect(V2_SYSTEM_PROMPT_V20).not.toMatch(/Forbidden first-sentence openers/);
-    expect(V2_SYSTEM_PROMPT_V20).not.toMatch(/Worked example: the post-NPS opener/);
-    expect(V2_SYSTEM_PROMPT_V20).not.toMatch(/Referencing prior context/);
   });
 
-  it("V21 differs from V20 (so the migration's exact-equality check separates them)", () => {
+  it("V2_SYSTEM_PROMPT_V21 is preserved byte-perfect", () => {
+    expect(V2_SYSTEM_PROMPT_V21.length).toBeGreaterThan(5500);
+    expect(V2_SYSTEM_PROMPT_V21).toMatch(/curious journalist/);
+    expect(V2_SYSTEM_PROMPT_V21).toMatch(/Forbidden first-sentence openers/);
+    expect(V2_SYSTEM_PROMPT_V21).toMatch(/Worked example: the post-NPS opener/);
+    // V21 did NOT yet contain the V2.2 hard-cap or frustration-signal
+    // sections — that's how the migration tells them apart.
+    expect(V2_SYSTEM_PROMPT_V21).not.toMatch(/Hard constraints/);
+    expect(V2_SYSTEM_PROMPT_V21).not.toMatch(/Frustration signals/);
+  });
+
+  it("V21 differs from V20", () => {
+    expect(V2_SYSTEM_PROMPT_V21).not.toEqual(V2_SYSTEM_PROMPT_V20);
+  });
+
+  it("current V2_SYSTEM_PROMPT (V2.2) differs from V20 and V21", () => {
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V20);
+    expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V21);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// V2.2 — surgical rewrite. Cuts the prompt from ~200 lines to ~80, locks
+// in operational constraints (5-7 question session cap, 3 follow-ups per
+// thread max, frustration-signal pivot), and shows one before/after
+// example drawn from a real failure transcript that ran 14+ turns on a
+// single sprinkler-callback thread.
+// ──────────────────────────────────────────────────────────────────────────
+describe("V2 system prompt — V2.2 hard caps + frustration handling", () => {
+  it("declares the session cap and per-thread cap up front", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Hard constraints/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Total session.*5.7 questions/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/3 follow-ups MAX/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Stop at 7/);
   });
 
-  it("V21 names the actual forbidden first-sentence phrases, not just the abstract rule", () => {
+  it("operationalizes the thread-completion checklist", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Thread completion/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/INCIDENT/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/WHO/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/WHEN/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/MISSED/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/your next reply MUST pivot/i);
+  });
+
+  it("names the frustration signals and demands an immediate pivot", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Frustration signals/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/I said/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/again/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/are you dumb/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/apologize once.*pivot/i);
+  });
+
+  it("includes the before/after detractor example from the real failure", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Worked example: detractor done right/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/sprinklers/i);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Michelle/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/CHECKLIST.*COMPLETE/i);
+  });
+
+  it("retains the forbidden first-sentence openers from V2.1", () => {
     expect(V2_SYSTEM_PROMPT).toMatch(/Forbidden first-sentence openers/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/"Thanks for that/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/"That's helpful/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/"I appreciate/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/"I see you've/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/"Looking at your history/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/"It sounds like/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Thanks for/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/I appreciate/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Looking at your history/);
   });
 
-  it("V21 includes the gold-standard post-NPS opener example from the design prototype", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Worked example: the post-NPS opener/);
+  it("retains the post-NPS gold-standard opener", () => {
     expect(V2_SYSTEM_PROMPT).toMatch(/A 6 — honest answer/);
     expect(V2_SYSTEM_PROMPT).toMatch(/biggest thing standing between you and a higher score/);
-    // And calls out what NOT to look like:
-    expect(V2_SYSTEM_PROMPT).toMatch(/MUST NOT look like/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/that's helpful to know upfront/i);
   });
 
-  it("V21 contains the oblique-history rule (no meta-narration of prior context)", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Referencing prior context/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/NEVER meta-narrate/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Weave the context INTO the question/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/ONE prior thread per turn/);
+  it("retains the prior-context invisibility rule (no meta-narration)", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Prior context/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/never meta-narrate/i);
   });
 
-  it("V21 reinforces the 2-sentence cap as a self-check before sending", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Before sending each reply, run this self-check/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Did I use more than 2 sentences/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Did my first sentence soften, thank, validate/);
+  it("forbids re-asking facts the resident already gave", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Ask for a fact the resident already gave/);
   });
 
-  it("V21 extends the 'never do' list with the new forbidden-opener and meta-narration rules", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(
-      /Never open a reply with a thanks\/validation\/meta-comment phrase/
-    );
-    expect(V2_SYSTEM_PROMPT).toMatch(/Never meta-narrate prior context/);
+  it("forbids drilling past the 3-probe cap", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Drill a thread past 3 follow-ups/);
+  });
+
+  it("is significantly shorter than V2.1 (the surgical-rewrite goal)", () => {
+    // V2.1 was ~5500-9000 chars of mostly-philosophical guidance. V2.2
+    // should be tighter while still hitting every operational rule.
+    expect(V2_SYSTEM_PROMPT.length).toBeLessThan(V2_SYSTEM_PROMPT_V21.length);
   });
 });
 

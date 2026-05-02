@@ -333,14 +333,18 @@ export default function ChatPage() {
   // ── Render ─────────────────────────────────────────────────────────
   return (
     <div
-      className="flex min-h-[100dvh] sm:min-h-screen sm:items-center sm:justify-center sm:py-6 sm:px-4"
+      className="flex min-h-[100dvh] sm:min-h-[100dvh] sm:items-center sm:justify-center sm:py-3 sm:px-4"
       style={{
         background: "linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%)",
         fontFamily: "var(--font-sans)",
       }}
     >
+      {/* Fixed-size card on desktop: locked at calc(100dvh - 1.5rem) so
+            the chat area doesn't grow phase-by-phase as the user moves
+            from trust gate → NPS picker → conversation. Mobile is
+            full-bleed (100dvh) — same lock-in shape. */}
       <div
-        className="flex flex-col w-full h-[100dvh] bg-white overflow-hidden sm:h-auto sm:rounded-3xl sm:max-w-[520px] sm:max-h-[min(800px,calc(100vh-3rem))]"
+        className="flex flex-col w-full h-[100dvh] bg-white overflow-hidden sm:rounded-3xl sm:max-w-[520px] sm:h-[min(820px,calc(100dvh-1.5rem))]"
         style={{
           border: "1px solid var(--line)",
           boxShadow: "var(--shadow-lg)",
