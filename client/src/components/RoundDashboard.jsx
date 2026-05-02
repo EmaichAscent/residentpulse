@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { npsColor, copyInsights } from "../utils/npsHelpers";
 import ActionDrawer from "./ActionDrawer";
 import { NpsGauge, NpsBar } from "./charts/NpsCharts";
+import InfoTip from "./InfoTip";
 
 /**
  * Round Results dashboard — Phase 3 PR rebuild.
@@ -962,10 +963,17 @@ export default function RoundDashboard() {
         <>
           <SectionHeader>
             <h3
-              className="font-semibold text-[15px]"
+              className="font-semibold text-[15px] inline-flex items-center"
               style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
             >
               Recommended actions · this round
+              <InfoTip>
+                What the AI thinks would move your NPS most based on the patterns it found in this
+                round&apos;s chats. Each pick shows: the action, mention count, communities
+                affected, and a projected NPS lift if you address it (conservatively assumes 50% of
+                impacted detractors convert to passives). Accept to log it as an action; reject to
+                dismiss.
+              </InfoTip>
             </h3>
             <div className="flex items-center gap-2.5">
               {(() => {
@@ -1030,10 +1038,16 @@ export default function RoundDashboard() {
         <>
           <SectionHeader>
             <h3
-              className="font-semibold text-[15px]"
+              className="font-semibold text-[15px] inline-flex items-center"
               style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
             >
               Warnings · this round
+              <InfoTip>
+                Things flagged during the chats that need a human follow-up — safety concerns, legal
+                issues, escalations, threats to leave. Different from low NPS: warnings are
+                &quot;pick up the phone today&quot; signals regardless of the score. Always grouped
+                by community so you know who to call.
+              </InfoTip>
             </h3>
             <div className="flex items-center gap-2.5">
               <Pill variant="warn">
@@ -1273,10 +1287,16 @@ export default function RoundDashboard() {
         <Card padding={22}>
           <SectionHeader noOuterMargin>
             <h3
-              className="font-semibold text-[15px]"
+              className="font-semibold text-[15px] inline-flex items-center"
               style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
             >
               Manager performance · {hasChangeData ? "biggest movers" : "ranked by NPS"}
+              <InfoTip>
+                NPS broken down by community manager for this round. When previous-round data
+                exists, the table shows the biggest movers (largest +/− change) so you can spot
+                who&apos;s improving and who&apos;s slipping. Without prior data, managers are
+                ranked by current NPS. Click a manager to see their communities.
+              </InfoTip>
             </h3>
             {managers.length > 6 && (
               <button
@@ -1317,10 +1337,16 @@ export default function RoundDashboard() {
         <Card padding={22}>
           <SectionHeader noOuterMargin>
             <h3
-              className="font-semibold text-[15px]"
+              className="font-semibold text-[15px] inline-flex items-center"
               style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
             >
               What boards are talking about
+              <InfoTip>
+                Themes the AI extracted from this round&apos;s chats, split by sentiment. Promoter
+                themes are what&apos;s working (worth doubling down on); detractor themes are
+                what&apos;s dragging your score (worth fixing). Same theme can appear in both
+                columns — the volume tells you which side is winning.
+              </InfoTip>
             </h3>
             <span className="text-[12px]" style={{ color: "var(--ink-4)" }}>
               From {completedSessions.length} conversations
@@ -1353,10 +1379,16 @@ export default function RoundDashboard() {
           <Card padding={22}>
             <SectionHeader noOuterMargin>
               <h3
-                className="font-semibold text-[15px]"
+                className="font-semibold text-[15px] inline-flex items-center"
                 style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
               >
                 Revenue at risk
+                <InfoTip>
+                  Estimated annual contract value (ARR) of communities currently scoring as
+                  detractors (NPS 0–6). The percentage shows what share of your portfolio that
+                  represents. Helps you prioritize: a small number of large detractors usually
+                  matters more than a large number of small ones.
+                </InfoTip>
               </h3>
               <Pill variant="warn">
                 {community_analytics.revenue_at_risk.percent_at_risk}% of ARR
@@ -1410,10 +1442,15 @@ export default function RoundDashboard() {
           <Card padding={22}>
             <SectionHeader noOuterMargin>
               <h3
-                className="font-semibold text-[15px]"
+                className="font-semibold text-[15px] inline-flex items-center"
                 style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
               >
                 By location
+                <InfoTip>
+                  NPS broken down by physical location (e.g., regional offices). A location with a
+                  much lower NPS than the portfolio average usually signals staffing, operational,
+                  or local-leadership issues at that specific site — not a company- wide problem.
+                </InfoTip>
               </h3>
             </SectionHeader>
             <div className="flex flex-col">
@@ -1461,10 +1498,15 @@ export default function RoundDashboard() {
         <Card padding={22}>
           <SectionHeader noOuterMargin>
             <h3
-              className="font-semibold text-[15px]"
+              className="font-semibold text-[15px] inline-flex items-center"
               style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
             >
               By community size
+              <InfoTip>
+                NPS grouped by community size (auto-bucketed by unit count). Reveals whether your
+                service quality scales — a much lower NPS in your largest communities, for example,
+                often points to staffing ratios that need attention as buildings grow.
+              </InfoTip>
             </h3>
             <span className="text-[12px]" style={{ color: "var(--ink-4)" }}>
               {community_analytics.size_trends.length} cohorts

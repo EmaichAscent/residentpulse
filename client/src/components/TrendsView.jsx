@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { NpsLineChart, StackedSentimentBars } from "./charts/NpsCharts";
+import InfoTip from "./InfoTip";
 
 /**
  * Trends — round-over-round delta dashboard. Full rebuild matching
@@ -108,11 +109,27 @@ export default function TrendsView() {
           title="↑ Communities improving most"
           color="var(--pulse-deep)"
           movers={biggestMovers(latest, prev, "asc")}
+          tooltip={
+            <>
+              Communities whose NPS rose the most between the previous and latest concluded round.
+              The arrow shows previous → current NPS values; the pill is the delta (current minus
+              previous). For example, −80 → +80 = +160. Look here for what&apos;s working — these
+              are your case studies and reference accounts.
+            </>
+          }
         />
         <BiggestMoversCard
           title="↓ Communities declining most"
           color="var(--coral)"
           movers={biggestMovers(latest, prev, "desc")}
+          tooltip={
+            <>
+              Communities whose NPS dropped the most between the previous and latest concluded
+              round. Same delta math as the improving list, but inverted. Look here first — these
+              are where you&apos;re losing trust and the next escalation is most likely to come
+              from.
+            </>
+          }
         />
       </div>
       <ManagerLocationDeltasCard latest={latest} />
@@ -267,10 +284,17 @@ function NpsOverTimeCard({ rounds, latest, prev, baseline }) {
     <Card padding={22}>
       <div className="flex items-center justify-between mb-3.5">
         <h3
-          className="font-semibold text-[15px]"
+          className="font-semibold text-[15px] inline-flex items-center"
           style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
         >
           NPS over time
+          <InfoTip>
+            Your portfolio's Net Promoter Score across every concluded round. NPS = % promoters
+            (scored 9–10) minus % detractors (0–6). Range −100 to +100, where 0 means equal
+            promoters and detractors. The shaded green band is the &quot;good&quot; zone (above 0).
+            &quot;since R1&quot; shows total movement; &quot;since R2&quot; shows last round&apos;s
+            change.
+          </InfoTip>
         </h3>
         <div className="flex gap-4 text-[12px]">
           <span>
@@ -326,10 +350,16 @@ function CohortMovementCard({ rounds, latest, prev }) {
     <Card padding={22}>
       <div className="flex items-center justify-between mb-3.5">
         <h3
-          className="font-semibold text-[15px]"
+          className="font-semibold text-[15px] inline-flex items-center"
           style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
         >
           Cohort movement · D / P / Pr share
+          <InfoTip>
+            How residents split between detractors (red, scored 0–6), passives (amber, 7–8), and
+            promoters (green, 9–10) in each round. Bars are stacked to 100%, so the visual is about
+            share, not headcount. The legend deltas (+pp / −pp) show how each group&apos;s share has
+            shifted from the previous round.
+          </InfoTip>
         </h3>
       </div>
       {/* Sized for the left column of the cohort/response 2-col grid.
@@ -354,10 +384,15 @@ function ResponseRateCard({ rounds, latest, prev }) {
     <Card padding={22}>
       <div className="flex items-center justify-between mb-3.5">
         <h3
-          className="font-semibold text-[15px]"
+          className="font-semibold text-[15px] inline-flex items-center"
           style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
         >
           Response rate
+          <InfoTip>
+            Percentage of invited board members who completed the survey, round by round. The higher
+            the response rate, the more representative your NPS — anything above 60% is strong for
+            board surveys. The +/−pp pill shows the change vs the previous round.
+          </InfoTip>
         </h3>
       </div>
       <div className="flex items-baseline gap-2 mb-4">
@@ -417,10 +452,16 @@ function TrendingTopicsCard({ latest, prev }) {
     <Card padding={22}>
       <div className="flex items-center justify-between mb-3.5">
         <h3
-          className="font-semibold text-[15px]"
+          className="font-semibold text-[15px] inline-flex items-center"
           style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
         >
-          Trending topics · what's rising and fading
+          Trending topics · what&apos;s rising and fading
+          <InfoTip>
+            Themes and keywords the AI extracted from this round&apos;s chats vs the previous round.
+            &quot;Rising&quot; topics are coming up more than they used to (often a new concern);
+            &quot;Fading&quot; topics are easing off (often a sign that an issue is getting
+            resolved). Use these to quickly spot what the board is shifting attention toward.
+          </InfoTip>
         </h3>
       </div>
       <div className="grid gap-6" style={{ gridTemplateColumns: "1fr 1fr" }}>
@@ -497,11 +538,12 @@ function TopicColumn({ label, color, tint, topics }) {
   );
 }
 
-function BiggestMoversCard({ title, color, movers }) {
+function BiggestMoversCard({ title, color, movers, tooltip }) {
   return (
     <Card padding={22}>
-      <h3 className="font-semibold text-[15px] mb-3.5" style={{ color }}>
+      <h3 className="font-semibold text-[15px] mb-3.5 inline-flex items-center" style={{ color }}>
         {title}
+        {tooltip && <InfoTip>{tooltip}</InfoTip>}
       </h3>
       {movers.length === 0 ? (
         <p className="text-[12.5px]" style={{ color: "var(--ink-4)" }}>
@@ -562,10 +604,16 @@ function ManagerLocationDeltasCard({ latest }) {
   return (
     <Card padding={22}>
       <h3
-        className="font-semibold text-[15px] mb-3.5"
+        className="font-semibold text-[15px] mb-3.5 inline-flex items-center"
         style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
       >
         Manager &amp; location deltas
+        <InfoTip>
+          NPS broken down by community manager and by physical location, with each row&apos;s change
+          vs the previous round. Helps you spot whether issues are concentrated in specific people
+          or specific properties — versus being a portfolio-wide trend. A manager with a steep drop
+          is usually worth a 1:1 conversation.
+        </InfoTip>
       </h3>
       <div className="grid gap-7" style={{ gridTemplateColumns: "1.5fr 1fr" }}>
         <div>
@@ -711,10 +759,15 @@ function SizeCohortCard({ latest }) {
     <Card padding={22}>
       <div className="flex items-baseline justify-between mb-3.5">
         <h3
-          className="font-semibold text-[15px]"
+          className="font-semibold text-[15px] inline-flex items-center"
           style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
         >
           By community size
+          <InfoTip>
+            NPS grouped by community size (small / medium / large, auto-bucketed by unit count).
+            Reveals whether your service quality holds up across scales — a much lower NPS in large
+            communities, for example, often means staffing ratios need attention.
+          </InfoTip>
         </h3>
         <span className="text-[11.5px]" style={{ color: "var(--ink-4)" }}>
           Cohorts auto-bucket by unit count.
@@ -801,6 +854,14 @@ function DualCohortsCard({ latest }) {
         tone="risk"
         rows={detractors}
         emptyHint="No communities have stayed in the detractor cohort across rounds."
+        tooltip={
+          <>
+            Communities that have scored as detractors (NPS 0–6) in two or more consecutive rounds —
+            including the latest. These are your highest churn-risk accounts: the problem isn&apos;t
+            a one-off, it&apos;s persistent. Sorted by ARR-at-risk so the biggest dollar exposure
+            surfaces first.
+          </>
+        }
       />
       <DualCohortPanel
         title="Dual promoters"
@@ -808,12 +869,19 @@ function DualCohortsCard({ latest }) {
         tone="good"
         rows={promoters}
         emptyHint="No communities have stayed in the promoter cohort across rounds."
+        tooltip={
+          <>
+            Communities that have scored as promoters (NPS 9–10) in two or more consecutive rounds.
+            Stable promoters make the best case studies, references, and testimonial sources — and
+            their managers are usually doing something worth replicating elsewhere.
+          </>
+        }
       />
     </div>
   );
 }
 
-function DualCohortPanel({ title, sub, tone, rows, emptyHint }) {
+function DualCohortPanel({ title, sub, tone, rows, emptyHint, tooltip }) {
   const accent = tone === "risk" ? "var(--coral)" : "var(--pulse-deep)";
   const tint = tone === "risk" ? "var(--coral-tint)" : "var(--pulse-tint)";
   return (
@@ -828,10 +896,11 @@ function DualCohortPanel({ title, sub, tone, rows, emptyHint }) {
               {tone === "risk" ? <RiskGlyph /> : <PromoterGlyph />}
             </span>
             <h3
-              className="font-semibold text-[15px]"
+              className="font-semibold text-[15px] inline-flex items-center"
               style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
             >
               {title}
+              {tooltip && <InfoTip>{tooltip}</InfoTip>}
             </h3>
             <span
               className="text-[11.5px] font-bold rounded-full"
