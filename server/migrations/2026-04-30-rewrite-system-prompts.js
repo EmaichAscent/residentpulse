@@ -85,15 +85,29 @@ const MIGRATIONS = [
 ];
 
 async function main() {
-  if (!process.env.DATABASE_URL) {
-    console.error("ERROR: DATABASE_URL not set.");
+  // Prefer DATABASE_PUBLIC_URL when present so this script works under
+  // `railway run` from a local shell — Railway's DATABASE_URL points to
+  // the internal `*.railway.internal` hostname which only resolves
+  // inside their private network. Inside a Railway container only
+  // DATABASE_URL exists, so the fallback covers the in-container case.
+  const connectionString = process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL;
+  if (!connectionString) {
+    console.error("ERROR: neither DATABASE_PUBLIC_URL nor DATABASE_URL is set.");
     process.exit(1);
   }
 
+  // Public Railway hostnames require SSL even outside production NODE_ENV.
+  // Internal hostnames don't, but always-on SSL is safe against either.
+  const usingPublic = !!process.env.DATABASE_PUBLIC_URL;
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+    connectionString,
+    ssl:
+      usingPublic || process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
   });
+
+  if (usingPublic) {
+    console.log("Using DATABASE_PUBLIC_URL (external Railway connection).\n");
+  }
 
   console.log("=== Rewrite system prompts: V1 → V2 ===\n");
 
