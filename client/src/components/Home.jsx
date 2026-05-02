@@ -128,6 +128,8 @@ export default function Home() {
           planned={planned}
           interviewDone={!!interviewStatus?.hasCompletedInterview}
           memberCount={account?.usage?.member_count || 0}
+          hasLogo={!!account?.has_logo}
+          googleReviewsConfigured={!!account?.google_review_enabled && !!account?.google_review_url}
         />
       ) : (
         <>
@@ -869,24 +871,40 @@ function ActivityRow({ a }) {
 
 /**
  * LaunchChecklist — replaces the legacy "Welcome + Steps" panel from
- * the old Dashboard component. Three numbered tasks the admin needs
- * to complete before they can collect their first round of feedback.
+ * the old Dashboard component. Three required tasks to collect a
+ * first round of feedback, plus two optional polish steps (logo +
+ * Google Reviews) that the original onboarding flow surfaced.
  *
  * Status is derived from data we already load on /admin/home:
- *   1. AI brief    — interviewStatus.hasCompletedInterview
- *   2. Members     — account.usage.member_count > 0
- *   3. First round — planned.length > 0 (next-step CTA changes copy)
+ *   Required:
+ *     1. AI brief    — interviewStatus.hasCompletedInterview
+ *     2. Members     — account.usage.member_count > 0
+ *     3. First round — planned.length > 0
+ *   Optional:
+ *     4. Branding    — account.has_logo (resident chat header)
+ *     5. Reviews     — account.google_review_enabled && url present
+ *                      (drives the promoter fast-path CTA for NPS 9-10)
  *
- * Once all three are checked the checklist's primary CTA flips to
- * "Launch your first round →" and links into /admin/rounds where the
- * preflight + Launch Now hero takes over.
+ * Required task completion drives the hero CTA: once all 3 are done,
+ * "Launch your first round →" appears. Optional tasks never gate the
+ * launch — they just polish the resident-facing experience.
+ *
+ * Optional CTAs deep-link into /admin/account?section=<id>, which the
+ * AccountSettings component now reads from the URL on mount.
  */
-function LaunchChecklist({ navigate, planned, interviewDone, memberCount }) {
+function LaunchChecklist({
+  navigate,
+  planned,
+  interviewDone,
+  memberCount,
+  hasLogo,
+  googleReviewsConfigured,
+}) {
   const membersDone = memberCount > 0;
   const roundScheduled = planned.length > 0;
-  const allReady = interviewDone && membersDone && roundScheduled;
+  const allRequiredReady = interviewDone && membersDone && roundScheduled;
 
-  const tasks = [
+  const requiredTasks = [
     {
       n: 1,
       title: "Brief the AI on your business",
@@ -917,6 +935,36 @@ function LaunchChecklist({ navigate, planned, interviewDone, memberCount }) {
       },
     },
   ];
+
+  const optionalTasks = [
+    {
+      n: 4,
+      title: "Add your company logo",
+      blurb:
+        "Your logo appears in the resident chat header so board members instantly recognize who's asking. Square or landscape PNG/JPG.",
+      done: hasLogo,
+      doneLabel: "Logo uploaded",
+      cta: {
+        label: hasLogo ? "Update logo →" : "Upload logo →",
+        to: "/admin/account?section=org",
+      },
+    },
+    {
+      n: 5,
+      title: "Connect Google Reviews",
+      blurb:
+        "Promoters (NPS 9–10) get a one-tap CTA to leave you a Google review at the end of their chat. Set the destination URL in Account → Reviews.",
+      done: googleReviewsConfigured,
+      doneLabel: "Reviews connected",
+      cta: {
+        label: googleReviewsConfigured ? "Review settings →" : "Set up reviews →",
+        to: "/admin/account?section=reviews",
+      },
+    },
+  ];
+
+  const requiredDoneCount = requiredTasks.filter((t) => t.done).length;
+  const optionalDoneCount = optionalTasks.filter((t) => t.done).length;
 
   return (
     <div className="space-y-3.5" data-testid="home-launch-checklist">
@@ -961,11 +1009,11 @@ function LaunchChecklist({ navigate, planned, interviewDone, memberCount }) {
           }}
         >
           <span className="text-[12px]" style={{ color: "var(--ink-5)" }}>
-            {allReady
+            {allRequiredReady
               ? "All set up — ready when you are."
-              : `${tasks.filter((t) => t.done).length} of ${tasks.length} complete`}
+              : `${requiredDoneCount} of ${requiredTasks.length} required complete`}
           </span>
-          {allReady ? (
+          {allRequiredReady ? (
             <button
               onClick={() => navigate("/admin/rounds")}
               type="button"
@@ -982,16 +1030,44 @@ function LaunchChecklist({ navigate, planned, interviewDone, memberCount }) {
         </div>
       </div>
 
-      {/* Steps card */}
+      {/* Required steps card */}
       <div
         className="rounded-2xl bg-white overflow-hidden"
         style={{ border: "1px solid var(--line)", boxShadow: "var(--shadow-sm)" }}
       >
-        {tasks.map((t, i) => (
+        {requiredTasks.map((t, i) => (
           <ChecklistRow
             key={t.n}
             task={t}
-            isLast={i === tasks.length - 1}
+            isLast={i === requiredTasks.length - 1}
+            onCta={() => navigate(t.cta.to)}
+          />
+        ))}
+      </div>
+
+      {/* Optional polish section header */}
+      <div className="flex items-baseline justify-between pt-1 px-1">
+        <h3
+          className="font-semibold text-[13px] uppercase"
+          style={{ color: "var(--ink-3)", letterSpacing: "0.1em" }}
+        >
+          Polish your setup · optional
+        </h3>
+        <span className="text-[11.5px]" style={{ color: "var(--ink-4)" }}>
+          {optionalDoneCount} of {optionalTasks.length} complete
+        </span>
+      </div>
+
+      {/* Optional steps card */}
+      <div
+        className="rounded-2xl bg-white overflow-hidden"
+        style={{ border: "1px solid var(--line)", boxShadow: "var(--shadow-sm)" }}
+      >
+        {optionalTasks.map((t, i) => (
+          <ChecklistRow
+            key={t.n}
+            task={t}
+            isLast={i === optionalTasks.length - 1}
             onCta={() => navigate(t.cta.to)}
           />
         ))}

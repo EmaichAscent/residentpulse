@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import AddAdminUserModal from "./AddAdminUserModal";
 import ConfirmModal from "./ConfirmModal";
 import TypedConfirmModal from "./TypedConfirmModal";
@@ -76,7 +76,41 @@ export default function AccountSettings() {
   const { user: sessionUser } = useOutletContext();
 
   // ── new: which subsection panel is active ───────────────────────
-  const [activeSection, setActiveSection] = useState("org");
+  // Deep-linkable via ?section=<id> so the launch checklist on /admin/home
+  // can jump straight to "org" (logo) or "reviews" (Google review URL).
+  // The set of allowed ids matches SECTIONS — anything else falls back to "org".
+  const [searchParams, setSearchParams] = useSearchParams();
+  const ALLOWED_SECTIONS = [
+    "org",
+    "team",
+    "subscription",
+    "reviews",
+    "notifications",
+    "profile",
+    "security",
+    "danger",
+  ];
+  const initialSection = (() => {
+    const fromUrl = searchParams.get("section");
+    return fromUrl && ALLOWED_SECTIONS.includes(fromUrl) ? fromUrl : "org";
+  })();
+  const [activeSection, setActiveSectionState] = useState(initialSection);
+  const setActiveSection = (next) => {
+    setActiveSectionState(next);
+    // Mirror state into the URL so browser back/forward navigation and
+    // shareable links keep the active panel in sync. `replace: true` so
+    // every section click doesn't push a new history entry.
+    if (next === "org") {
+      // Clean URL on the default panel.
+      const params = new URLSearchParams(searchParams);
+      params.delete("section");
+      setSearchParams(params, { replace: true });
+    } else {
+      const params = new URLSearchParams(searchParams);
+      params.set("section", next);
+      setSearchParams(params, { replace: true });
+    }
+  };
 
   useEffect(() => {
     loadData();
