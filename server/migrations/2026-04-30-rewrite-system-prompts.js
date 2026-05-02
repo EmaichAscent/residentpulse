@@ -36,8 +36,11 @@ import {
   LEGACY_SYSTEM_PROMPT_V09,
   V2_SYSTEM_PROMPT_V20,
   V2_SYSTEM_PROMPT_V21,
+  V2_SYSTEM_PROMPT_V22,
   V2_SYSTEM_PROMPT,
+  V2_INTERVIEW_INITIAL_V20,
   V2_INTERVIEW_INITIAL,
+  V2_PROMPT_GENERATION_V20,
   V2_PROMPT_GENERATION,
 } from "../prompts/defaults.js";
 
@@ -67,19 +70,20 @@ const MIGRATIONS = [
       LEGACY_SYSTEM_PROMPT_V09,
       V2_SYSTEM_PROMPT_V20,
       V2_SYSTEM_PROMPT_V21,
+      V2_SYSTEM_PROMPT_V22,
     ],
     to: V2_SYSTEM_PROMPT,
   },
   {
     key: "interview_initial_prompt",
     label: "Client onboarding interview",
-    matches: [V1_INTERVIEW_INITIAL],
+    matches: [V1_INTERVIEW_INITIAL, V2_INTERVIEW_INITIAL_V20],
     to: V2_INTERVIEW_INITIAL,
   },
   {
     key: "prompt_generation_instruction",
     label: "Supplement generator",
-    matches: [V1_PROMPT_GENERATION],
+    matches: [V1_PROMPT_GENERATION, V2_PROMPT_GENERATION_V20],
     to: V2_PROMPT_GENERATION,
   },
 ];
