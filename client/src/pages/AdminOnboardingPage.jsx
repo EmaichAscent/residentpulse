@@ -182,33 +182,28 @@ export default function AdminOnboardingPage() {
     navigate("/admin");
   };
 
-  const handleEndEarly = async () => {
-    try {
-      const res = await fetch(`/api/admin/interview/${interviewId}/message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          message: "I'd like to wrap up. Can you summarize what we've discussed?",
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setSummaryMessage(data.message);
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            role: "user",
-            content: "I'd like to wrap up. Can you summarize what we've discussed?",
-            timestamp: new Date().toISOString(),
-          },
-          { role: "assistant", content: data.message, timestamp: new Date().toISOString() },
-        ]);
-        setStep("confirm");
-      }
-    } catch (err) {
-      console.error("End early error:", err);
+  // Finish Interview advances directly to the Review step. The
+  // previous version POSTed a synthetic "I'd like to wrap up" message
+  // to the AI before advancing — but if the conversation had already
+  // wrapped naturally (the common case under V2.1), the /message
+  // endpoint required status='in_progress' and could refuse, leaving
+  // the user stuck on the chat step with no feedback.
+  //
+  // Recap content for the Review step is the last AI message from the
+  // existing transcript (the natural close), with a generic fallback
+  // when there isn't one. The /confirm endpoint generates the actual
+  // supplement; this is just a preview of what the user is approving.
+  const handleEndEarly = () => {
+    if (!interviewId) {
+      setLaunchError("No interview found. Refresh the page and complete the form again.");
+      return;
     }
+    const lastAssistant = [...chatMessages].reverse().find((m) => m.role === "assistant");
+    setSummaryMessage(
+      lastAssistant?.content ||
+        "Here's the conversation we had. Confirm to generate the AI supplement that briefs board interviews on your priorities."
+    );
+    setStep("confirm");
   };
 
   if (loading) {
