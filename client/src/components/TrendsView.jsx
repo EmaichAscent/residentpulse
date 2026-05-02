@@ -299,7 +299,11 @@ function NpsOverTimeCard({ rounds, latest, prev, baseline }) {
           </span>
         </div>
       </div>
-      <NpsLineChart data={data} width={1100} height={220} />
+      {/* width is the chart's internal coordinate space; the SVG scales
+            to fill its container via viewBox + width="100%". 720 keeps
+            the labels at a readable size when the card stretches the
+            full content width. */}
+      <NpsLineChart data={data} width={720} height={220} />
     </Card>
   );
 }
@@ -328,7 +332,10 @@ function CohortMovementCard({ rounds, latest, prev }) {
           Cohort movement · D / P / Pr share
         </h3>
       </div>
-      <StackedSentimentBars data={data} width={620} height={220} />
+      {/* Sized for the left column of the cohort/response 2-col grid.
+            viewBox in StackedSentimentBars scales to the actual column
+            width — 420 keeps bars and labels well-proportioned. */}
+      <StackedSentimentBars data={data} width={420} height={220} />
       <div className="flex gap-4 text-[12px] mt-2">
         <LegendDot color="var(--coral)" label={`Detractors ${formatPct(detDelta)}`} />
         <LegendDot

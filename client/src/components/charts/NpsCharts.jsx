@@ -235,13 +235,20 @@ export function NpsLineChart({ data, width = 600, height = 220, color = "var(--i
   const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p[0]} ${p[1]}`).join(" ");
   const gridY = [-50, 0, 50];
 
+  // viewBox + 100% width lets the chart scale to its container instead
+  // of overflowing when callers pass a width larger than the container
+  // (e.g. width=1100 in TrendsView's NPS-over-time card). The internal
+  // coordinate math keeps using the literal `width` prop — only the
+  // rendered size scales.
   return (
     <svg
-      width={width}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="xMidYMid meet"
+      width="100%"
       height={height}
       role="img"
       aria-label={`NPS over ${data.length} rounds`}
-      style={{ maxWidth: "100%" }}
+      style={{ display: "block", maxWidth: "100%", height: "auto" }}
     >
       {/* Zone backgrounds */}
       <rect
@@ -348,13 +355,18 @@ export function StackedSentimentBars({ data, width = 600, height = 220 }) {
   const barW = (w / data.length) * 0.55;
   const gap = w / data.length - barW;
 
+  // viewBox + 100% width keeps the chart inside its container at any
+  // viewport size (the cohort card sits in a 2-col grid that's often
+  // narrower than the default 600 / explicit 620 width prop).
   return (
     <svg
-      width={width}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="xMidYMid meet"
+      width="100%"
       height={height}
       role="img"
       aria-label="Cohort movement over rounds"
-      style={{ maxWidth: "100%" }}
+      style={{ display: "block", maxWidth: "100%", height: "auto" }}
     >
       {/* Gridlines + y labels (percentage scale) */}
       {[0, 25, 50, 75, 100].map((g) => (
