@@ -40,6 +40,7 @@ import {
   V2_SYSTEM_PROMPT_V23,
   V2_SYSTEM_PROMPT,
   V2_INTERVIEW_INITIAL_V20,
+  V2_INTERVIEW_INITIAL_V21,
   V2_INTERVIEW_INITIAL,
   V2_PROMPT_GENERATION_V20,
   V2_PROMPT_GENERATION,
@@ -79,7 +80,11 @@ const MIGRATIONS = [
   {
     key: "interview_initial_prompt",
     label: "Client onboarding interview",
-    matches: [V1_INTERVIEW_INITIAL, V2_INTERVIEW_INITIAL_V20],
+    // V2_INTERVIEW_INITIAL_V21 was the value seeded by the previous
+    // migration run; rows still holding it should be upgraded to V2.2
+    // (current V2_INTERVIEW_INITIAL) which rewrites the wrap-up so the
+    // model stops promising async "within 24 hours" supplement delivery.
+    matches: [V1_INTERVIEW_INITIAL, V2_INTERVIEW_INITIAL_V20, V2_INTERVIEW_INITIAL_V21],
     to: V2_INTERVIEW_INITIAL,
   },
   {

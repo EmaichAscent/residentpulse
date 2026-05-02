@@ -13,6 +13,7 @@ import {
   V2_SYSTEM_PROMPT_V23,
   V2_SYSTEM_PROMPT,
   V2_INTERVIEW_INITIAL_V20,
+  V2_INTERVIEW_INITIAL_V21,
   V2_INTERVIEW_INITIAL,
   V2_PROMPT_GENERATION_V20,
   V2_PROMPT_GENERATION,
@@ -201,8 +202,51 @@ describe("V2 onboarding interview — V2.0 frozen + V2.1 current", () => {
     expect(V2_INTERVIEW_INITIAL).toMatch(/biggest priority this quarter/);
   });
 
-  it("V2.1 is shorter than V2.0 (surgical-rewrite goal)", () => {
-    expect(V2_INTERVIEW_INITIAL.length).toBeLessThan(V2_INTERVIEW_INITIAL_V20.length);
+  it("V2.1 (now frozen) is shorter than V2.0 (surgical-rewrite goal)", () => {
+    expect(V2_INTERVIEW_INITIAL_V21.length).toBeLessThan(V2_INTERVIEW_INITIAL_V20.length);
+  });
+
+  // ── V2.2 (current) — wrap-up rewrite ────────────────────────────────
+  // V2.1's wrap-up promised admins they'd be able to "edit, regenerate,
+  // or approve" the supplement. The model interpreted that as an async
+  // review queue and started telling admins they'd "receive the
+  // supplement within 24 hours" — but /confirm runs synchronously in
+  // seconds. V2.2 rewrites the wrap-up + Never list to describe what
+  // actually happens.
+
+  it("V2_INTERVIEW_INITIAL_V21 is preserved byte-perfect (was the V2.1 default before V2.2 wrap-up rewrite)", () => {
+    // Distinguishing fingerprint: V2.1's wrap-up phrase that the AI
+    // misread as an async review flow.
+    expect(V2_INTERVIEW_INITIAL_V21).toMatch(/edit, regenerate, or approve/);
+  });
+
+  it("V2.2 current differs from V2.1", () => {
+    expect(V2_INTERVIEW_INITIAL).not.toEqual(V2_INTERVIEW_INITIAL_V21);
+  });
+
+  it("V2.2 drops the 'edit, regenerate, or approve' wrap phrasing that misled the model", () => {
+    expect(V2_INTERVIEW_INITIAL).not.toMatch(/edit, regenerate, or approve/);
+  });
+
+  it("V2.2 explicitly forbids async-delivery promises ('within X hours', 'we'll send', etc.)", () => {
+    // The Never list now blocks the language patterns the model
+    // hallucinated under V2.1.
+    expect(V2_INTERVIEW_INITIAL).toMatch(/no "within 24 hours"/);
+    expect(V2_INTERVIEW_INITIAL).toMatch(/Promise async delivery of the brief/);
+    expect(V2_INTERVIEW_INITIAL).toMatch(/generated immediately when they confirm/);
+  });
+
+  it("V2.2 wrap-up describes the on-demand /confirm flow", () => {
+    expect(V2_INTERVIEW_INITIAL).toMatch(/it takes a few seconds/);
+    expect(V2_INTERVIEW_INITIAL).toMatch(/applied to every board interview from there on/);
+  });
+
+  it("V2.2 keeps the four-phase shape and surprise probe (no regression on V2.1's gains)", () => {
+    expect(V2_INTERVIEW_INITIAL).toMatch(/Phase 1.*Calibrate/);
+    expect(V2_INTERVIEW_INITIAL).toMatch(/Phase 2.*Concretize/);
+    expect(V2_INTERVIEW_INITIAL).toMatch(/Phase 3.*Forbid/);
+    expect(V2_INTERVIEW_INITIAL).toMatch(/Phase 4.*Vocabulary/);
+    expect(V2_INTERVIEW_INITIAL).toMatch(/would surprise you/i);
   });
 });
 
