@@ -305,6 +305,16 @@ async function initializeSchema() {
       logger.info("Survey rounds migration skipped (already applied or file not found)");
     }
 
+    // Run per-round window_days migration (configurable response window)
+    try {
+      const windowMigrationPath = join(__dirname, "migrations", "add-survey-round-window-days.sql");
+      const windowMigrationSQL = readFileSync(windowMigrationPath, "utf-8");
+      await client.query(windowMigrationSQL);
+      logger.info("Survey round window_days migration applied successfully");
+    } catch (migrationErr) {
+      logger.info("Survey round window_days migration skipped (already applied or file not found)");
+    }
+
     // Create email_jobs table (depends on survey_rounds existing)
     await client.query(`
       CREATE TABLE IF NOT EXISTS email_jobs (

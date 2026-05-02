@@ -64,40 +64,60 @@ async function concludeExpiredRounds() {
 }
 
 /**
- * Send reminder emails to non-responders at day 10 and day 20
+ * Send resident follow-up reminders to non-responders.
+ *
+ * Two follow-ups per round, both proportional to the round's
+ * configured response window:
+ *
+ *   first  — at floor(window_days / 3) days after launch
+ *   second — at floor(2 * window_days / 3) days after launch
+ *
+ * For the historic 30-day window this still fires at days 10 and 20
+ * (matching the legacy hardcoded behavior). For a 14-day window it
+ * fires at days 4 and 9 — both safely inside the response window so
+ * residents aren't pinged after the round closed.
+ *
+ * The DB columns are still named reminder_10_sent / reminder_20_sent
+ * for backward compatibility (rename would require its own migration).
+ * They now mean "first follow-up sent" / "second follow-up sent" —
+ * the literal day numbers depend on the round's window_days.
  */
 async function sendReminders() {
-  // Day 10 reminders (skip test rounds)
-  const day10Rounds = await db.all(
+  // First follow-up (skip test rounds). FLOOR(window/3) days after launch.
+  const firstRounds = await db.all(
     `SELECT * FROM survey_rounds
      WHERE status = 'in_progress'
        AND reminder_10_sent = false
        AND is_test = FALSE
-       AND launched_at <= CURRENT_TIMESTAMP - INTERVAL '10 days'`
+       AND launched_at + (FLOOR(COALESCE(window_days, 21) / 3.0) || ' days')::interval
+           <= CURRENT_TIMESTAMP`
   );
 
-  for (const round of day10Rounds) {
-    await sendRoundReminders(round, 10);
+  for (const round of firstRounds) {
+    const dayNum = Math.floor((round.window_days || 21) / 3);
+    await sendRoundReminders(round, dayNum);
     await db.run("UPDATE survey_rounds SET reminder_10_sent = true WHERE id = ?", [round.id]);
     logger.info(
-      `Day 10 reminders sent for round ${round.round_number} (client ${round.client_id})`
+      `First follow-up (day ${dayNum}) sent for round ${round.round_number} (client ${round.client_id})`
     );
   }
 
-  // Day 20 reminders (skip test rounds)
-  const day20Rounds = await db.all(
+  // Second follow-up (skip test rounds). FLOOR(2*window/3) days after launch.
+  const secondRounds = await db.all(
     `SELECT * FROM survey_rounds
      WHERE status = 'in_progress'
        AND reminder_20_sent = false
        AND is_test = FALSE
-       AND launched_at <= CURRENT_TIMESTAMP - INTERVAL '20 days'`
+       AND launched_at + (FLOOR(2 * COALESCE(window_days, 21) / 3.0) || ' days')::interval
+           <= CURRENT_TIMESTAMP`
   );
 
-  for (const round of day20Rounds) {
-    await sendRoundReminders(round, 20);
+  for (const round of secondRounds) {
+    const dayNum = Math.floor((2 * (round.window_days || 21)) / 3);
+    await sendRoundReminders(round, dayNum);
     await db.run("UPDATE survey_rounds SET reminder_20_sent = true WHERE id = ?", [round.id]);
     logger.info(
-      `Day 20 reminders sent for round ${round.round_number} (client ${round.client_id})`
+      `Second follow-up (day ${dayNum}) sent for round ${round.round_number} (client ${round.client_id})`
     );
   }
 }

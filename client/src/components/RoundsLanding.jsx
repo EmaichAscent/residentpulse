@@ -252,22 +252,27 @@ export default function RoundsLanding() {
     }
   };
 
-  const handleReschedule = async (roundId, newDate) => {
+  // Reschedule accepts an optional window_days override. The inline
+  // "Reschedule" buttons on the planned-rounds list pass date only;
+  // the configure modal can pass both date + window_days.
+  const handleReschedule = async (roundId, newDate, windowDays) => {
     if (!newDate) return;
     try {
+      const body = { scheduled_date: newDate };
+      if (windowDays != null) body.window_days = windowDays;
       const res = await fetch(`/api/admin/survey-rounds/${roundId}/reschedule`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ scheduled_date: newDate }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         setReschedulingId(null);
         setRescheduleDate("");
         await loadData();
       } else {
-        const body = await res.json().catch(() => ({}));
-        alert(body.error || "Failed to reschedule");
+        const errBody = await res.json().catch(() => ({}));
+        alert(errBody.error || "Failed to reschedule");
       }
     } catch (err) {
       console.error("Reschedule failed:", err);
@@ -280,7 +285,10 @@ export default function RoundsLanding() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ scheduled_date: data.scheduled_date }),
+        body: JSON.stringify({
+          scheduled_date: data.scheduled_date,
+          window_days: data.window_days,
+        }),
       });
       if (res.ok) {
         setScheduleOpen(false);
@@ -635,6 +643,7 @@ export default function RoundsLanding() {
           mode="create"
           nextRoundNumber={maxRoundNumber(rounds) + 1}
           defaultDate={defaultNextDate(rounds, account?.survey_cadence || 2)}
+          defaultWindowDays={21}
           audience={preflight?.audience}
           onCancel={() => setScheduleOpen(false)}
           onSubmit={handleScheduleSubmit}
@@ -645,10 +654,11 @@ export default function RoundsLanding() {
           mode="configure"
           nextRoundNumber={configuringRound.round_number}
           defaultDate={configuringRound.scheduled_date?.slice(0, 10) || ""}
+          defaultWindowDays={configuringRound.window_days || 21}
           audience={preflight?.audience}
           onCancel={() => setConfiguringRound(null)}
           onSubmit={async (data) => {
-            await handleReschedule(configuringRound.id, data.scheduled_date);
+            await handleReschedule(configuringRound.id, data.scheduled_date, data.window_days);
             setConfiguringRound(null);
           }}
         />
@@ -834,14 +844,19 @@ function NextRoundHero({
             </span>
             {" · "}
             {audience.invitees ?? "—"} invitees across {audience.communities ?? "—"} communities
-            {/* Window + resident follow-up cadence (NOT the admin
-                pre-launch reminders, which are a separate schedule
-                shown in the pre-flight strip below). The actual code
-                in surveyRounds.js → POST /:id/launch sets closes_at to
-                +30 days; scheduler.js sends resident follow-ups on
-                day 10 and day 20 of the open window. */}
-            {audience.window_days && ` · ${audience.window_days}-day response window`}
-            {" · resident follow-ups at days 10 & 20"}
+            {/* Window + resident follow-up cadence. surveyRounds.js
+                → POST /:id/launch sets closes_at to +window_days from
+                launch; scheduler.js sends resident follow-ups at
+                floor(window/3) and floor(2*window/3) elapsed days.
+                Default window is 21 → reminders at days 7 + 14
+                elapsed (Day 8 + Day 15 calendar). The pre-launch
+                ADMIN reminders shown in the pre-flight strip below
+                are a separate schedule (14/7/1 days before launch). */}
+            {(() => {
+              const w = next.window_days || 21;
+              const c = followUpCadence(w);
+              return ` · ${w}-day response window · resident follow-ups at days ${c.first + 1} & ${c.second + 1}`;
+            })()}
           </div>
         </div>
         <div className="flex flex-col gap-2 items-end flex-shrink-0">
@@ -1196,18 +1211,19 @@ function ScheduleRoundModal({
   mode = "create",
   nextRoundNumber,
   defaultDate,
+  defaultWindowDays = 21,
   audience,
   onCancel,
   onSubmit,
 }) {
-  // The backend `/custom` endpoint only takes scheduled_date today. We
-  // collect name + window in the modal for forward compatibility, but
-  // only the date is sent. A future backend PR can accept label and
-  // window_days too without modal churn.
+  // Backend now accepts window_days on both POST /custom and PATCH
+  // /reschedule (see surveyRounds.js validateWindowDays — bounds 7..60).
+  // The Round name field is still cosmetic — no backend column for it.
   const [name, setName] = useState(`Round ${nextRoundNumber}`);
   const [date, setDate] = useState(defaultDate);
-  const [windowDays, setWindowDays] = useState(30);
+  const [windowDays, setWindowDays] = useState(defaultWindowDays);
   const isConfigure = mode === "configure";
+  const cadence = followUpCadence(windowDays);
 
   return (
     <div
@@ -1233,7 +1249,7 @@ function ScheduleRoundModal({
         </h3>
         <p className="text-[13px] mb-5" style={{ color: "var(--ink-3)" }}>
           {isConfigure
-            ? "Adjust this round's settings before it launches. Resident follow-ups send at days 10 and 20 of the response window."
+            ? `Adjust this round's settings before it launches. Resident follow-ups send at days ${cadence.first} and ${cadence.second} of the response window.`
             : "Add a one-off round to the calendar. Cadence-driven planned rounds adjust automatically when this is launched."}
         </p>
 
@@ -1260,13 +1276,19 @@ function ScheduleRoundModal({
         <Field label="Response window (days)">
           <input
             type="number"
-            min={1}
-            max={90}
+            min={7}
+            max={60}
             value={windowDays}
             onChange={(e) => setWindowDays(Number(e.target.value))}
             className="w-full px-3 py-2 text-[13.5px] rounded-lg outline-none"
             style={{ border: "1px solid var(--line-2)", color: "var(--ink)" }}
           />
+          <p className="text-[11.5px] mt-1.5" style={{ color: "var(--ink-4)" }}>
+            Cadence: <span className="font-mono">Day 1</span> launch ·{" "}
+            <span className="font-mono">Day {cadence.first + 1}</span> reminder ·{" "}
+            <span className="font-mono">Day {cadence.second + 1}</span> reminder ·{" "}
+            <span className="font-mono">Day {windowDays + 1}</span> closed
+          </p>
         </Field>
 
         <Field label="Audience">
@@ -1305,7 +1327,11 @@ function ScheduleRoundModal({
                 alert("Pick a send date.");
                 return;
               }
-              onSubmit({ scheduled_date: date });
+              if (!Number.isInteger(windowDays) || windowDays < 7 || windowDays > 60) {
+                alert("Response window must be between 7 and 60 days.");
+                return;
+              }
+              onSubmit({ scheduled_date: date, window_days: windowDays });
             }}
             className="btn-pulse"
             type="button"
@@ -1499,6 +1525,21 @@ function formatRelative(iso) {
 
 function maxRoundNumber(rounds) {
   return rounds.reduce((m, r) => Math.max(m, r.round_number || 0), 0);
+}
+
+/**
+ * Resident follow-up cadence — mirrors server/scheduler.js sendReminders().
+ * Returns the elapsed-day numbers when each follow-up fires after launch.
+ *
+ * For window=21 (the new default): first=7, second=14 → calendar days
+ * 8 and 15 (with launch on Day 1, close on Day 22).
+ */
+function followUpCadence(windowDays) {
+  const w = Number(windowDays) > 0 ? Number(windowDays) : 21;
+  return {
+    first: Math.floor(w / 3),
+    second: Math.floor((2 * w) / 3),
+  };
 }
 
 function RefreshIcon() {
