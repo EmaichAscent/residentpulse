@@ -1193,13 +1193,19 @@ function Card({ children, padding = 22, style }) {
 
 function DeltaPill({ value, suffix }) {
   const isPositive = value > 0;
+  // whiteSpace:nowrap prevents the suffix ("vs Round 2") from wrapping
+  // when the pill sits next to the oversized NPS number — the parent
+  // flex was letting "vs", "Round", "2" each break to their own line.
+  // flex-shrink-0 keeps the pill at its natural content width even when
+  // the row is squeezed by the gauge on the right.
   return (
     <span
-      className="inline-flex items-center gap-1 text-[13px] font-semibold rounded-full"
+      className="inline-flex items-center gap-1 text-[13px] font-semibold rounded-full flex-shrink-0"
       style={{
         backgroundColor: isPositive ? "var(--pulse-tint)" : "var(--coral-tint)",
         color: isPositive ? "var(--pulse-deep)" : "var(--coral)",
         padding: "4px 10px",
+        whiteSpace: "nowrap",
       }}
     >
       {isPositive ? "↑ +" : "↓ "}
