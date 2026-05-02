@@ -51,15 +51,22 @@ export default function RoundsLanding() {
   // /admin/rounds/:id. Hydrated from a second fetch when there's at
   // least one concluded round.
   const [latestRoundData, setLatestRoundData] = useState(null);
+  // AI brief status — drives the optional "Re-brief the AI" button on
+  // the next-round hero so admins can refresh the interview supplement
+  // before launching a new round. lastInterviewDate is rendered as
+  // relative age ("3 mo ago") so admins know when their context is stale.
+  const [interviewStatus, setInterviewStatus] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
-      const [rRes, aRes] = await Promise.all([
+      const [rRes, aRes, iRes] = await Promise.all([
         fetch("/api/admin/survey-rounds", { credentials: "include" }),
         fetch("/api/admin/account", { credentials: "include" }),
+        fetch("/api/admin/interview/status", { credentials: "include" }),
       ]);
       if (rRes.ok) setRounds(await rRes.json());
       if (aRes.ok) setAccount(await aRes.json());
+      if (iRes.ok) setInterviewStatus(await iRes.json());
     } catch (err) {
       console.error("Failed to load rounds:", err);
     } finally {
@@ -425,6 +432,8 @@ export default function RoundsLanding() {
           launching={launching === next.id}
           onLaunch={() => handleLaunch(next.id)}
           onConfigure={() => setConfiguringRound(next)}
+          interviewStatus={interviewStatus}
+          onReBrief={() => navigate(`/admin/onboarding?type=re_interview&launch_round=${next.id}`)}
         />
       ) : (
         <ScheduleNextCta onSchedule={() => setScheduleOpen(true)} />
@@ -749,11 +758,42 @@ function StatCell({ label, value, valueColor, sub, delta }) {
   );
 }
 
-function NextRoundHero({ next, preflight, launching, onLaunch, onConfigure }) {
+function NextRoundHero({
+  next,
+  preflight,
+  launching,
+  onLaunch,
+  onConfigure,
+  interviewStatus,
+  onReBrief,
+}) {
   const sd = next.scheduled_date ? new Date(next.scheduled_date) : null;
   const audience = preflight?.audience || {};
   const checks = preflightChecks(preflight);
   const hasError = checks.some((c) => c.state === "error");
+
+  // AI brief age — surfaced above the Re-brief button so admins know
+  // when their interview supplement was last refreshed. Only show the
+  // button if there's at least one completed interview on file (i.e.
+  // the admin actually has a brief to refresh).
+  const briefAgeLabel = (() => {
+    if (!interviewStatus?.lastInterviewDate) return null;
+    const days = Math.floor(
+      (Date.now() - new Date(interviewStatus.lastInterviewDate).getTime()) / (1000 * 60 * 60 * 24)
+    );
+    if (days < 1) return "Brief updated today";
+    if (days < 30) return `Brief: ${days}d old`;
+    const months = Math.round(days / 30);
+    return `Brief: ${months}mo old`;
+  })();
+  const showReBrief = !!interviewStatus?.hasCompletedInterview;
+  const briefIsStale = (() => {
+    if (!interviewStatus?.lastInterviewDate) return false;
+    const days = Math.floor(
+      (Date.now() - new Date(interviewStatus.lastInterviewDate).getTime()) / (1000 * 60 * 60 * 24)
+    );
+    return days >= 90;
+  })();
 
   return (
     <div
@@ -825,6 +865,37 @@ function NextRoundHero({ next, preflight, launching, onLaunch, onConfigure }) {
           >
             Configure
           </button>
+          {showReBrief && (
+            <div className="flex flex-col items-end gap-0.5 mt-1">
+              <button
+                onClick={onReBrief}
+                type="button"
+                className="px-4 py-2 text-[13px] font-semibold rounded-lg transition flex items-center gap-1.5"
+                style={{
+                  backgroundColor: briefIsStale
+                    ? "var(--amber-tint, rgba(248,168,84,0.18))"
+                    : "transparent",
+                  color: briefIsStale ? "var(--amber)" : "white",
+                  border: briefIsStale
+                    ? "1px solid var(--amber-soft, rgba(248,168,84,0.5))"
+                    : "1px solid rgba(255, 255, 255, 0.25)",
+                }}
+                title="Optional. Re-interview the AI to refresh the per-client brief that personalizes board interviews."
+              >
+                <RefreshIcon />
+                Re-brief the AI
+              </button>
+              {briefAgeLabel && (
+                <span
+                  className="text-[10.5px] font-mono"
+                  style={{ color: briefIsStale ? "var(--amber)" : "var(--ink-5)" }}
+                >
+                  {briefAgeLabel}
+                  {briefIsStale && " · consider refreshing"}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1428,6 +1499,27 @@ function formatRelative(iso) {
 
 function maxRoundNumber(rounds) {
   return rounds.reduce((m, r) => Math.max(m, r.round_number || 0), 0);
+}
+
+function RefreshIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 12a9 9 0 0 1 15.3-6.4L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-15.3 6.4L3 16" />
+      <path d="M8 16H3v5" />
+    </svg>
+  );
 }
 
 function defaultNextDate(rounds, cadence) {
