@@ -243,7 +243,7 @@ router.get("/recent-activity", async (req, res) => {
  */
 router.post("/custom", async (req, res) => {
   try {
-    const { scheduled_date } = req.body || {};
+    const { scheduled_date, window_days } = req.body || {};
     if (!scheduled_date) {
       return res.status(400).json({ error: "scheduled_date is required" });
     }
@@ -251,6 +251,8 @@ router.post("/custom", async (req, res) => {
     if (isNaN(parsed.getTime())) {
       return res.status(400).json({ error: "Invalid scheduled_date" });
     }
+    const validatedWindow = validateWindowDays(window_days);
+    if (validatedWindow.error) return res.status(400).json({ error: validatedWindow.error });
 
     const last = await db.get(
       `SELECT round_number FROM survey_rounds
@@ -261,9 +263,9 @@ router.post("/custom", async (req, res) => {
     const nextNumber = (last?.round_number || 0) + 1;
 
     const result = await db.run(
-      `INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test)
-       VALUES (?, ?, ?, 'planned', ?)`,
-      [req.clientId, nextNumber, parsed.toISOString(), req.isTestMode]
+      `INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test, window_days)
+       VALUES (?, ?, ?, 'planned', ?, ?)`,
+      [req.clientId, nextNumber, parsed.toISOString(), req.isTestMode, validatedWindow.value]
     );
     const round = await db.get("SELECT * FROM survey_rounds WHERE id = ?", [
       result.lastInsertRowid,
@@ -274,6 +276,28 @@ router.post("/custom", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+/**
+ * Validate the per-round response window. Bounds (7..60) are product
+ * policy: < 7 days doesn't give residents enough lead time and skews
+ * NPS toward whoever happens to be on email that week; > 60 days
+ * stretches the round past the next-round cadence boundary at 4×/yr
+ * (90 days).
+ *
+ * Default: 21 days — gives weekly cadence (Day 1 launch / Day 8 / Day
+ * 15 / Day 22 close). The schema default also pins to 21; we still
+ * pass an explicit value here so partial UI updates don't accidentally
+ * leave the column unset and silently regress.
+ *
+ * Returns { value: <int> } on success, { error: <string> } on failure.
+ */
+function validateWindowDays(input) {
+  if (input == null || input === "") return { value: 21 };
+  const n = Number(input);
+  if (!Number.isInteger(n)) return { error: "window_days must be an integer" };
+  if (n < 7 || n > 60) return { error: "window_days must be between 7 and 60" };
+  return { value: n };
+}
 
 /**
  * Pre-flight checklist data for a planned round. Powers the
@@ -1519,7 +1543,7 @@ router.get("/:id/export", async (req, res) => {
 router.patch("/:id/reschedule", async (req, res) => {
   try {
     const roundId = Number(req.params.id);
-    const { scheduled_date } = req.body;
+    const { scheduled_date, window_days } = req.body;
 
     if (!scheduled_date) {
       return res.status(400).json({ error: "scheduled_date is required" });
@@ -1528,6 +1552,15 @@ router.patch("/:id/reschedule", async (req, res) => {
     const parsedDate = new Date(scheduled_date + "T00:00:00Z");
     if (isNaN(parsedDate.getTime())) {
       return res.status(400).json({ error: "Invalid date format" });
+    }
+
+    // window_days is optional on reschedule — undefined means "leave it".
+    // null/empty also means "leave it" so the configure modal can omit it
+    // without forcing us to default-stomp the existing per-round value.
+    const windowProvided = window_days !== undefined && window_days !== null && window_days !== "";
+    const validatedWindow = windowProvided ? validateWindowDays(window_days) : null;
+    if (validatedWindow?.error) {
+      return res.status(400).json({ error: validatedWindow.error });
     }
 
     const round = await db.get(
@@ -1539,10 +1572,17 @@ router.patch("/:id/reschedule", async (req, res) => {
       return res.status(400).json({ error: "Only planned rounds can be rescheduled" });
     }
 
-    await db.run(
-      "UPDATE survey_rounds SET scheduled_date = ?, admin_reminder_14_sent = FALSE, admin_reminder_7_sent = FALSE, admin_reminder_1_sent = FALSE WHERE id = ?",
-      [scheduled_date, roundId]
-    );
+    if (validatedWindow) {
+      await db.run(
+        "UPDATE survey_rounds SET scheduled_date = ?, window_days = ?, admin_reminder_14_sent = FALSE, admin_reminder_7_sent = FALSE, admin_reminder_1_sent = FALSE WHERE id = ?",
+        [scheduled_date, validatedWindow.value, roundId]
+      );
+    } else {
+      await db.run(
+        "UPDATE survey_rounds SET scheduled_date = ?, admin_reminder_14_sent = FALSE, admin_reminder_7_sent = FALSE, admin_reminder_1_sent = FALSE WHERE id = ?",
+        [scheduled_date, roundId]
+      );
+    }
 
     const updated = await db.get("SELECT * FROM survey_rounds WHERE id = ?", [roundId]);
     res.json(updated);
@@ -1840,10 +1880,15 @@ router.post("/:id/launch", async (req, res) => {
       });
     }
 
-    // Calculate close date (30 days from now)
+    // Calculate close date from the round's configured window. Falls
+    // back to 21 if the column is missing (defensive — the column is
+    // NOT NULL DEFAULT 21 after the add-survey-round-window-days
+    // migration runs, but legacy rounds created before the migration
+    // could in theory still hit this path on the first deploy).
+    const windowDays = Number(round.window_days) > 0 ? Number(round.window_days) : 21;
     const now = new Date();
     const closesAt = new Date(now);
-    closesAt.setDate(closesAt.getDate() + 30);
+    closesAt.setDate(closesAt.getDate() + windowDays);
 
     // Update round status
     await db.run(
