@@ -118,6 +118,11 @@ router.get("/validate-token/:token", async (req, res) => {
       "SELECT value FROM settings WHERE key = 'google_review_url' AND client_id = ?",
       [user.client_id]
     );
+    const reviewThresholdSetting = await db.get(
+      "SELECT value FROM settings WHERE key = 'google_review_threshold' AND client_id = ?",
+      [user.client_id]
+    );
+    const googleReviewThreshold = reviewThresholdSetting ? Number(reviewThresholdSetting.value) : 9;
     // Resolution chain: location-specific URL → main URL → null
     const mainUrl = reviewUrl?.value || null;
     const googleReviewUrl =
@@ -135,6 +140,7 @@ router.get("/validate-token/:token", async (req, res) => {
       company_name: clientInfo?.company_name || "",
       has_logo: clientInfo?.has_logo || false,
       google_review_url: googleReviewUrl,
+      google_review_threshold: googleReviewThreshold,
     });
   } catch (err) {
     logger.error({ err }, "Token validation error");

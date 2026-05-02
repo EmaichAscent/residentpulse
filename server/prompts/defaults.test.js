@@ -10,6 +10,7 @@ import {
   V2_SYSTEM_PROMPT_V20,
   V2_SYSTEM_PROMPT_V21,
   V2_SYSTEM_PROMPT_V22,
+  V2_SYSTEM_PROMPT_V23,
   V2_SYSTEM_PROMPT,
   V2_INTERVIEW_INITIAL_V20,
   V2_INTERVIEW_INITIAL,
@@ -65,10 +66,10 @@ describe("V1 prompts (frozen — used as match keys by the migration)", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// V2 board interview — V2.0/V2.1/V2.2 frozen, V2.3 current
+// V2 board interview — V2.0/V2.1/V2.2/V2.3 frozen, V2.4 current
 // ──────────────────────────────────────────────────────────────────────────
 
-describe("V2 system prompt — V2.0/V2.1/V2.2 frozen for migration matching", () => {
+describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3 frozen for migration matching", () => {
   it("V2_SYSTEM_PROMPT_V20 is preserved byte-perfect", () => {
     expect(V2_SYSTEM_PROMPT_V20.length).toBeGreaterThan(5500);
     expect(V2_SYSTEM_PROMPT_V20).toMatch(/curious journalist/);
@@ -81,62 +82,69 @@ describe("V2 system prompt — V2.0/V2.1/V2.2 frozen for migration matching", ()
     expect(V2_SYSTEM_PROMPT_V21).not.toMatch(/Hard constraints/);
   });
 
-  it("V2_SYSTEM_PROMPT_V22 is preserved byte-perfect (had hard caps but still listed reserves)", () => {
+  it("V2_SYSTEM_PROMPT_V22 is preserved byte-perfect", () => {
     expect(V2_SYSTEM_PROMPT_V22.length).toBeGreaterThan(3000);
     expect(V2_SYSTEM_PROMPT_V22).toMatch(/Hard constraints/);
     expect(V2_SYSTEM_PROMPT_V22).toMatch(/Frustration signals/);
-    expect(V2_SYSTEM_PROMPT_V22).toMatch(/reserves/i); // V2.2 still mentioned reserves
+    expect(V2_SYSTEM_PROMPT_V22).toMatch(/reserves/i);
+    // V22 did NOT yet have the [CHAT:END] auto-close rule
+    expect(V2_SYSTEM_PROMPT_V22).not.toMatch(/CHAT:END/);
   });
 
-  it("all three frozen versions are distinct", () => {
-    const all = [V2_SYSTEM_PROMPT_V20, V2_SYSTEM_PROMPT_V21, V2_SYSTEM_PROMPT_V22];
+  it("V2_SYSTEM_PROMPT_V23 is preserved byte-perfect (reserves out of coverage but no CHAT:END yet)", () => {
+    expect(V2_SYSTEM_PROMPT_V23.length).toBeGreaterThan(3000);
+    expect(V2_SYSTEM_PROMPT_V23).toMatch(/Reserves.*rarely top-of-mind/i);
+    expect(V2_SYSTEM_PROMPT_V23).not.toMatch(/CHAT:END/);
+  });
+
+  it("all four frozen versions are distinct", () => {
+    const all = [
+      V2_SYSTEM_PROMPT_V20,
+      V2_SYSTEM_PROMPT_V21,
+      V2_SYSTEM_PROMPT_V22,
+      V2_SYSTEM_PROMPT_V23,
+    ];
     expect(new Set(all).size).toBe(all.length);
   });
 
-  it("current V2_SYSTEM_PROMPT (V2.3) differs from all frozen versions", () => {
+  it("current V2_SYSTEM_PROMPT (V2.4) differs from all frozen versions", () => {
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V20);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V21);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V22);
+    expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V23);
   });
 });
 
-describe("V2 system prompt — V2.3 current (reserves removed, accept-fine rule)", () => {
+describe("V2 system prompt — V2.4 current (CHAT:END auto-close)", () => {
   it("targets [CLIENT_NAME] and frames the role minimally", () => {
     expect(V2_SYSTEM_PROMPT).toMatch(/\[CLIENT_NAME\]/);
     expect(V2_SYSTEM_PROMPT).toMatch(/interviewing a board member/i);
   });
 
-  it("retains hard constraints from V2.2 (5-7 question cap, 3 per thread)", () => {
+  it("retains hard constraints from V2.2/V2.3 (5-7 question cap, 3 per thread)", () => {
     expect(V2_SYSTEM_PROMPT).toMatch(/Hard constraints/);
     expect(V2_SYSTEM_PROMPT).toMatch(/Total session.*5.7 questions/);
     expect(V2_SYSTEM_PROMPT).toMatch(/3 follow-ups MAX/);
     expect(V2_SYSTEM_PROMPT).toMatch(/Stop at 7/);
   });
 
-  it("retains thread completion checklist + frustration signals", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Thread completion/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/INCIDENT/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Frustration signals/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/just what I mentioned above/i);
-  });
-
-  it("NEW: codifies the 'if a topic is fine, accept and pivot' rule", () => {
+  it("retains the accept-fine + reserves-follow-only rules from V2.3", () => {
     expect(V2_SYSTEM_PROMPT).toMatch(/topic is "fine".*ACCEPT IT, pivot/i);
-    expect(V2_SYSTEM_PROMPT).toMatch(
-      /A thread is also COMPLETE when the resident says it's not a concern/i
-    );
-  });
-
-  it("NEW: removes reserves from coverage areas, makes financials follow-only", () => {
-    // The coverage areas list should NOT include reserves as a probe target
-    expect(V2_SYSTEM_PROMPT).not.toMatch(/Coverage areas[\s\S]*?Financial transparency.*reserves/);
-    // The follow-only block should explicitly call out reserves
     expect(V2_SYSTEM_PROMPT).toMatch(/Reserves.*rarely top-of-mind/i);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Do NOT lead with these/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Lead with reserves, statements, or special assessments/);
   });
 
-  it("NEW: Never list explicitly forbids leading with reserves/statements/assessments", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Lead with reserves, statements, or special assessments/);
+  it("NEW: encodes the [CHAT:END] auto-close protocol on the wrap reply", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Closing the chat.*CRITICAL/i);
+    expect(V2_SYSTEM_PROMPT).toMatch(/\[CHAT:END\]/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Thank you for your time, I'm concluding this chat/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/auto-closes the session 3 seconds later/i);
+  });
+
+  it("NEW: forbids [CHAT:END] in mid-conversation replies", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/NEVER include \[CHAT:END\] in mid-conversation replies/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Forget to include \[CHAT:END\] on your final wrap reply/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Include \[CHAT:END\] in any reply that isn't the final wrap/);
   });
 
   it("retains the post-NPS gold-standard opener and detractor worked example", () => {

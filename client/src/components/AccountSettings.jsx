@@ -71,6 +71,8 @@ export default function AccountSettings() {
   const [showLocationUrls, setShowLocationUrls] = useState(false);
   const [detractorThreshold, setDetractorThreshold] = useState(0);
   const [savingThreshold, setSavingThreshold] = useState(false);
+  const [reviewThreshold, setReviewThreshold] = useState(9);
+  const [savingReviewThreshold, setSavingReviewThreshold] = useState(false);
   const { user: sessionUser } = useOutletContext();
 
   // ── new: which subsection panel is active ───────────────────────
@@ -109,6 +111,11 @@ export default function AccountSettings() {
           setShowLocationUrls(Object.keys(urlMap).length > 0);
         }
         setDetractorThreshold(clientData.detractor_alert_threshold || 0);
+        setReviewThreshold(
+          Number.isInteger(clientData.google_review_threshold)
+            ? clientData.google_review_threshold
+            : 9
+        );
       }
 
       if (usersRes.ok) {
@@ -319,6 +326,26 @@ export default function AccountSettings() {
     }
   };
 
+  const handleSaveReviewThreshold = async (value) => {
+    const next = Math.max(7, Math.min(10, Math.round(Number(value) || 9)));
+    setSavingReviewThreshold(true);
+    try {
+      const res = await fetch("/api/admin/account/google-review-threshold", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threshold: next }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      setReviewThreshold(next);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to save review threshold:", err);
+    } finally {
+      setSavingReviewThreshold(false);
+    }
+  };
+
   const handleSaveDetractorThreshold = async (value) => {
     setSavingThreshold(true);
     try {
@@ -458,6 +485,9 @@ export default function AccountSettings() {
               saving={reviewSaving}
               message={reviewMessage}
               onSave={handleSaveReviewSettings}
+              threshold={reviewThreshold}
+              savingThreshold={savingReviewThreshold}
+              onSaveThreshold={handleSaveReviewThreshold}
             />
           )}
           {activeSection === "notifications" && (
@@ -1857,13 +1887,16 @@ function ReviewsSection(props) {
     saving,
     message,
     onSave,
+    threshold,
+    savingThreshold,
+    onSaveThreshold,
   } = props;
 
   return (
     <>
       <SectionHeading
         title="Google Reviews"
-        sub="Promoters who score 9 or 10 are invited to leave a Google review at the end of their conversation."
+        sub={`Residents who score ${threshold} or higher are invited to leave a Google review at the end of their conversation.`}
       />
       <Card>
         <CardBody>
@@ -1882,6 +1915,21 @@ function ReviewsSection(props) {
               <div className="text-[12.5px] mt-1" style={{ color: "var(--ink-3)" }}>
                 A link appears on the survey completion screen for promoters.
               </div>
+            </div>
+            <div
+              className="flex items-center gap-2 flex-shrink-0"
+              title="Minimum NPS score that triggers the review ask"
+            >
+              <span className="text-[11.5px]" style={{ color: "var(--ink-4)" }}>
+                Score ≥
+              </span>
+              <ThresholdStepper
+                value={threshold}
+                min={7}
+                max={10}
+                disabled={savingThreshold || !enabled}
+                onChange={onSaveThreshold}
+              />
             </div>
           </div>
 
@@ -2124,6 +2172,49 @@ function ChannelTag({ children }) {
     >
       {children}
     </span>
+  );
+}
+
+// Generic min..max integer stepper, used by Google review threshold
+// (and ready for any future threshold control). Single onChange call
+// with the new clamped value; parent handles persistence.
+function ThresholdStepper({ value, min, max, disabled, onChange }) {
+  const safe = Number.isInteger(value) ? value : min;
+  return (
+    <div
+      className="inline-flex items-center"
+      style={{
+        backgroundColor: "white",
+        border: "1px solid var(--line-2)",
+        borderRadius: 6,
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <StepperBtn
+        onClick={() => onChange(Math.max(min, safe - 1))}
+        disabled={disabled || safe <= min}
+      >
+        −
+      </StepperBtn>
+      <span
+        className="text-center"
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 12,
+          fontWeight: 600,
+          color: "var(--ink)",
+          minWidth: 28,
+        }}
+      >
+        {safe}
+      </span>
+      <StepperBtn
+        onClick={() => onChange(Math.min(max, safe + 1))}
+        disabled={disabled || safe >= max}
+      >
+        +
+      </StepperBtn>
+    </div>
   );
 }
 
