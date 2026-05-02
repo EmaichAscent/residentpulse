@@ -18,11 +18,12 @@ import { NpsGauge, Sparkline } from "./charts/NpsCharts";
  *      indicator
  *   4. Two columns: Survey Rounds timeline | Recent Activity feed
  *
- * Empty states:
- *   • No concluded round yet → simple "Schedule your first round" CTA
- *     in place of the hero row
- *   • No insights on latest round → hero row still shows raw metrics,
- *     brief section shows "Generate analysis" prompt
+ * Empty state — net-new client admin (no rounds yet):
+ *   A v2-token "Get to your first round" checklist with three
+ *   numbered tasks — brief the AI, add board members, schedule + launch
+ *   the first round. Each task surfaces its current status (done /
+ *   pending) and a one-click CTA. Replaces the legacy generic-blue
+ *   Welcome+Steps panel from the pre-Phase-3 Dashboard component.
  */
 export default function Home() {
   const { user } = useOutletContext();
@@ -31,6 +32,7 @@ export default function Home() {
   const [latestDashboard, setLatestDashboard] = useState(null);
   const [account, setAccount] = useState(null);
   const [recentActivity, setRecentActivity] = useState([]);
+  const [interviewStatus, setInterviewStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [cadenceUpdating, setCadenceUpdating] = useState(false);
@@ -39,18 +41,20 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const [rRes, aRes, actRes] = await Promise.all([
+      const [rRes, aRes, actRes, iRes] = await Promise.all([
         fetch("/api/admin/survey-rounds", { credentials: "include" }),
         fetch("/api/admin/account", { credentials: "include" }),
         fetch("/api/admin/survey-rounds/recent-activity?limit=5", {
           credentials: "include",
         }),
+        fetch("/api/admin/interview/status", { credentials: "include" }),
       ]);
       if (!rRes.ok) throw new Error("Failed to load rounds");
       const list = await rRes.json();
       setRounds(list);
       if (aRes.ok) setAccount(await aRes.json());
       if (actRes.ok) setRecentActivity(await actRes.json());
+      if (iRes.ok) setInterviewStatus(await iRes.json());
 
       const latestConcluded = [...list]
         .filter((rd) => rd.status === "concluded")
@@ -119,7 +123,12 @@ export default function Home() {
       <Greeting user={user} latestConcluded={latestConcluded} navigate={navigate} />
 
       {!hasAnyHistory ? (
-        <EmptyState navigate={navigate} planned={planned} />
+        <LaunchChecklist
+          navigate={navigate}
+          planned={planned}
+          interviewDone={!!interviewStatus?.hasCompletedInterview}
+          memberCount={account?.usage?.member_count || 0}
+        />
       ) : (
         <>
           {/* 2. HERO ROW */}
@@ -855,33 +864,234 @@ function ActivityRow({ a }) {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Empty state
+// Empty state — net-new admin launch checklist
 // ──────────────────────────────────────────────────────────────────────
 
-function EmptyState({ navigate, planned }) {
+/**
+ * LaunchChecklist — replaces the legacy "Welcome + Steps" panel from
+ * the old Dashboard component. Three numbered tasks the admin needs
+ * to complete before they can collect their first round of feedback.
+ *
+ * Status is derived from data we already load on /admin/home:
+ *   1. AI brief    — interviewStatus.hasCompletedInterview
+ *   2. Members     — account.usage.member_count > 0
+ *   3. First round — planned.length > 0 (next-step CTA changes copy)
+ *
+ * Once all three are checked the checklist's primary CTA flips to
+ * "Launch your first round →" and links into /admin/rounds where the
+ * preflight + Launch Now hero takes over.
+ */
+function LaunchChecklist({ navigate, planned, interviewDone, memberCount }) {
+  const membersDone = memberCount > 0;
+  const roundScheduled = planned.length > 0;
+  const allReady = interviewDone && membersDone && roundScheduled;
+
+  const tasks = [
+    {
+      n: 1,
+      title: "Brief the AI on your business",
+      blurb:
+        "A 5-minute interview gives the AI the context it needs to ask board members about what actually matters to your communities.",
+      done: interviewDone,
+      doneLabel: "Brief complete",
+      cta: { label: "Start brief →", to: "/admin/onboarding" },
+    },
+    {
+      n: 2,
+      title: "Add your board members",
+      blurb: "Add the people you'd like to survey. Bring them in one at a time, or import a CSV.",
+      done: membersDone,
+      doneLabel: `${memberCount} member${memberCount === 1 ? "" : "s"} added`,
+      cta: { label: membersDone ? "Manage members →" : "Add members →", to: "/admin/members" },
+    },
+    {
+      n: 3,
+      title: "Schedule your first round",
+      blurb:
+        "Pick a launch date — invitations go out automatically and we walk you through pre-flight before anything sends.",
+      done: roundScheduled,
+      doneLabel: "Round scheduled",
+      cta: {
+        label: roundScheduled ? "Open rounds →" : "Schedule round →",
+        to: "/admin/rounds",
+      },
+    },
+  ];
+
   return (
-    <Card padding={32}>
-      <div className="text-center max-w-md mx-auto">
+    <div className="space-y-3.5" data-testid="home-launch-checklist">
+      {/* Hero card */}
+      <div
+        className="rounded-2xl overflow-hidden text-white"
+        style={{
+          background: "linear-gradient(135deg, var(--ink), var(--ink-2))",
+          boxShadow: "var(--shadow-lg)",
+        }}
+      >
+        <div className="px-7 pt-6 pb-5">
+          <div
+            className="text-[11px] font-semibold uppercase mb-1.5"
+            style={{ letterSpacing: "0.12em", color: "var(--pulse)" }}
+          >
+            Get to your first round
+          </div>
+          <div
+            className="font-medium"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 26,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            Three steps and you're collecting feedback.
+          </div>
+          <p
+            className="text-[13.5px] mt-1.5"
+            style={{ color: "var(--ink-5)", maxWidth: 520, lineHeight: 1.5 }}
+          >
+            Brief the AI, add your board members, and schedule the first round. Once it's live, this
+            page becomes your at-a-glance command center.
+          </p>
+        </div>
         <div
-          className="font-medium mb-2"
+          className="px-7 py-3 flex items-center justify-between"
           style={{
-            fontFamily: "var(--font-display)",
-            fontSize: 22,
-            color: "var(--ink)",
-            letterSpacing: "-0.015em",
+            background: "rgba(255,255,255,0.04)",
+            borderTop: "1px solid rgba(255,255,255,0.08)",
           }}
         >
-          No survey rounds yet
+          <span className="text-[12px]" style={{ color: "var(--ink-5)" }}>
+            {allReady
+              ? "All set up — ready when you are."
+              : `${tasks.filter((t) => t.done).length} of ${tasks.length} complete`}
+          </span>
+          {allReady ? (
+            <button
+              onClick={() => navigate("/admin/rounds")}
+              type="button"
+              className="px-4 py-2 text-[13px] font-semibold rounded-lg transition hover:opacity-90"
+              style={{ backgroundColor: "var(--pulse)", color: "white" }}
+            >
+              Launch your first round →
+            </button>
+          ) : (
+            <span className="text-[11px]" style={{ color: "var(--ink-5)" }}>
+              No survey rounds yet
+            </span>
+          )}
         </div>
-        <p className="text-[13px] mb-5" style={{ color: "var(--ink-3)" }}>
-          Schedule your first round to send invitations to your board members. After it concludes,
-          this page becomes your at-a-glance command center.
+      </div>
+
+      {/* Steps card */}
+      <div
+        className="rounded-2xl bg-white overflow-hidden"
+        style={{ border: "1px solid var(--line)", boxShadow: "var(--shadow-sm)" }}
+      >
+        {tasks.map((t, i) => (
+          <ChecklistRow
+            key={t.n}
+            task={t}
+            isLast={i === tasks.length - 1}
+            onCta={() => navigate(t.cta.to)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChecklistRow({ task, isLast, onCta }) {
+  const { n, title, blurb, done, doneLabel, cta } = task;
+  return (
+    <div
+      className="grid items-start gap-4 px-5 py-4"
+      style={{
+        gridTemplateColumns: "auto 1fr auto",
+        borderBottom: isLast ? "none" : "1px solid var(--line)",
+      }}
+    >
+      {/* Numbered / checked badge */}
+      <div
+        className="rounded-full flex items-center justify-center font-semibold flex-shrink-0"
+        style={{
+          width: 32,
+          height: 32,
+          backgroundColor: done ? "var(--pulse)" : "white",
+          color: done ? "white" : "var(--ink-3)",
+          border: done ? "none" : "1.5px dashed var(--line-2)",
+          fontFamily: "var(--font-display)",
+          fontSize: 14,
+        }}
+        aria-hidden="true"
+      >
+        {done ? (
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        ) : (
+          n
+        )}
+      </div>
+
+      {/* Title + blurb */}
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span
+            className="font-semibold text-[14px]"
+            style={{
+              color: done ? "var(--ink-3)" : "var(--ink)",
+              letterSpacing: "-0.005em",
+              textDecoration: done ? "line-through" : "none",
+            }}
+          >
+            {title}
+          </span>
+          {done && (
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-bold uppercase"
+              style={{
+                backgroundColor: "var(--pulse-tint)",
+                color: "var(--pulse-deep)",
+                letterSpacing: "0.06em",
+              }}
+            >
+              ✓ {doneLabel}
+            </span>
+          )}
+        </div>
+        <p className="text-[12.5px] mt-1 leading-relaxed" style={{ color: "var(--ink-3)" }}>
+          {blurb}
         </p>
-        <button onClick={() => navigate("/admin/rounds")} className="btn-pulse" type="button">
-          {planned.length > 0 ? "View planned rounds →" : "Schedule first round →"}
+      </div>
+
+      {/* CTA */}
+      <div className="flex-shrink-0">
+        <button
+          onClick={onCta}
+          type="button"
+          className="font-semibold rounded-lg transition hover:opacity-90"
+          style={{
+            backgroundColor: done ? "transparent" : "var(--pulse)",
+            color: done ? "var(--ink-3)" : "white",
+            border: done ? "1px solid var(--line-2)" : "none",
+            padding: "8px 14px",
+            fontSize: 12.5,
+            boxShadow: done ? "none" : "var(--shadow-sm)",
+          }}
+        >
+          {cta.label}
         </button>
       </div>
-    </Card>
+    </div>
   );
 }
 
