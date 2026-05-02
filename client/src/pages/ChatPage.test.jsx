@@ -248,4 +248,97 @@ describe("ChatPage", () => {
     renderChat({ state: { ...baseState, isMock: true } });
     expect(await screen.findByText(/Mock Survey Mode/i)).toBeInTheDocument();
   });
+
+  it("shows the auto-close countdown when the chat handler returns chat_end:true", async () => {
+    globalThis.fetch = vi.fn((url, opts) => {
+      // Resume into conversation view with NPS already on file
+      if (url.match(/sessions\/99$/) && (!opts || opts.method !== "PATCH")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              session: { nps_score: 7, completed: false, google_review_response: null },
+              messages: [
+                {
+                  role: "assistant",
+                  content: "Where were we?",
+                  created_at: "2026-04-20T10:00:00Z",
+                },
+              ],
+            }),
+        });
+      }
+      if (url.endsWith("/api/chat") && opts?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              message: "Thank you for your time, I'm concluding this chat.",
+              timestamp: "2026-04-20T10:01:00Z",
+              chat_end: true,
+            }),
+        });
+      }
+      if (url.match(/sessions\/99\/complete/) && opts?.method === "PATCH") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    renderChat();
+    // Send a message to trigger the chat_end response
+    const textarea = await screen.findByPlaceholderText(/Type your answer/i);
+    fireEvent.change(textarea, { target: { value: "Done." } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    // Closing message + countdown footer indicator should appear
+    expect(
+      await screen.findByText(/Thank you for your time, I'm concluding this chat/i)
+    ).toBeInTheDocument();
+    expect(await screen.findByText(/Closing in 3s/i)).toBeInTheDocument();
+  });
+
+  it("auto-end timer eventually completes the session", async () => {
+    vi.useFakeTimers();
+    let completeCalled = false;
+    globalThis.fetch = vi.fn((url, opts) => {
+      if (url.match(/sessions\/99$/) && (!opts || opts.method !== "PATCH")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              session: { nps_score: 7, completed: false, google_review_response: null },
+              messages: [],
+            }),
+        });
+      }
+      if (url.endsWith("/api/chat") && opts?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              message: "Thank you for your time, I'm concluding this chat.",
+              chat_end: true,
+            }),
+        });
+      }
+      if (url.match(/sessions\/99\/complete/) && opts?.method === "PATCH") {
+        completeCalled = true;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    renderChat();
+    // Wait for resume to complete + input to render
+    const textarea = await vi.waitFor(() => screen.getByPlaceholderText(/Type your answer/i));
+    fireEvent.change(textarea, { target: { value: "Done." } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    // Let the post-message render + countdown ticks fire
+    await vi.runAllTimersAsync();
+
+    expect(completeCalled).toBe(true);
+    vi.useRealTimers();
+  });
 });

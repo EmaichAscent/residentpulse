@@ -93,19 +93,37 @@ router.post("/", async (req, res) => {
     }
   }
 
-  // Google review prompt for promoters (NPS 9-10) — skip if already responded
-  if (session.nps_score !== null && session.nps_score >= 9 && !session.google_review_response) {
+  // Google review fast-path for qualifying scores. Threshold is per-client
+  // (default 9). When a resident qualifies AND reviews are enabled, the
+  // standard 5-7 question budget is replaced with a tight 3-4 turn flow:
+  // one quick "what's working" probe, one quick "anything to improve"
+  // probe, then the review ask. Promoters are time-poor — get the ask
+  // in before they tab away.
+  if (session.nps_score !== null && !session.google_review_response) {
     const reviewEnabled = await db.get(
       "SELECT value FROM settings WHERE key = 'google_review_enabled' AND client_id = ?",
       [session.client_id]
     );
-    if (reviewEnabled?.value === "true") {
-      systemPrompt += `\n\nGOOGLE REVIEW REQUEST: This resident scored ${session.nps_score}/10 — they are a promoter. As your CLOSING question before wrapping up the conversation, naturally ask if they would be willing to leave a quick Google review to help the company. Be warm and grateful, not pushy. If they say yes, thank them enthusiastically and let them know a link will appear after they end the chat. If they decline, say "No problem at all" and thank them for their time. After addressing their response, suggest they click "End Chat" to finish.
+    const thresholdSetting = await db.get(
+      "SELECT value FROM settings WHERE key = 'google_review_threshold' AND client_id = ?",
+      [session.client_id]
+    );
+    const threshold = thresholdSetting ? Number(thresholdSetting.value) : 9;
+    const qualifies = session.nps_score >= threshold;
 
-IMPORTANT: At the very end of your response where you address their answer about the review, include exactly one of these hidden tags (the system will strip these before display):
-- If they agreed to leave a review: [REVIEW:YES]
-- If they declined: [REVIEW:NO]
-Do NOT include any tag until the user has responded to your review question.`;
+    if (reviewEnabled?.value === "true" && qualifies) {
+      systemPrompt += `\n\nGOOGLE REVIEW PROMOTER FAST-PATH: This resident scored ${session.nps_score}/10 — at or above the ${threshold} threshold for a Google review ask. Promoters abandon chats. Override the standard 5-7 question budget. Run THIS sequence:
+
+  Turn 1  ONE quick "what's working" probe (your post-NPS opener already does this).
+  Turn 2  ONE quick "anything they could do even better?" probe.
+  Turn 3  The review ask — verbatim or close: "Quick favor — would you be willing to leave a short Google review? It helps us a lot." Then include EXACTLY ONE hidden tag based on their response (system strips before display):
+            • If they say yes: [REVIEW:YES]
+            • If they decline: [REVIEW:NO]
+  Turn 4  Closing reply: "Thank you so much — the link will appear in a moment. Have a great day." then include the [CHAT:END] tag (system strips, auto-closes the chat 3 seconds later).
+
+If they decline the review at Turn 3, your closing reply is: "No problem at all — thanks for your time today." + [CHAT:END]
+
+Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer briefly; that's enough.`;
     }
   }
 
@@ -153,7 +171,7 @@ Do NOT include any tag until the user has responded to your review question.`;
 
     let assistantMessage = response.content[0].text;
 
-    // Check for Google review response tags and strip them (case-insensitive, allow spaces)
+    // [REVIEW:YES|NO] — promoter response to the Google review ask.
     const reviewMatch = assistantMessage.match(/\[REVIEW:\s*(YES|NO)\s*\]/i);
     if (reviewMatch) {
       assistantMessage = assistantMessage.replace(/\s*\[REVIEW:\s*(YES|NO)\s*\]\s*/gi, "").trim();
@@ -162,6 +180,17 @@ Do NOT include any tag until the user has responded to your review question.`;
         reviewResponse,
         Number(session_id),
       ]);
+    }
+
+    // [CHAT:END] — model signals it has wrapped the conversation. The
+    // tag is stripped before display; the boolean is returned to the
+    // frontend, which renders the closing message and auto-closes the
+    // session 3 seconds later. Used by both the standard wrap path
+    // and the promoter fast-path's final reply.
+    let chatEnd = false;
+    if (/\[CHAT:\s*END\s*\]/i.test(assistantMessage)) {
+      assistantMessage = assistantMessage.replace(/\s*\[CHAT:\s*END\s*\]\s*/gi, "").trim();
+      chatEnd = true;
     }
 
     // Save assistant message
@@ -184,7 +213,11 @@ Do NOT include any tag until the user has responded to your review question.`;
       );
     }
 
-    res.json({ message: assistantMessage, timestamp: savedMsg?.created_at });
+    res.json({
+      message: assistantMessage,
+      timestamp: savedMsg?.created_at,
+      chat_end: chatEnd,
+    });
   } catch (err) {
     logger.error("Anthropic API error: %s", err.message);
     res.status(500).json({ error: "Failed to get AI response" });

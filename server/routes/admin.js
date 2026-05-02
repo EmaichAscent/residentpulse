@@ -251,6 +251,14 @@ router.get("/account", async (req, res) => {
     [req.clientId]
   );
 
+  // Google review threshold — minimum NPS score that triggers the
+  // promoter fast-path + completion CTA. Default 9 (NPS textbook).
+  // Range 7-10 enforced by the PUT endpoint below.
+  const googleReviewThresholdSetting = await db.get(
+    "SELECT value FROM settings WHERE key = 'google_review_threshold' AND client_id = ?",
+    [req.clientId]
+  );
+
   // Locations for this client
   const locations = await db.all(
     `SELECT l.id, l.name, l.google_review_url,
@@ -276,6 +284,9 @@ router.get("/account", async (req, res) => {
     },
     google_review_enabled: reviewEnabled?.value === "true",
     google_review_url: reviewUrl?.value || "",
+    google_review_threshold: googleReviewThresholdSetting
+      ? Number(googleReviewThresholdSetting.value)
+      : 9,
     detractor_alert_threshold: detractorSetting ? Number(detractorSetting.value) : 0,
     locations,
   });
@@ -383,6 +394,32 @@ router.put("/account/detractor-threshold", async (req, res) => {
     res.json({ ok: true, threshold: value });
   } catch (err) {
     logger.error({ err }, "Failed to update detractor threshold");
+    res.status(500).json({ error: "Failed to update threshold" });
+  }
+});
+
+// Update google review threshold — minimum NPS score that triggers
+// the promoter fast-path (in chat.js) and the completion-screen CTA
+// (in sessions.js token validation). Range 7-10 enforced; default 9
+// when no row exists.
+router.put("/account/google-review-threshold", async (req, res) => {
+  try {
+    const { threshold } = req.body;
+    const value = Number(threshold);
+
+    if (!Number.isInteger(value) || value < 7 || value > 10) {
+      return res.status(400).json({ error: "Threshold must be an integer between 7 and 10" });
+    }
+
+    await db.run(
+      `INSERT INTO settings (key, value, client_id) VALUES ('google_review_threshold', $1, $2)
+       ON CONFLICT (key, client_id) DO UPDATE SET value = EXCLUDED.value`,
+      [String(value), req.clientId]
+    );
+
+    res.json({ ok: true, threshold: value });
+  } catch (err) {
+    logger.error({ err }, "Failed to update google review threshold");
     res.status(500).json({ error: "Failed to update threshold" });
   }
 });

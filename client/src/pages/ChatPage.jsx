@@ -79,6 +79,11 @@ export default function ChatPage() {
   const [npsSubmitted, setNpsSubmitted] = useState(false);
   const [npsScore, setNpsScore] = useState(null);
   const [completed, setCompleted] = useState(false);
+  // The model can signal end-of-chat by emitting a [CHAT:END] tag in
+  // its final reply. Backend strips the tag, returns chat_end:true,
+  // and the frontend shows a 3-second auto-close countdown so the
+  // resident sees the final message before the session terminates.
+  const [autoEndCountdown, setAutoEndCountdown] = useState(null);
   const [listening, setListening] = useState(false);
   const [speechEnabled, setSpeechEnabled] = useState(!!synth);
   const [speaking, setSpeaking] = useState(false);
@@ -140,6 +145,18 @@ export default function ChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView?.({ behavior: "smooth" });
   }, [messages, loading, trustAccepted, npsSubmitted, completed]);
+
+  // ── Auto-end countdown (triggered by server's chat_end flag) ───────
+  useEffect(() => {
+    if (autoEndCountdown == null) return;
+    if (autoEndCountdown <= 0) {
+      handleEndChat();
+      return;
+    }
+    const t = setTimeout(() => setAutoEndCountdown((n) => (n != null ? n - 1 : null)), 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoEndCountdown]);
 
   // ── Auto-resize textarea ───────────────────────────────────────────
   const autoResize = useCallback(() => {
@@ -213,6 +230,12 @@ export default function ChatPage() {
           timestamp: data.timestamp || new Date().toISOString(),
         },
       ]);
+      // Server signaled end-of-chat — kick off the auto-close timer.
+      // The user sees the final AI message + a small "ending in 3…"
+      // hint, then the chat completes automatically.
+      if (data.chat_end) {
+        setAutoEndCountdown(3);
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -448,9 +471,10 @@ export default function ChatPage() {
         )}
 
         <Footer
-          showEndEarly={npsSubmitted && !completed}
+          showEndEarly={npsSubmitted && !completed && autoEndCountdown == null}
           onEndChat={handleEndChat}
           endDisabled={loading}
+          autoEndCountdown={autoEndCountdown}
         />
       </div>
     </div>
@@ -837,7 +861,8 @@ function InputBar({
 // Footer — Powered by + End early
 // ──────────────────────────────────────────────────────────────────────
 
-function Footer({ showEndEarly, onEndChat, endDisabled }) {
+function Footer({ showEndEarly, onEndChat, endDisabled, autoEndCountdown }) {
+  const countdownActive = autoEndCountdown != null && autoEndCountdown > 0;
   return (
     <div
       className="bg-white flex-shrink-0 flex items-center justify-between"
@@ -852,6 +877,15 @@ function Footer({ showEndEarly, onEndChat, endDisabled }) {
         </span>
         <img src="/CAMAscent.png" alt="CAM Ascent" className="h-3 object-contain opacity-70" />
       </div>
+      {countdownActive && (
+        <span
+          className="text-[10.5px]"
+          style={{ color: "var(--pulse-deep)", fontFamily: "var(--font-mono)" }}
+          aria-live="polite"
+        >
+          Closing in {autoEndCountdown}s…
+        </span>
+      )}
       {showEndEarly && (
         <button
           type="button"
