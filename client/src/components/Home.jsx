@@ -273,13 +273,11 @@ function HeroRow({ latestConcluded, latestDashboard, concluded, navigate }) {
             >
               Portfolio NPS — Round {latestConcluded?.round_number}
             </div>
-            {/* flex-wrap lets the delta pill drop to a new line when the
-                column is too narrow to fit it next to the 64px score
-                without bursting past the column boundary into the
-                gauge. (DeltaPill keeps flex-shrink-0 + nowrap so its
-                "vs Round N" suffix never wraps inside the pill — the
-                pill is atomic, the row just rewraps around it.) */}
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mt-1.5">
+            {/* Score sits alone on its own line so the trend copy can
+                tuck up directly underneath it. Delta pill moved to the
+                right column under the gauge — same vertical alignment
+                as the gauge needle, doesn't fight the score for room. */}
+            <div className="mt-1.5">
               <span
                 className="font-medium"
                 style={{
@@ -292,12 +290,6 @@ function HeroRow({ latestConcluded, latestDashboard, concluded, navigate }) {
               >
                 {npsScore != null ? formatNps(npsScore) : "—"}
               </span>
-              {npsDelta != null && (
-                <DeltaPill
-                  value={npsDelta}
-                  suffix={`vs Round ${prevNps != null ? npsSeries[npsSeries.length - 2].round : ""}`}
-                />
-              )}
             </div>
             {trendCopy && (
               <div className="text-[13px] mt-1.5" style={{ color: "var(--ink-3)" }}>
@@ -305,8 +297,14 @@ function HeroRow({ latestConcluded, latestDashboard, concluded, navigate }) {
               </div>
             )}
           </div>
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0 flex flex-col items-end gap-2">
             <NpsGauge value={npsScore ?? 0} prev={prevNps} size={140} />
+            {npsDelta != null && (
+              <DeltaPill
+                value={npsDelta}
+                suffix={`vs Round ${prevNps != null ? npsSeries[npsSeries.length - 2].round : ""}`}
+              />
+            )}
           </div>
         </div>
         <div
