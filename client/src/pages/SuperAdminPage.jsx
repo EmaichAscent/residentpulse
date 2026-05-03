@@ -36,6 +36,7 @@ export default function SuperAdminPage() {
   const TABS = [
     { path: "dashboard", label: "Dashboard" },
     { path: "clients", label: "Clients" },
+    { path: "prompts", label: "Prompts" },
     { path: "settings", label: "Settings" },
   ];
 
