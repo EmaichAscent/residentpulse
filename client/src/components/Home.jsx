@@ -78,7 +78,12 @@ export default function Home() {
   }, [loadAll]);
 
   const handleCadenceChange = async (newCadence) => {
-    if (cadenceUpdating || newCadence === account?.survey_cadence) return;
+    // Read current cadence from where the API actually puts it
+    // (account.subscription.survey_cadence). Earlier wiring read
+    // account.survey_cadence which is always undefined → guard short-
+    // circuited only on the first render and the toggle locked.
+    const currentCadence = account?.subscription?.survey_cadence;
+    if (cadenceUpdating || newCadence === currentCadence) return;
     setCadenceUpdating(true);
     try {
       const res = await fetch("/api/admin/account/cadence", {
@@ -154,8 +159,13 @@ export default function Home() {
               concluded={concluded}
               inProgress={inProgress}
               planned={planned}
-              cadence={account?.survey_cadence || 2}
-              maxCadence={account?.max_survey_cadence || 2}
+              // The /api/admin/account payload nests cadence + plan
+              // limit under `subscription`. Reading from the top level
+              // (account?.survey_cadence, account?.max_survey_cadence)
+              // always returned undefined, defaulting both to 2 and
+              // freezing the toggle.
+              cadence={account?.subscription?.survey_cadence || 2}
+              maxCadence={account?.subscription?.survey_rounds_per_year || 2}
               onCadenceChange={handleCadenceChange}
               cadenceUpdating={cadenceUpdating}
               navigate={navigate}
@@ -643,7 +653,6 @@ function SurveyRoundsCard({
             maxAllowed={maxCadence}
             onChange={onCadenceChange}
             disabled={cadenceUpdating}
-            size="sm"
           />
         </div>
       </div>

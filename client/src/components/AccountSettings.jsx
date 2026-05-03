@@ -1705,7 +1705,6 @@ function SubscriptionSection(props) {
                     value={cadence}
                     maxAllowed={sub.survey_rounds_per_year}
                     onChange={(v) => setCadenceConfirm(v)}
-                    size="lg"
                   />
                 </div>
                 {cadenceError && (
