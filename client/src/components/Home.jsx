@@ -273,7 +273,13 @@ function HeroRow({ latestConcluded, latestDashboard, concluded, navigate }) {
             >
               Portfolio NPS — Round {latestConcluded?.round_number}
             </div>
-            <div className="flex items-baseline gap-3 mt-1.5">
+            {/* flex-wrap lets the delta pill drop to a new line when the
+                column is too narrow to fit it next to the 64px score
+                without bursting past the column boundary into the
+                gauge. (DeltaPill keeps flex-shrink-0 + nowrap so its
+                "vs Round N" suffix never wraps inside the pill — the
+                pill is atomic, the row just rewraps around it.) */}
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mt-1.5">
               <span
                 className="font-medium"
                 style={{
