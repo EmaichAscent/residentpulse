@@ -603,6 +603,56 @@ function RevenueRiskBars({ data, height = 220 }) {
 
 function TrendingTopicsCard({ latest, prev }) {
   const { rising, fading } = topicDeltas(latest, prev);
+  const risingTop = rising.slice(0, 4);
+  const fadingTop = fading.slice(0, 4);
+
+  // Fetch real sample quotes per word from the source rounds:
+  //   • Rising words → look up in THIS round (where the volume is now)
+  //   • Fading words → look up in the PREVIOUS round (where the
+  //     volume actually was, since "fading" means it's near-zero now)
+  // Each call returns { snippets: { word: { quote, attribution } } }.
+  // Falls back gracefully if the endpoint errors — the row just shows
+  // the templated interpretation as before.
+  const [risingSnippets, setRisingSnippets] = useState({});
+  const [fadingSnippets, setFadingSnippets] = useState({});
+
+  // Stringified word lists become the cache keys for the snippet fetch.
+  // Extracted out of the useEffect dep array to satisfy the
+  // exhaustive-deps "no complex expression in deps" rule.
+  const risingWords = risingTop.map((t) => t.word).join(",");
+  const fadingWords = fadingTop.map((t) => t.word).join(",");
+  const latestId = latest?.id;
+  const prevId = prev?.id;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (latestId && risingWords) {
+      fetch(
+        `/api/admin/survey-rounds/${latestId}/topic-snippets?words=${encodeURIComponent(risingWords)}`,
+        { credentials: "include" }
+      )
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!cancelled && data?.snippets) setRisingSnippets(data.snippets);
+        })
+        .catch(() => {});
+    }
+    if (prevId && fadingWords) {
+      fetch(
+        `/api/admin/survey-rounds/${prevId}/topic-snippets?words=${encodeURIComponent(fadingWords)}`,
+        { credentials: "include" }
+      )
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!cancelled && data?.snippets) setFadingSnippets(data.snippets);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [latestId, prevId, risingWords, fadingWords]);
+
   return (
     <Card padding={22}>
       <div className="flex items-center justify-between mb-3.5">
@@ -615,7 +665,8 @@ function TrendingTopicsCard({ latest, prev }) {
             Themes and keywords the AI extracted from this round&apos;s chats vs the previous round.
             &quot;Rising&quot; topics are coming up more than they used to (often a new concern);
             &quot;Fading&quot; topics are easing off (often a sign that an issue is getting
-            resolved). Use these to quickly spot what the board is shifting attention toward.
+            resolved). Each row shows a real quote from the chats so you can see exactly what
+            residents said about it.
           </InfoTip>
         </h3>
       </div>
@@ -624,20 +675,24 @@ function TrendingTopicsCard({ latest, prev }) {
           label="↑ Rising"
           color="var(--pulse-deep)"
           tint="var(--pulse-tint)"
-          topics={rising.slice(0, 4)}
+          topics={risingTop}
+          snippets={risingSnippets}
+          sourceLabel="this round"
         />
         <TopicColumn
           label="↓ Fading"
           color="var(--coral)"
           tint="var(--coral-tint)"
-          topics={fading.slice(0, 4)}
+          topics={fadingTop}
+          snippets={fadingSnippets}
+          sourceLabel="last round"
         />
       </div>
     </Card>
   );
 }
 
-function TopicColumn({ label, color, tint, topics }) {
+function TopicColumn({ label, color, tint, topics, snippets = {}, sourceLabel }) {
   if (topics.length === 0) {
     return (
       <div>
@@ -662,44 +717,106 @@ function TopicColumn({ label, color, tint, topics }) {
       >
         {label}
       </div>
-      {topics.map((t, i) => (
-        <div
-          key={t.word}
-          className="py-3"
-          style={{
-            borderBottom: i < topics.length - 1 ? "1px solid var(--line)" : "none",
-          }}
-        >
-          {/* Top row: topic word + delta pill on the right */}
-          <div className="grid items-center gap-3" style={{ gridTemplateColumns: "1fr auto" }}>
-            <span
-              className="font-semibold text-[13.5px] truncate"
-              style={{ color: "var(--ink)" }}
-              title={t.word}
-            >
-              {t.word}
-            </span>
-            <span
-              className="text-[12px] font-bold rounded-full"
-              style={{
-                color,
-                backgroundColor: tint,
-                padding: "2px 8px",
-              }}
-            >
-              {t.delta > 0 ? "+" : ""}
-              {t.delta}
-            </span>
+      {topics.map((t, i) => {
+        const snippet = snippets[t.word.toLowerCase()];
+        return (
+          <div
+            key={t.word}
+            className="py-3"
+            style={{
+              borderBottom: i < topics.length - 1 ? "1px solid var(--line)" : "none",
+            }}
+          >
+            {/* Top row: topic word + delta pill on the right */}
+            <div className="grid items-center gap-3" style={{ gridTemplateColumns: "1fr auto" }}>
+              <span
+                className="font-semibold text-[13.5px] truncate"
+                style={{ color: "var(--ink)" }}
+                title={t.word}
+              >
+                {t.word}
+              </span>
+              <span
+                className="text-[12px] font-bold rounded-full"
+                style={{
+                  color,
+                  backgroundColor: tint,
+                  padding: "2px 8px",
+                }}
+              >
+                {t.delta > 0 ? "+" : ""}
+                {t.delta}
+              </span>
+            </div>
+            {/* Movement line — terse round-over-round count change. */}
+            <p className="text-[11.5px] mt-1.5 font-mono" style={{ color: "var(--ink-4)" }}>
+              {movementLine(t, direction)}
+            </p>
+            {/* Real sample quote from a board chat — shipped from the
+                  /topic-snippets endpoint. The snippet is trimmed to ~140
+                  chars centered on the keyword, with the keyword
+                  highlighted. Falls back to the templated interpretation
+                  sentence for words with no matching message. */}
+            {snippet?.quote ? (
+              <blockquote
+                className="text-[12.5px] mt-2 leading-snug italic"
+                style={{
+                  color: "var(--ink-2)",
+                  borderLeft: `2px solid ${color}`,
+                  paddingLeft: 10,
+                }}
+              >
+                “{highlightKeyword(snippet.quote, t.word)}”
+                {snippet.attribution && (
+                  <footer className="text-[11px] mt-1 not-italic" style={{ color: "var(--ink-4)" }}>
+                    — {snippet.attribution} ({sourceLabel})
+                  </footer>
+                )}
+              </blockquote>
+            ) : (
+              <p className="text-[12px] mt-1.5 leading-snug" style={{ color: "var(--ink-3)" }}>
+                {interpretTopic(t, direction)}
+              </p>
+            )}
           </div>
-          {/* Interpretation sentence — gives the admin a one-line read on
-                what this number actually means. Includes the round-over-
-                round comparison + a short "what to do with this" tag. */}
-          <p className="text-[12px] mt-1.5 leading-snug" style={{ color: "var(--ink-3)" }}>
-            {interpretTopic(t, direction)}
-          </p>
-        </div>
-      ))}
+        );
+      })}
     </div>
+  );
+}
+
+/**
+ * One-line movement summary — count change + percent for growing /
+ * fading topics. Sits above the sample quote so the operator sees the
+ * scale at a glance, then reads the quote for context.
+ */
+function movementLine(t, direction) {
+  const prev = t.count - t.delta;
+  if (direction === "rising") {
+    if (prev === 0) return `0 → ${t.count} mentions · brand new this round`;
+    const pct = Math.round((t.delta / prev) * 100);
+    return `${prev} → ${t.count} mentions · +${pct}% vs last round`;
+  }
+  if (t.count === 0) return `${prev} → 0 mentions · gone this round`;
+  return `${prev} → ${t.count} mentions · ${Math.round((t.count / prev) * 100)}% of last round`;
+}
+
+/**
+ * Wraps the keyword inside the snippet in a <strong> for emphasis.
+ * Case-insensitive — preserves original casing from the message.
+ */
+function highlightKeyword(snippet, word) {
+  if (!snippet || !word) return snippet;
+  const re = new RegExp(`(${word.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")})`, "ig");
+  const parts = snippet.split(re);
+  return parts.map((part, i) =>
+    re.test(part) ? (
+      <strong key={i} style={{ color: "var(--ink)" }}>
+        {part}
+      </strong>
+    ) : (
+      part
+    )
   );
 }
 
