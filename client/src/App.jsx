@@ -32,6 +32,7 @@ import AccountSettings from "./components/AccountSettings";
 import SuperAdminDashboard from "./components/SuperAdminDashboard";
 import SuperAdminClients from "./components/SuperAdminClients";
 import SuperAdminSettings from "./components/SuperAdminSettings";
+import SuperAdminPromptsLibrary from "./components/SuperAdminPromptsLibrary";
 
 export default function App() {
   return (
@@ -58,6 +59,7 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<SuperAdminDashboard />} />
             <Route path="clients" element={<SuperAdminClients />} />
+            <Route path="prompts" element={<SuperAdminPromptsLibrary />} />
             <Route path="settings" element={<SuperAdminSettings />} />
           </Route>
           <Route
