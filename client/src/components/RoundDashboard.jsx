@@ -1465,12 +1465,47 @@ ${footer()}
         </Card>
       )}
 
-      {/* 7. THEMES — what promoters love / what detractors hate
+      {/* 6.5 TOP COMPLAINT THEMES — skim-able summary of the top
+            detractor themes for this round. Sits BEFORE the
+            promoter/detractor side-by-side comparison so admins land
+            on the actionable list first. Uses the same detractor_themes
+            data as the comparison view — just rendered as a numbered
+            list with each theme's sample quote inline. */}
+      {detractorThemes.length > 0 && (
+        <Card padding={22}>
+          <SectionHeader noOuterMargin>
+            <h3
+              className="font-semibold text-[15px] inline-flex items-center"
+              style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
+            >
+              Top complaint themes · this round
+              <InfoTip>
+                The {Math.min(detractorThemes.length, 10)} most-mentioned issues from board members
+                who scored as detractors (NPS 0–6) this round, ordered by how heavily they came up
+                in the chats. Each row shows a representative quote so you can see the actual
+                language being used. Address the top three first — they typically account for the
+                biggest chunk of detractor sentiment.
+              </InfoTip>
+            </h3>
+            <span className="text-[12px]" style={{ color: "var(--ink-4)" }}>
+              {Math.min(detractorThemes.length, 10)} of {detractorThemes.length} shown
+            </span>
+          </SectionHeader>
+          <div className="flex flex-col">
+            {detractorThemes.slice(0, 10).map((theme, i, arr) => (
+              <ComplaintThemeRow key={i} rank={i + 1} theme={theme} isLast={i === arr.length - 1} />
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* 7. THEMES — what promoters love / what detractors don't like
             Renders the spec's weighted-bar + sample-quote layout when
             the AI extraction (insights.promoter_themes / detractor_themes)
             is available. Falls back to a deduced version from
             key_findings for rounds whose insights were generated before
-            this PR shipped. */}
+            this PR shipped. ("Hate" → "Don't Like" per Mike — clinical
+            language sounds less inflammatory in board reports.) */}
       {(promoterThemes.length > 0 || detractorThemes.length > 0) && (
         <Card padding={22}>
           <SectionHeader noOuterMargin>
@@ -1500,7 +1535,7 @@ ${footer()}
               sample={promoterTopQuote}
             />
             <ThemesColumn
-              title="⚠ What detractors hate"
+              title="⚠ What detractors don't like"
               color="var(--coral)"
               tint="var(--coral-tint)"
               soft="var(--coral-soft)"
@@ -2073,6 +2108,68 @@ function ManagerColumn({ label, labelColor, managers, changeIsPositive, hasChang
  * sample_quote + sample_attribution. Useful when several themes share
  * a topic area and the operator wants to see what each one covers.
  */
+/**
+ * ComplaintThemeRow — single row in the "Top complaint themes · this
+ * round" summary card. Renders rank + theme label + sample quote +
+ * (optional) attribution. Designed to be skim-able in 5 seconds.
+ *
+ * Reads from the same detractor_themes shape the side-by-side
+ * comparison uses, so no extra server work.
+ */
+function ComplaintThemeRow({ rank, theme, isLast }) {
+  const label = theme.theme || theme.label || theme.finding || "Unnamed theme";
+  const quote = theme.sample_quote || theme.evidence || "";
+  const attribution = theme.sample_attribution || "";
+  return (
+    <div
+      className="grid items-start gap-4 py-4"
+      style={{
+        gridTemplateColumns: "32px 1fr",
+        borderBottom: isLast ? "none" : "1px solid var(--line)",
+      }}
+    >
+      <span
+        className="text-center"
+        style={{
+          fontFamily: "var(--font-display)",
+          fontSize: 22,
+          fontWeight: 500,
+          color: "var(--ink-3)",
+          lineHeight: 1,
+        }}
+      >
+        {rank}
+      </span>
+      <div className="min-w-0">
+        <div
+          className="font-semibold text-[14px]"
+          style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
+        >
+          {label}
+        </div>
+        {quote && (
+          <blockquote
+            className="text-[13px] mt-1.5 leading-snug"
+            style={{
+              color: "var(--ink-2)",
+              borderLeft: "2px solid var(--coral-soft, rgba(232,93,76,0.4))",
+              paddingLeft: 10,
+              fontStyle: "italic",
+            }}
+          >
+            “{quote}”
+            {attribution && (
+              <footer className="text-[11.5px] mt-1 not-italic" style={{ color: "var(--ink-4)" }}>
+                — {attribution}
+              </footer>
+            )}
+          </blockquote>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ThemesColumn({ title, color, tint, soft, themes, sample }) {
   const [expandedIdx, setExpandedIdx] = useState(null);
 

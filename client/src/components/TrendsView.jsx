@@ -704,10 +704,12 @@ function TopicColumn({ label, color, tint, topics }) {
 }
 
 /**
- * One-sentence plain-English interpretation of a trending topic row.
+ * Two-sentence plain-English interpretation of a trending topic row.
  * Combines the round-over-round movement (current vs previous mention
- * counts) with a short "so what?" tag so admins don't have to translate
- * the +N pill themselves.
+ * counts) with a diagnostic + action tag so admins don't have to
+ * translate the +N pill themselves.
+ *
+ * Pattern: [movement] + [diagnostic interpretation] + [recommended next step]
  *
  * Inputs:
  *   t = { word, count, delta }
@@ -719,15 +721,22 @@ function interpretTopic(t, direction) {
   const prev = t.count - t.delta;
   if (direction === "rising") {
     if (prev === 0) {
-      return `${t.count} mention${t.count === 1 ? "" : "s"} this round, none last round. A new theme — worth watching.`;
+      // Brand-new keyword. Highest signal — usually a fresh trigger.
+      return `Brand-new this round — ${t.count} board${t.count === 1 ? " has" : "s have"} brought it up unprompted. New keywords usually surface a fresh concern or a reaction to something that recently changed at your company. Open the round detail and search for "${t.word}" to see exactly what's driving it.`;
     }
-    return `${t.count} mentions this round, up from ${prev}. Boards are paying more attention — worth understanding what's driving the increase.`;
+    // Existing keyword growing. Compute relative size to flag big spikes.
+    const pctIncrease = prev > 0 ? Math.round((t.delta / prev) * 100) : 0;
+    const accelerator =
+      pctIncrease >= 100 ? "more than doubled" : pctIncrease >= 50 ? "jumped sharply" : "increased";
+    return `Mentions ${accelerator} from ${prev} to ${t.count}${pctIncrease >= 50 ? ` (${pctIncrease}% increase)` : ""}. When a topic accelerates this fast, it almost always traces to a specific catalyst — a policy change, a vendor issue, or one incident hitting multiple communities at once — rather than slow drift. Find the source before it spreads further.`;
   }
   // fading
   if (t.count === 0) {
-    return `${prev} mention${prev === 1 ? "" : "s"} last round, none this round. Often a sign the issue is being addressed.`;
+    // Sharp drop to zero. Could be resolution OR avoidance.
+    return `Came up ${prev} time${prev === 1 ? "" : "s"} last round and zero this round. Clean drops to zero usually mean the issue was resolved between rounds — or whatever triggered the conversation has passed. Worth a one-line check with the affected communities to confirm nothing's still simmering quietly.`;
   }
-  return `${t.count} mention${t.count === 1 ? "" : "s"} this round, down from ${prev}. Easing off but still on the radar.`;
+  // Partial fade. Lower urgency than rising.
+  return `Down from ${prev} to ${t.count} mention${t.count === 1 ? "" : "s"} — about ${Math.round((t.count / prev) * 100)}% of last round's volume. The conversation is cooling but hasn't disappeared, which usually means partial action was taken or the original trigger eased on its own. Lower priority than rising themes, but worth confirming the underlying issue is actually resolved and not just out of sight.`;
 }
 
 function BiggestMoversCard({ title, color, movers, tooltip, tooltipAlign = "left" }) {
