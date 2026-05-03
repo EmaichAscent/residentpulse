@@ -11,6 +11,7 @@ import {
   V2_SYSTEM_PROMPT_V21,
   V2_SYSTEM_PROMPT_V22,
   V2_SYSTEM_PROMPT_V23,
+  V2_SYSTEM_PROMPT_V24,
   V2_SYSTEM_PROMPT,
   V2_INTERVIEW_INITIAL_V20,
   V2_INTERVIEW_INITIAL_V21,
@@ -67,10 +68,10 @@ describe("V1 prompts (frozen — used as match keys by the migration)", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// V2 board interview — V2.0/V2.1/V2.2/V2.3 frozen, V2.4 current
+// V2 board interview — V2.0/V2.1/V2.2/V2.3/V2.4 frozen, V2.5 current
 // ──────────────────────────────────────────────────────────────────────────
 
-describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3 frozen for migration matching", () => {
+describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3/V2.4 frozen for migration matching", () => {
   it("V2_SYSTEM_PROMPT_V20 is preserved byte-perfect", () => {
     expect(V2_SYSTEM_PROMPT_V20.length).toBeGreaterThan(5500);
     expect(V2_SYSTEM_PROMPT_V20).toMatch(/curious journalist/);
@@ -98,54 +99,96 @@ describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3 frozen for migration matching
     expect(V2_SYSTEM_PROMPT_V23).not.toMatch(/CHAT:END/);
   });
 
-  it("all four frozen versions are distinct", () => {
+  it("V2_SYSTEM_PROMPT_V24 is preserved byte-perfect (CHAT:END landed but pre-V2.5 thread fix)", () => {
+    expect(V2_SYSTEM_PROMPT_V24.length).toBeGreaterThan(3000);
+    // Distinguishing fingerprint: V24 had the [CHAT:END] auto-close rule
+    // but used the loose "3 follow-ups MAX" wording that the model
+    // interpreted as "per question topic" rather than "per root issue".
+    expect(V2_SYSTEM_PROMPT_V24).toMatch(/\[CHAT:END\]/);
+    expect(V2_SYSTEM_PROMPT_V24).toMatch(/3 follow-ups MAX/);
+    // V24 did NOT have the V2.5 "Common failure mode" worked example
+    expect(V2_SYSTEM_PROMPT_V24).not.toMatch(/Common failure mode/);
+    // V24 did NOT explicitly forbid "Have you tried…?" advice
+    expect(V2_SYSTEM_PROMPT_V24).not.toMatch(/Have you tried/);
+  });
+
+  it("all five frozen versions are distinct", () => {
     const all = [
       V2_SYSTEM_PROMPT_V20,
       V2_SYSTEM_PROMPT_V21,
       V2_SYSTEM_PROMPT_V22,
       V2_SYSTEM_PROMPT_V23,
+      V2_SYSTEM_PROMPT_V24,
     ];
     expect(new Set(all).size).toBe(all.length);
   });
 
-  it("current V2_SYSTEM_PROMPT (V2.4) differs from all frozen versions", () => {
+  it("current V2_SYSTEM_PROMPT (V2.5) differs from all frozen versions", () => {
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V20);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V21);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V22);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V23);
+    expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V24);
   });
 });
 
-describe("V2 system prompt — V2.4 current (CHAT:END auto-close)", () => {
+describe("V2 system prompt — V2.5 current (thread = root topic, no advice, no meta-narration)", () => {
   it("targets [CLIENT_NAME] and frames the role minimally", () => {
     expect(V2_SYSTEM_PROMPT).toMatch(/\[CLIENT_NAME\]/);
     expect(V2_SYSTEM_PROMPT).toMatch(/interviewing a board member/i);
   });
 
-  it("retains hard constraints from V2.2/V2.3 (5-7 question cap, 3 per thread)", () => {
+  it("retains the 5-7 question total + close-on-fine pivot rules", () => {
     expect(V2_SYSTEM_PROMPT).toMatch(/Hard constraints/);
     expect(V2_SYSTEM_PROMPT).toMatch(/Total session.*5.7 questions/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/3 follow-ups MAX/);
     expect(V2_SYSTEM_PROMPT).toMatch(/Stop at 7/);
-  });
-
-  it("retains the accept-fine + reserves-follow-only rules from V2.3", () => {
     expect(V2_SYSTEM_PROMPT).toMatch(/topic is "fine".*ACCEPT IT, pivot/i);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Reserves.*rarely top-of-mind/i);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Lead with reserves, statements, or special assessments/);
   });
 
-  it("NEW: encodes the [CHAT:END] auto-close protocol on the wrap reply", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Closing the chat.*CRITICAL/i);
+  it("retains the [CHAT:END] auto-close protocol from V2.4", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Closing the chat/);
     expect(V2_SYSTEM_PROMPT).toMatch(/\[CHAT:END\]/);
     expect(V2_SYSTEM_PROMPT).toMatch(/Thank you for your time, I'm concluding this chat/);
     expect(V2_SYSTEM_PROMPT).toMatch(/auto-closes the session 3 seconds later/i);
   });
 
-  it("NEW: forbids [CHAT:END] in mid-conversation replies", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/NEVER include \[CHAT:END\] in mid-conversation replies/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Forget to include \[CHAT:END\] on your final wrap reply/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Include \[CHAT:END\] in any reply that isn't the final wrap/);
+  it("retains reserves-follow-only and forbidden first-sentence openers", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Reserves.*rarely top-of-mind/i);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Lead with reserves, statements, or special assessments/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Forbidden first-sentence openers/);
+  });
+
+  // ── V2.5 — three new behaviors ────────────────────────────────────
+
+  it("V2.5: redefines 'thread' as ROOT TOPIC (not per-question)", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Per ROOT topic.*2 follow-ups MAX/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/SAME root issue is the SAME thread/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/What counts as a "root topic"/);
+    // The Never list spells out that causes/sub-causes are one thread.
+    expect(V2_SYSTEM_PROMPT).toMatch(
+      /SAME ROOT TOPIC past 3 questions.*including causes, sub-causes, examples, and implications/
+    );
+  });
+
+  it("V2.5: Common failure mode worked example is included verbatim", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Common failure mode \(DO NOT REPEAT\)/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/They keep changing my manager/);
+    // The "Have you tried documenting" line is the failure example.
+    expect(V2_SYSTEM_PROMPT).toMatch(/Have you tried documenting these projects in writing/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/THREE QUESTIONS MAX, then pivot/);
+  });
+
+  it("V2.5: forbids advice / consulting language", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Suggest solutions or advise/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Have you tried…\?/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/You're collecting feedback, not consulting/);
+  });
+
+  it("V2.5: forbids 'It sounds like…' and validation talk ANYWHERE in a reply", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Forbidden ANYWHERE in a reply/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/"It sounds like…"/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/"So it sounds like…"/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Validation talk wastes turns/);
   });
 
   it("retains the post-NPS gold-standard opener and detractor worked example", () => {
