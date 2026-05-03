@@ -204,17 +204,40 @@ router.get("/activity-log", async (req, res) => {
 
 // Get all clients (simplified for list view)
 router.get("/clients", async (req, res) => {
+  // Enriched per-client view (PR 8 of the SuperAdmin overhaul) so the
+  // Clients list can compute health dots and apply filter chips:
+  //
+  //   • active_round_count    — drives the "no round" / "active" filter
+  //                             chips and the dormant-with-active health
+  //                             flag
+  //   • onboarding_complete   — any admin has finished onboarding?
+  //                             ("onboarding incomplete" filter chip)
+  //   • last_round_launched_at — most recent launched round date
+  //                             (helps differentiate "never run" vs
+  //                             "ran a long time ago")
+  //
+  // Health is then computed client-side from these fields; keeping it
+  // there lets us iterate on health rules without a server deploy.
   const clients = await db.all(
     `SELECT c.id, c.company_name, c.client_code, c.status, c.created_at,
             c.test_mode_activated_at,
             sp.display_name as plan_name, sp.name as plan_key,
             MAX(ca.last_login_at) as last_activity,
-            COUNT(ca.id) as admin_count
+            COUNT(DISTINCT ca.id) as admin_count,
+            BOOL_OR(ca.onboarding_completed) as onboarding_complete,
+            (SELECT COUNT(*) FROM survey_rounds sr
+              WHERE sr.client_id = c.id
+                AND sr.status = 'in_progress'
+                AND sr.is_test = FALSE) as active_round_count,
+            (SELECT MAX(launched_at) FROM survey_rounds sr
+              WHERE sr.client_id = c.id
+                AND sr.is_test = FALSE) as last_round_launched_at
      FROM clients c
      LEFT JOIN client_admins ca ON ca.client_id = c.id
      LEFT JOIN client_subscriptions cs ON cs.client_id = c.id
      LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
-     GROUP BY c.id, c.company_name, c.client_code, c.status, c.created_at, c.test_mode_activated_at, sp.display_name, sp.name
+     GROUP BY c.id, c.company_name, c.client_code, c.status, c.created_at,
+              c.test_mode_activated_at, sp.display_name, sp.name
      ORDER BY c.created_at DESC`
   );
   res.json(clients);
