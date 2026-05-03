@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import CadenceToggle from "./CadenceToggle";
 
 /**
  * Rounds page — full rebuild to match the build spec Mike shared:
@@ -680,45 +681,6 @@ export default function RoundsLanding() {
 // ──────────────────────────────────────────────────────────────────────
 // Subcomponents
 // ──────────────────────────────────────────────────────────────────────
-
-function CadenceToggle({ value, maxAllowed, onChange, disabled }) {
-  const options = [
-    { v: 2, label: "2×/yr" },
-    { v: 4, label: "4×/yr" },
-  ];
-  return (
-    <div
-      className="inline-flex rounded-lg p-0.5"
-      style={{ backgroundColor: "var(--paper-2)", border: "1px solid var(--line)" }}
-    >
-      {options.map((o) => {
-        const isActive = value === o.v;
-        const isDisabled = disabled || o.v > maxAllowed;
-        return (
-          <button
-            key={o.v}
-            onClick={() => !isActive && !isDisabled && onChange(o.v)}
-            disabled={isDisabled}
-            type="button"
-            className="px-3 py-1.5 text-[12px] font-semibold rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              backgroundColor: isActive ? "white" : "transparent",
-              color: isActive ? "var(--ink)" : "var(--ink-3)",
-              boxShadow: isActive ? "var(--shadow-sm)" : "none",
-            }}
-            title={
-              o.v > maxAllowed
-                ? `${o.label} requires plan upgrade`
-                : `Set portfolio cadence to ${o.label}`
-            }
-          >
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 function StatCell({ label, value, valueColor, sub, delta }) {
   return (

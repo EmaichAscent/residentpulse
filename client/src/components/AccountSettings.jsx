@@ -3,6 +3,7 @@ import { useOutletContext, useSearchParams } from "react-router-dom";
 import AddAdminUserModal from "./AddAdminUserModal";
 import ConfirmModal from "./ConfirmModal";
 import TypedConfirmModal from "./TypedConfirmModal";
+import CadenceToggle from "./CadenceToggle";
 
 /**
  * /admin/account — full visual rebuild matching DESIGN/handoff/account-spec.md.
@@ -1699,25 +1700,13 @@ function SubscriptionSection(props) {
                   How many times per year you survey your board members. Changing cadence
                   recalculates future planned rounds.
                 </p>
-                <div className="flex gap-2 mt-3">
-                  <CadenceBtn
-                    active={cadence === 2}
-                    onClick={() => cadence !== 2 && setCadenceConfirm(2)}
-                  >
-                    2× / year
-                  </CadenceBtn>
-                  <CadenceBtn
-                    active={cadence === 4}
-                    disabled={sub.survey_rounds_per_year < 4}
-                    title={
-                      sub.survey_rounds_per_year < 4
-                        ? "Upgrade your plan to enable quarterly surveys"
-                        : ""
-                    }
-                    onClick={() => cadence !== 4 && setCadenceConfirm(4)}
-                  >
-                    4× / year
-                  </CadenceBtn>
+                <div className="mt-3">
+                  <CadenceToggle
+                    value={cadence}
+                    maxAllowed={sub.survey_rounds_per_year}
+                    onChange={(v) => setCadenceConfirm(v)}
+                    size="lg"
+                  />
                 </div>
                 {cadenceError && (
                   <p className="text-[12px] mt-2" style={{ color: "var(--coral)" }}>
@@ -1878,28 +1867,6 @@ function DivRow({ label, value, mono, divider }) {
         {value}
       </span>
     </div>
-  );
-}
-
-function CadenceBtn({ children, active, disabled, onClick, title }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="font-semibold rounded-lg transition disabled:opacity-50"
-      style={{
-        padding: "8px 16px",
-        fontSize: 12.5,
-        backgroundColor: active ? "var(--ink)" : "var(--paper-2)",
-        color: active ? "white" : "var(--ink-2)",
-        border: active ? "1px solid var(--ink)" : "1px solid var(--line-2)",
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
-    >
-      {children}
-    </button>
   );
 }
 
