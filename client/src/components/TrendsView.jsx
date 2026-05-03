@@ -653,6 +653,7 @@ function TopicColumn({ label, color, tint, topics }) {
       </div>
     );
   }
+  const direction = label.startsWith("↓") ? "fading" : "rising";
   return (
     <div>
       <div
@@ -664,33 +665,69 @@ function TopicColumn({ label, color, tint, topics }) {
       {topics.map((t, i) => (
         <div
           key={t.word}
-          className="grid items-center gap-3 py-2 text-[13.5px]"
+          className="py-3"
           style={{
-            gridTemplateColumns: "120px 1fr auto",
             borderBottom: i < topics.length - 1 ? "1px solid var(--line)" : "none",
           }}
         >
-          <span className="font-semibold truncate" style={{ color: "var(--ink)" }} title={t.word}>
-            {t.word}
-          </span>
-          <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-            {t.count} mention{t.count === 1 ? "" : "s"} this round
-          </span>
-          <span
-            className="text-[12px] font-bold rounded-full"
-            style={{
-              color,
-              backgroundColor: tint,
-              padding: "2px 8px",
-            }}
-          >
-            {t.delta > 0 ? "+" : ""}
-            {t.delta}
-          </span>
+          {/* Top row: topic word + delta pill on the right */}
+          <div className="grid items-center gap-3" style={{ gridTemplateColumns: "1fr auto" }}>
+            <span
+              className="font-semibold text-[13.5px] truncate"
+              style={{ color: "var(--ink)" }}
+              title={t.word}
+            >
+              {t.word}
+            </span>
+            <span
+              className="text-[12px] font-bold rounded-full"
+              style={{
+                color,
+                backgroundColor: tint,
+                padding: "2px 8px",
+              }}
+            >
+              {t.delta > 0 ? "+" : ""}
+              {t.delta}
+            </span>
+          </div>
+          {/* Interpretation sentence — gives the admin a one-line read on
+                what this number actually means. Includes the round-over-
+                round comparison + a short "what to do with this" tag. */}
+          <p className="text-[12px] mt-1.5 leading-snug" style={{ color: "var(--ink-3)" }}>
+            {interpretTopic(t, direction)}
+          </p>
         </div>
       ))}
     </div>
   );
+}
+
+/**
+ * One-sentence plain-English interpretation of a trending topic row.
+ * Combines the round-over-round movement (current vs previous mention
+ * counts) with a short "so what?" tag so admins don't have to translate
+ * the +N pill themselves.
+ *
+ * Inputs:
+ *   t = { word, count, delta }
+ *     count = mentions this round
+ *     delta = count - previous_round_count   (positive for rising)
+ *   direction = "rising" | "fading"
+ */
+function interpretTopic(t, direction) {
+  const prev = t.count - t.delta;
+  if (direction === "rising") {
+    if (prev === 0) {
+      return `${t.count} mention${t.count === 1 ? "" : "s"} this round, none last round. A new theme — worth watching.`;
+    }
+    return `${t.count} mentions this round, up from ${prev}. Boards are paying more attention — worth understanding what's driving the increase.`;
+  }
+  // fading
+  if (t.count === 0) {
+    return `${prev} mention${prev === 1 ? "" : "s"} last round, none this round. Often a sign the issue is being addressed.`;
+  }
+  return `${t.count} mention${t.count === 1 ? "" : "s"} this round, down from ${prev}. Easing off but still on the radar.`;
 }
 
 function BiggestMoversCard({ title, color, movers, tooltip, tooltipAlign = "left" }) {
