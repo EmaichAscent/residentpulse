@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Sparkline } from "./charts/NpsCharts";
 
 /**
  * Board Members — full rebuild matching DESIGN/design_handoff_clientapp/
@@ -34,6 +35,13 @@ export default function Members() {
   // members from /board-members/inactive with a Reactivate action in
   // place of Archive.
   const [view, setView] = useState("active");
+  // CSV import state — file picker is hidden; "Import" button triggers
+  // it via ref. importResult holds either the success counts payload
+  // (POST /api/admin/board-members/import returns { added, skipped,
+  // errors }) or { error } from a non-2xx response.
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const importInputRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,6 +111,37 @@ export default function Members() {
       await load();
     } catch (err) {
       alert(err.message);
+    }
+  };
+
+  // CSV upload — single-shot POST to /board-members/import. Server
+  // parses, validates, and returns { added, skipped, errors }. We
+  // surface the result in a modal so admins can see how many rows
+  // imported and which lines failed.
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/admin/board-members/import", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      setImportResult(data);
+      await load();
+    } catch (err) {
+      setImportResult({ error: err.message });
+    } finally {
+      setImporting(false);
+      // Reset the input so the same file can be re-uploaded after
+      // fixing CSV errors without forcing a refresh.
+      if (importInputRef.current) importInputRef.current.value = "";
     }
   };
 
@@ -202,16 +241,21 @@ export default function Members() {
             Export CSV
           </a>
           <button
-            onClick={() =>
-              alert(
-                "Import flow coming soon — drop a CSV with email, first_name, last_name, community_name columns."
-              )
-            }
+            onClick={() => importInputRef.current?.click()}
+            disabled={importing}
             className="btn-ghost"
             type="button"
           >
-            Import
+            {importing ? "Uploading…" : "Import"}
           </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleImportFile}
+            className="hidden"
+            aria-hidden="true"
+          />
           <button onClick={() => setAddOpen(true)} className="btn-pulse" type="button">
             + Add member
           </button>
@@ -301,6 +345,16 @@ export default function Members() {
           onConfirm={handleArchive}
         />
       )}
+
+      {/* CSV import result modal */}
+      {importResult && (
+        <ImportResultModal
+          result={importResult}
+          subject="board member"
+          sampleHint="email, first_name, last_name, community_name"
+          onClose={() => setImportResult(null)}
+        />
+      )}
     </div>
   );
 }
@@ -387,9 +441,25 @@ function MemberRow({
         {member.community_name || "—"}
       </span>
       <StatusPill status={status} score={member.latest_nps} />
-      <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>
-        {member.updated_at ? formatRelative(member.updated_at) : "—"}
-      </span>
+      <div className="flex items-center gap-2">
+        {/* Per-member NPS sparkline — pulled from nps_history (round
+              + nps array returned by GET /api/admin/board-members).
+              Only renders when there are 2+ data points; a single
+              dot would just look like clutter. Tone matches the
+              member's current status pill. */}
+        {Array.isArray(member.nps_history) && member.nps_history.length >= 2 && (
+          <Sparkline
+            data={member.nps_history.map((h) => h.nps)}
+            width={60}
+            height={20}
+            color={tone}
+            strokeWidth={1.5}
+          />
+        )}
+        <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>
+          {member.updated_at ? formatRelative(member.updated_at) : "—"}
+        </span>
+      </div>
       <div className="flex items-center gap-1.5" style={{ width: 110, justifyContent: "flex-end" }}>
         {view === "archived" ? (
           <button onClick={onReactivate} className="btn-pulse-sm" type="button">
@@ -416,8 +486,13 @@ function MemberRow({
 export function ViewToggle({ value, onChange }) {
   return (
     <div
-      className="inline-flex rounded-lg p-0.5"
-      style={{ backgroundColor: "var(--paper-2)", border: "1px solid var(--line)" }}
+      className="inline-flex items-center rounded-lg"
+      style={{
+        backgroundColor: "var(--paper-2)",
+        border: "1px solid var(--line)",
+        height: 36,
+        padding: 3,
+      }}
     >
       {[
         { v: "active", label: "Active" },
@@ -429,11 +504,14 @@ export function ViewToggle({ value, onChange }) {
             key={o.v}
             onClick={() => !isActive && onChange(o.v)}
             type="button"
-            className="px-3 py-1.5 text-[12px] font-semibold rounded-md transition"
+            className="text-[12.5px] font-semibold rounded-md transition"
             style={{
               backgroundColor: isActive ? "white" : "transparent",
               color: isActive ? "var(--ink)" : "var(--ink-3)",
               boxShadow: isActive ? "var(--shadow-sm)" : "none",
+              padding: "0 14px",
+              height: 28,
+              whiteSpace: "nowrap",
             }}
           >
             {o.label}
@@ -680,6 +758,138 @@ export function ArchiveModal({ name, subjectKind, onCancel, onConfirm }) {
   );
 }
 
+/**
+ * ImportResultModal — shown after a CSV import POST.
+ *
+ *   result.error            → coral failure card with the message + sample-CSV hint
+ *   result.added/skipped    → pulse success card with counts and per-row errors
+ *   result.errors[]         → optional list of CSV-row error strings
+ *
+ * Reused by Members and Communities since both import endpoints
+ * return the same { added, skipped, errors? } shape.
+ */
+export function ImportResultModal({ result, subject, sampleHint, onClose }) {
+  const isError = !!result?.error;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(36,42,52,0.45)" }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: 480,
+          width: "100%",
+          padding: 24,
+          boxShadow: "var(--shadow-lg)",
+        }}
+      >
+        <h3
+          className="font-medium"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 22,
+            letterSpacing: "-0.015em",
+            color: "var(--ink)",
+            marginBottom: 8,
+          }}
+        >
+          {isError ? "Import failed" : "Import complete"}
+        </h3>
+        {isError ? (
+          <>
+            <div
+              className="rounded-lg"
+              style={{
+                backgroundColor: "var(--coral-tint)",
+                border: "1px solid rgba(232,93,76,0.3)",
+                padding: 12,
+                marginBottom: 12,
+              }}
+            >
+              <p className="text-[13px]" style={{ color: "var(--coral)" }}>
+                {result.error}
+              </p>
+            </div>
+            <p className="text-[12.5px]" style={{ color: "var(--ink-3)" }}>
+              CSV columns we expect: <span className="font-mono">{sampleHint}</span>
+            </p>
+          </>
+        ) : (
+          <>
+            <div
+              className="rounded-lg"
+              style={{
+                backgroundColor: "var(--pulse-tint)",
+                border: "1px solid rgba(31,165,113,0.3)",
+                padding: 12,
+                marginBottom: 12,
+              }}
+            >
+              <p className="text-[13.5px]" style={{ color: "var(--pulse-deep)" }}>
+                <strong>{result.added ?? 0}</strong> {subject}
+                {(result.added ?? 0) === 1 ? "" : "s"} added
+                {result.skipped != null && (
+                  <>
+                    {" · "}
+                    <strong>{result.skipped}</strong> skipped (duplicates / existing)
+                  </>
+                )}
+                .
+              </p>
+            </div>
+            {Array.isArray(result.errors) && result.errors.length > 0 && (
+              <div
+                className="rounded-lg"
+                style={{
+                  backgroundColor: "var(--paper-2)",
+                  border: "1px solid var(--line)",
+                  padding: 12,
+                  marginBottom: 12,
+                  maxHeight: 200,
+                  overflowY: "auto",
+                }}
+              >
+                <p
+                  className="text-[11px] font-semibold uppercase mb-2"
+                  style={{ letterSpacing: "0.08em", color: "var(--ink-4)" }}
+                >
+                  {result.errors.length} row{result.errors.length === 1 ? "" : "s"} skipped
+                </p>
+                <ul
+                  className="text-[12px] space-y-1"
+                  style={{ color: "var(--ink-2)", listStyle: "none", paddingLeft: 0 }}
+                >
+                  {result.errors.slice(0, 30).map((e, i) => (
+                    <li key={i} className="font-mono">
+                      {typeof e === "string" ? e : (e?.message ?? JSON.stringify(e))}
+                    </li>
+                  ))}
+                  {result.errors.length > 30 && (
+                    <li
+                      className="italic mt-2"
+                      style={{ color: "var(--ink-4)", fontFamily: "inherit" }}
+                    >
+                      …and {result.errors.length - 30} more.
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+        <div className="flex justify-end">
+          <button onClick={onClose} className="btn-pulse" type="button">
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SearchInput({ value, onChange, placeholder }) {
   return (
     <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
@@ -725,7 +935,7 @@ export function FilterSelect({ label, value, onChange, options }) {
         color: value ? "var(--ink)" : "var(--ink-3)",
       }}
     >
-      <option value="">All {label.toLowerCase()}s</option>
+      <option value="">All {pluralizeLabel(label)}</option>
       {options.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
@@ -733,6 +943,20 @@ export function FilterSelect({ label, value, onChange, options }) {
       ))}
     </select>
   );
+}
+
+/**
+ * Pluralize a singular label for the "All X" filter placeholder.
+ * Naive label.toLowerCase() + "s" produced "statuss" and "communitys".
+ * This handles the small set of categorical labels we use today
+ * (Status, Community, Property type, Manager) — extend the rules
+ * inline if a new label needs special handling.
+ */
+function pluralizeLabel(singular) {
+  const w = singular.toLowerCase();
+  if (w.endsWith("y") && !/[aeiou]y$/.test(w)) return w.slice(0, -1) + "ies"; // community → communities
+  if (w.endsWith("s") || w.endsWith("x") || w.endsWith("ch") || w.endsWith("sh")) return w + "es"; // status → statuses
+  return w + "s";
 }
 
 export function FieldInput({ label, value, onChange, type = "text" }) {

@@ -152,10 +152,15 @@
      and admin shell. Distinct from the legacy .btn-primary / .btn-send
      above, which use the older cam-blue palette. */
   .btn-ghost {
-    @apply inline-flex items-center gap-1.5 px-3.5 py-2 text-[13px] font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-[13px] font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed;
     color: var(--ink);
     background-color: white;
     border: 1px solid var(--line-2);
+    /* Multi-word labels like "Export CSV" + "Add member" wrapped to two
+       lines on tight headers; explicit height + nowrap keep the action
+       row uniform. */
+    height: 36px;
+    white-space: nowrap;
   }
   .btn-ghost:hover:not(:disabled) {
     background-color: var(--paper);
@@ -172,8 +177,10 @@
   }
 
   .btn-pulse {
-    @apply inline-flex items-center gap-1.5 px-3.5 py-2 text-[13px] font-semibold text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-[13px] font-semibold text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed;
     background-color: var(--pulse);
+    height: 36px;
+    white-space: nowrap;
   }
   .btn-pulse:hover:not(:disabled) {
     background-color: var(--pulse-deep);
