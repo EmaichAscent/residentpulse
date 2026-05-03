@@ -1,6 +1,22 @@
 import { useState, useEffect } from "react";
 import { NpsLineChart, StackedSentimentBars } from "./charts/NpsCharts";
 import InfoTip from "./InfoTip";
+import {
+  baseStyles,
+  brandBar,
+  toolbar,
+  footer,
+  npsLineSvg,
+  stackedSentimentSvg,
+  revenueRiskSvg,
+  horizontalBarsSvg,
+  renderTable,
+  npsHex,
+  formatShortDate as formatShort,
+  escapeHtml,
+  openReportWindow,
+  V2_PALETTE as PdfC,
+} from "../utils/pdfReport";
 
 /**
  * Trends — round-over-round delta dashboard. Full rebuild matching
@@ -94,15 +110,18 @@ export default function TrendsView() {
   const prev = concluded[concluded.length - 2];
   const baseline = concluded[0];
 
+  const handleExport = () => exportTrendsPdf({ concluded, latest, prev, baseline });
+
   return (
     <div className="space-y-3.5" data-testid="trends">
-      <Header rounds={concluded} />
+      <Header rounds={concluded} onExport={handleExport} />
       <HeadlineStory rounds={concluded} latest={latest} prev={prev} baseline={baseline} />
       <NpsOverTimeCard rounds={concluded} latest={latest} prev={prev} baseline={baseline} />
       <div className="grid gap-3.5" style={{ gridTemplateColumns: "1.4fr 1fr" }}>
         <CohortMovementCard rounds={concluded} latest={latest} prev={prev} />
         <ResponseRateCard rounds={concluded} latest={latest} prev={prev} />
       </div>
+      <RevenueAtRiskOverTimeCard rounds={concluded} />
       <TrendingTopicsCard latest={latest} prev={prev} />
       <div className="grid gap-3.5" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <BiggestMoversCard
@@ -143,7 +162,7 @@ export default function TrendsView() {
 // Sections
 // ──────────────────────────────────────────────────────────────────────
 
-function Header({ rounds }) {
+function Header({ rounds, onExport }) {
   const first = rounds[0];
   const last = rounds[rounds.length - 1];
   const dateRange =
@@ -170,22 +189,14 @@ function Header({ rounds }) {
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <button
-          onClick={() =>
-            alert("Filters coming soon — for now the page shows all communities across all rounds.")
-          }
-          className="btn-ghost"
-          type="button"
-        >
-          All filters
-        </button>
-        <button
-          onClick={() => alert("Trends export coming soon.")}
-          className="btn-ghost"
-          type="button"
-        >
-          Export
-        </button>
+        {/* "All filters" intentionally not surfaced — wasn't in the
+            original spec and the trends data is portfolio-wide today.
+            Will re-add when per-cohort filtering ships. */}
+        {onExport && (
+          <button onClick={onExport} className="btn-ghost" type="button">
+            Export PDF
+          </button>
+        )}
       </div>
     </div>
   );
@@ -443,6 +454,149 @@ function ResponseRateCard({ rounds, latest, prev }) {
         ))}
       </div>
     </Card>
+  );
+}
+
+/**
+ * RevenueAtRiskOverTimeCard — bar chart showing what % of portfolio
+ * value sits in detractor-classified communities each round. Uses the
+ * existing trends endpoint's revenue_at_risk.percent_at_risk series.
+ *
+ * Why a bar chart (vs line): % at risk is a snapshot per round, not a
+ * continuous trajectory. Bars read more naturally as "this is where
+ * we stood at each closing" and the gridline at 20% gives operators
+ * a quick "is this concerning" reference.
+ */
+function RevenueAtRiskOverTimeCard({ rounds }) {
+  const points = rounds
+    .map((r) => ({
+      round: r.round_number,
+      percent: r.revenue_at_risk?.percent_at_risk,
+      hasData: r.revenue_at_risk?.total_portfolio_value > 0,
+    }))
+    .filter((p) => p.percent != null);
+
+  // Don't render the card at all if no round has revenue data — keeps
+  // free-tier accounts (no contract values on file) from seeing an
+  // empty bar chart.
+  if (points.length === 0) return null;
+
+  return (
+    <Card padding={22}>
+      <div className="mb-3.5">
+        <h3
+          className="font-semibold text-[11px] uppercase inline-flex items-center"
+          style={{ letterSpacing: "0.12em", color: "var(--ink-3)" }}
+        >
+          Revenue at risk over time
+          <InfoTip>
+            Percentage of total portfolio value (sum of contract values) that&apos;s sitting in
+            communities currently classified as detractors. Plotted per concluded round so you can
+            see whether your churn-risk exposure is shrinking or growing. The dashed line at 20% is
+            a watch-line — sustained values above it usually mean a small number of large accounts
+            are dragging the portfolio down.
+          </InfoTip>
+        </h3>
+        <p className="text-[12.5px] mt-0.5" style={{ color: "var(--ink-3)" }}>
+          Percentage of portfolio value in detractor-classified communities.
+        </p>
+      </div>
+      <RevenueRiskBars data={points} height={220} />
+    </Card>
+  );
+}
+
+function RevenueRiskBars({ data, height = 220 }) {
+  const width = 720;
+  const pad = { top: 12, right: 20, bottom: 30, left: 44 };
+  const w = width - pad.left - pad.right;
+  const h = height - pad.top - pad.bottom;
+  const barW = (w / data.length) * 0.55;
+  const gap = w / data.length - barW;
+  const watchLine = 20; // 20% dashed reference
+
+  const yToPx = (pct) => pad.top + h - (pct / 100) * h;
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="xMidYMid meet"
+      width="100%"
+      height={height}
+      role="img"
+      aria-label="Revenue at risk over time"
+      style={{ display: "block", maxWidth: "100%", height: "auto" }}
+    >
+      {/* Y gridlines */}
+      {[0, 25, 50, 75, 100].map((g) => (
+        <g key={g}>
+          <line
+            x1={pad.left}
+            x2={pad.left + w}
+            y1={yToPx(g)}
+            y2={yToPx(g)}
+            stroke="var(--line)"
+            strokeWidth="1"
+            strokeDasharray={g === 0 ? "0" : "2 3"}
+          />
+          <text
+            x={pad.left - 8}
+            y={yToPx(g) + 3}
+            textAnchor="end"
+            fontSize="10"
+            fill="var(--ink-4)"
+            fontFamily="var(--font-mono)"
+          >
+            {g}%
+          </text>
+        </g>
+      ))}
+      {/* Watch line at 20% */}
+      <line
+        x1={pad.left}
+        x2={pad.left + w}
+        y1={yToPx(watchLine)}
+        y2={yToPx(watchLine)}
+        stroke="var(--ink-4)"
+        strokeWidth="1"
+        strokeDasharray="6 4"
+      />
+      {/* Bars */}
+      {data.map((p, i) => {
+        const cx = pad.left + i * (barW + gap) + gap / 2;
+        const barH = (p.percent / 100) * h;
+        const y = yToPx(p.percent);
+        const fill = p.percent >= 20 ? "var(--coral)" : "var(--pulse)";
+        const tint = p.percent >= 20 ? "var(--coral-tint)" : "var(--pulse-tint)";
+        return (
+          <g key={p.round}>
+            {/* Soft tint backing — visible even when bar is short */}
+            <rect x={cx} y={pad.top} width={barW} height={h} fill={tint} opacity="0.4" rx="3" />
+            <rect x={cx} y={y} width={barW} height={barH} fill={fill} rx="3" />
+            <text
+              x={cx + barW / 2}
+              y={Math.max(y - 6, pad.top + 12)}
+              textAnchor="middle"
+              fontSize="11"
+              fontWeight="700"
+              fill={fill}
+            >
+              {p.percent}%
+            </text>
+            <text
+              x={cx + barW / 2}
+              y={pad.top + h + 18}
+              textAnchor="middle"
+              fontSize="11"
+              fill="var(--ink-3)"
+              fontFamily="var(--font-mono)"
+            >
+              R{p.round}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
@@ -1244,4 +1398,280 @@ function biggestMovers(latest, prev, direction) {
 function medianToNps(median) {
   if (median == null) return null;
   return Math.round((median - 5) * 20);
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// PDF export
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * exportTrendsPdf — opens a new window with a printable v2-styled
+ * report covering the same sections as the Trends page on screen:
+ * NPS over time, cohort movement, response rate, revenue at risk,
+ * trending topics, biggest movers, manager + location deltas.
+ *
+ * Uses utils/pdfReport for shared chrome (palette, type, brand bar,
+ * footer) and the SVG generators so what prints matches what's on
+ * screen. The chart components themselves stay React-rendered for
+ * the in-app view; the printable uses static-string mirrors.
+ */
+function exportTrendsPdf({ concluded, latest, prev, baseline }) {
+  const totalDelta = (latest.nps_score ?? 0) - (baseline.nps_score ?? 0);
+  const totalDeltaSign = totalDelta > 0 ? "+" : "";
+
+  // ── NPS over time ───────────────────────────────────────────────
+  const npsLineData = concluded.map((r) => ({
+    round: `R${r.round_number}`,
+    nps: r.nps_score ?? 0,
+  }));
+
+  // ── Cohort movement ────────────────────────────────────────────
+  const cohortData = concluded.map((r) => ({
+    round: r.round_number,
+    detractors: r.detractors || 0,
+    passives: r.passives || 0,
+    promoters: r.promoters || 0,
+  }));
+
+  // ── Response rate ──────────────────────────────────────────────
+  const respRateData = concluded.map((r) => ({
+    label: `R${r.round_number}`,
+    value: r.response_rate || 0,
+    max: 100,
+    suffix: "%",
+  }));
+
+  // ── Revenue at risk ────────────────────────────────────────────
+  const revenuePoints = concluded
+    .map((r) => ({
+      round: r.round_number,
+      percent: r.revenue_at_risk?.percent_at_risk,
+    }))
+    .filter((p) => p.percent != null);
+
+  // ── Topics ──────────────────────────────────────────────────────
+  const { rising, fading } = topicDeltas(latest, prev);
+
+  // ── Movers ──────────────────────────────────────────────────────
+  const improvers = biggestMovers(latest, prev, "asc");
+  const decliners = biggestMovers(latest, prev, "desc");
+
+  // ── Manager + Location ──────────────────────────────────────────
+  const managers = (latest.manager_performance || []).slice(0, 10);
+  const locations = (latest.location_performance || []).slice(0, 10);
+
+  const dateRange =
+    concluded[0] && concluded[concluded.length - 1]
+      ? `${formatShort(concluded[0].launched_at)} → ${formatShort(
+          concluded[concluded.length - 1].concluded_at ||
+            concluded[concluded.length - 1].launched_at
+        )}`
+      : "";
+
+  const html = `<!DOCTYPE html><html><head>
+<meta charset="utf-8"/>
+<title>Trends report</title>
+<style>${baseStyles()}</style>
+</head><body>
+${toolbar()}
+${brandBar({
+  logoUrl: "/api/admin/account/logo",
+  eyebrow: "Trends report",
+  title: `${concluded.length} concluded rounds`,
+  subtitle: dateRange,
+})}
+
+<div class="card ink">
+  <div class="uppercase-eyebrow" style="color:${PdfC.pulse};">Headline</div>
+  <h1 style="font-size:22px;color:white;margin-top:4px;">
+    NPS moved <span class="num">${escapeHtml(totalDeltaSign + totalDelta)}</span>
+    from R${baseline.round_number} (${formatNps(baseline.nps_score)}) to
+    R${latest.round_number} (${formatNps(latest.nps_score)}).
+  </h1>
+  <p style="margin-top:8px;">
+    Promoter share went from
+    <strong>${pctOf(baseline.promoters, totalRespondents(baseline))}%</strong> to
+    <strong>${pctOf(latest.promoters, totalRespondents(latest))}%</strong>;
+    detractor share from
+    <strong>${pctOf(baseline.detractors, totalRespondents(baseline))}%</strong> to
+    <strong>${pctOf(latest.detractors, totalRespondents(latest))}%</strong>.
+  </p>
+</div>
+
+<h2>NPS over time</h2>
+<div class="card">${npsLineSvg(npsLineData)}</div>
+
+<h2>Cohort movement</h2>
+<div class="card">
+  <p class="micro" style="margin-bottom:8px;">
+    Detractor (coral) / Passive (amber) / Promoter (pulse) share, normalized to 100% per round.
+  </p>
+  ${stackedSentimentSvg(cohortData)}
+</div>
+
+<h2>Response rate</h2>
+<div class="card">
+  <p class="micro" style="margin-bottom:8px;">% of invited board members who completed the survey.</p>
+  ${horizontalBarsSvg(respRateData)}
+</div>
+
+${
+  revenuePoints.length > 0
+    ? `
+<h2>Revenue at risk over time</h2>
+<div class="card">
+  <p class="micro" style="margin-bottom:8px;">
+    % of total portfolio value sitting in detractor-classified communities. Dashed line at 20% is the watch threshold.
+  </p>
+  ${revenueRiskSvg(revenuePoints)}
+</div>`
+    : ""
+}
+
+${
+  rising.length > 0 || fading.length > 0
+    ? `
+<h2>Trending topics</h2>
+<div class="row">
+  <div class="card">
+    <div class="uppercase-eyebrow" style="color:${PdfC.pulseDeep};">↑ Rising</div>
+    ${
+      rising.length === 0
+        ? '<p class="muted">No notable rising topics.</p>'
+        : `<ul style="margin:6px 0;padding-left:18px;">${rising
+            .slice(0, 6)
+            .map(
+              (t) =>
+                `<li><strong>${escapeHtml(t.word)}</strong> <span class="muted">(${t.delta > 0 ? "+" : ""}${t.delta} mentions)</span></li>`
+            )
+            .join("")}</ul>`
+    }
+  </div>
+  <div class="card">
+    <div class="uppercase-eyebrow" style="color:${PdfC.coral};">↓ Fading</div>
+    ${
+      fading.length === 0
+        ? '<p class="muted">No notable fading topics.</p>'
+        : `<ul style="margin:6px 0;padding-left:18px;">${fading
+            .slice(0, 6)
+            .map(
+              (t) =>
+                `<li><strong>${escapeHtml(t.word)}</strong> <span class="muted">(${t.delta} mentions)</span></li>`
+            )
+            .join("")}</ul>`
+    }
+  </div>
+</div>`
+    : ""
+}
+
+<h2>Communities improving most</h2>
+${
+  improvers.length === 0
+    ? '<p class="muted">No notable improvers this round.</p>'
+    : renderTable(
+        [
+          { label: "Community", key: "name" },
+          {
+            label: "Prev → Now",
+            key: "shift",
+            align: "right",
+            render: (_, r) =>
+              `<span class="num" style="color:${PdfC.ink3};">${formatNps(r.prev)}</span> → <span class="num" style="color:${PdfC.ink};">${formatNps(r.nps)}</span>`,
+          },
+          {
+            label: "Delta",
+            key: "delta",
+            align: "right",
+            render: (v) =>
+              `<span class="num" style="color:${PdfC.pulseDeep};">${v > 0 ? "+" : ""}${v}</span>`,
+          },
+        ],
+        improvers
+      )
+}
+
+<h2>Communities declining most</h2>
+${
+  decliners.length === 0
+    ? '<p class="muted">No notable decliners this round.</p>'
+    : renderTable(
+        [
+          { label: "Community", key: "name" },
+          {
+            label: "Prev → Now",
+            key: "shift",
+            align: "right",
+            render: (_, r) =>
+              `<span class="num" style="color:${PdfC.ink3};">${formatNps(r.prev)}</span> → <span class="num" style="color:${PdfC.ink};">${formatNps(r.nps)}</span>`,
+          },
+          {
+            label: "Delta",
+            key: "delta",
+            align: "right",
+            render: (v) =>
+              `<span class="num" style="color:${PdfC.coral};">${v > 0 ? "+" : ""}${v}</span>`,
+          },
+        ],
+        decliners
+      )
+}
+
+${
+  managers.length > 0
+    ? `
+<h2>Manager performance</h2>
+${renderTable(
+  [
+    { label: "Manager", key: "name", render: (_, r) => r.name || r.manager || "—" },
+    { label: "Communities", key: "communities", align: "center" },
+    { label: "Respondents", key: "respondents", align: "center" },
+    {
+      label: "NPS",
+      key: "nps",
+      align: "right",
+      render: (v, r) => {
+        const change =
+          r.change != null
+            ? ` <span class="muted">(${r.change > 0 ? "+" : ""}${r.change})</span>`
+            : "";
+        return `<span class="num" style="color:${npsHex(v)};">${formatNps(v)}</span>${change}`;
+      },
+    },
+  ],
+  managers
+)}`
+    : ""
+}
+
+${
+  locations.length > 0
+    ? `
+<h2>By location</h2>
+${renderTable(
+  [
+    { label: "Location", key: "location" },
+    { label: "Respondents", key: "respondents", align: "center" },
+    {
+      label: "NPS",
+      key: "nps",
+      align: "right",
+      render: (v, r) => {
+        const change =
+          r.change != null
+            ? ` <span class="muted">(${r.change > 0 ? "+" : ""}${r.change})</span>`
+            : "";
+        return `<span class="num" style="color:${npsHex(v)};">${formatNps(v)}</span>${change}`;
+      },
+    },
+  ],
+  locations
+)}`
+    : ""
+}
+
+${footer()}
+</body></html>`;
+
+  openReportWindow(html, { title: "Trends report" });
 }

@@ -1,9 +1,25 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { npsColor, copyInsights } from "../utils/npsHelpers";
+import { copyInsights } from "../utils/npsHelpers";
 import ActionDrawer from "./ActionDrawer";
 import { NpsGauge, NpsBar } from "./charts/NpsCharts";
 import InfoTip from "./InfoTip";
+import {
+  baseStyles,
+  brandBar,
+  toolbar,
+  footer,
+  stackedSentimentSvg,
+  horizontalBarsSvg,
+  renderTable,
+  npsHex as pdfNpsHex,
+  formatNps as pdfFormatNps,
+  formatCurrency as pdfFormatCurrency,
+  formatShortDate as pdfFormatShortDate,
+  escapeHtml as pdfEscapeHtml,
+  openReportWindow,
+  V2_PALETTE as PdfC,
+} from "../utils/pdfReport";
 
 /**
  * Round Results dashboard — Phase 3 PR rebuild.
@@ -452,256 +468,378 @@ export default function RoundDashboard() {
   // the on-screen dashboard is curated to the spec.
   // ────────────────────────────────────────────────────────────────────
   const handlePrintReport = () => {
-    const w = window.open("", "_blank");
-    if (!w) return;
-
-    const npsBarHtml = `
-      <div style="display:flex;height:20px;border-radius:6px;overflow:hidden;margin:8px 0;">
-        ${pPct > 0 ? `<div style="width:${pPct}%;background:#22c55e;"></div>` : ""}
-        ${paPct > 0 ? `<div style="width:${paPct}%;background:#f59e0b;"></div>` : ""}
-        ${dPct > 0 ? `<div style="width:${dPct}%;background:#ef4444;"></div>` : ""}
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;">
-        <span style="color:#22c55e;">Promoters ${pPct}%</span>
-        <span style="color:#f59e0b;">Passives ${paPct}%</span>
-        <span style="color:#ef4444;">Detractors ${dPct}%</span>
-      </div>`;
-
-    const communityRows = community_cohorts
-      .map(
-        (c) =>
-          `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${c.name}</td>
-       <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;color:${
-         c.median >= 9 ? "#22c55e" : c.median >= 7 ? "#f59e0b" : "#ef4444"
-       };">${c.median}</td>
-       <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${c.respondents || ""}</td></tr>`
-      )
-      .join("");
-
     const ca = community_analytics;
-    const npsColorFn = (v) => (v >= 50 ? "#22c55e" : v >= 0 ? "#f59e0b" : "#ef4444");
-
-    let revenueHtml = "";
-    if (ca?.revenue_at_risk?.total_portfolio_value > 0) {
-      const rar = ca.revenue_at_risk;
-      revenueHtml = `<h2 style="margin-top:28px;">Revenue at Risk</h2>
-        <div style="display:flex;gap:24px;margin:12px 0;">
-          <div><strong style="font-size:20px;">${formatCurrency(rar.total_portfolio_value)}</strong><br><span style="font-size:12px;color:#666;">Total Portfolio</span></div>
-          <div><strong style="font-size:20px;color:#ef4444;">${formatCurrency(rar.at_risk_value)}</strong><br><span style="font-size:12px;color:#666;">At Risk</span></div>
-          <div><strong style="font-size:20px;color:${rar.percent_at_risk > 20 ? "#ef4444" : rar.percent_at_risk > 10 ? "#f59e0b" : "#22c55e"};">${rar.percent_at_risk}%</strong><br><span style="font-size:12px;color:#666;">% at Risk</span></div>
-        </div>`;
-      if (rar.at_risk_communities?.length > 0) {
-        revenueHtml += `<table><thead><tr><th>At-Risk Community</th><th style="text-align:right;">Contract Value</th><th style="text-align:center;">NPS</th></tr></thead><tbody>`;
-        rar.at_risk_communities.forEach((c) => {
-          revenueHtml += `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${c.name}</td>
-            <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${formatCurrency(c.contract_value)}</td>
-            <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;color:#ef4444;">${c.median}</td></tr>`;
-        });
-        revenueHtml += `</tbody></table>`;
-      }
-    }
-
-    let managerHtml = "";
-    if (ca?.manager_performance?.length > 0) {
-      managerHtml = `<h2 style="margin-top:28px;">Manager Performance</h2><table><thead><tr><th>Manager</th><th style="text-align:center;">Communities</th><th style="text-align:center;">Respondents</th><th style="text-align:center;">NPS</th></tr></thead><tbody>`;
-      ca.manager_performance.forEach((m) => {
-        managerHtml += `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${m.manager || m.name}</td>
-          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${m.communities}</td>
-          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${m.respondents}</td>
-          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;color:${npsColorFn(m.nps)};">${m.nps > 0 ? "+" : ""}${m.nps}</td></tr>`;
-      });
-      managerHtml += `</tbody></table>`;
-    }
-
-    let locationHtml = "";
-    if (ca?.location_performance?.length > 0) {
-      locationHtml = `<h2 style="margin-top:28px;">NPS by Location</h2><table><thead><tr><th>Location</th><th style="text-align:center;">Respondents</th><th style="text-align:center;">NPS</th></tr></thead><tbody>`;
-      ca.location_performance.forEach((l) => {
-        locationHtml += `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${l.location}</td>
-          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${l.respondents}</td>
-          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;color:${npsColorFn(l.nps)};">${l.nps > 0 ? "+" : ""}${l.nps}</td></tr>`;
-      });
-      locationHtml += `</tbody></table>`;
-    }
-
-    let propertyHtml = "";
-    if (ca?.property_type_analysis?.length > 0) {
-      propertyHtml = `<h2 style="margin-top:28px;">Property Type Analysis</h2><table><thead><tr><th>Property Type</th><th style="text-align:center;">Communities</th><th style="text-align:center;">Respondents</th><th style="text-align:center;">NPS</th></tr></thead><tbody>`;
-      ca.property_type_analysis.forEach((pt) => {
-        propertyHtml += `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${formatPropertyType(pt.property_type)}</td>
-          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${pt.communities}</td>
-          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${pt.respondents}</td>
-          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;color:${npsColorFn(pt.nps)};">${pt.nps > 0 ? "+" : ""}${pt.nps}</td></tr>`;
-      });
-      propertyHtml += `</tbody></table>`;
-    }
-
-    let sizeHtml = "";
-    if (ca?.size_trends?.length > 0) {
-      sizeHtml = `<h2 style="margin-top:28px;">Size-Based Trends</h2><table><thead><tr><th>Cohort</th><th style="text-align:center;">Communities</th><th style="text-align:center;">Respondents</th><th style="text-align:center;">NPS</th></tr></thead><tbody>`;
-      ca.size_trends.forEach((s) => {
-        const npsVal = s.nps ?? s.median ?? 0;
-        sizeHtml += `<tr><td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;">${s.name}</td>
-          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${s.communities || ""}</td>
-          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;">${s.respondents}</td>
-          <td style="padding:6px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;color:${npsColorFn(npsVal)};">${npsVal > 0 ? "+" : ""}${npsVal}</td></tr>`;
-      });
-      sizeHtml += `</tbody></table>`;
-    }
-
-    let summaryHtml = "";
-    if (includeSummariesInPrint && completedSessions.length > 0) {
-      summaryHtml = `<h2 style="margin-top:28px;">Respondent Summaries (${completedSessions.length})</h2>`;
-      completedSessions.forEach((s) => {
-        summaryHtml += `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:8px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-            <strong>${[s.first_name, s.last_name].filter(Boolean).join(" ") || "Anonymous"}</strong>
-            <span style="font-weight:600;color:${s.nps_score >= 9 ? "#22c55e" : s.nps_score >= 7 ? "#f59e0b" : "#ef4444"};">NPS: ${s.nps_score ?? "—"}</span>
-          </div>
-          ${s.community_name ? `<div style="font-size:12px;color:#666;margin-bottom:4px;">${s.community_name}</div>` : ""}
-          ${s.summary ? `<div style="font-size:13px;color:#333;">${s.summary}</div>` : ""}
-        </div>`;
-      });
-    }
-
-    let insightsHtml = "";
-    if (insights?.executive_summary && !insights.error) {
-      insightsHtml += `<h2 style="margin-top:28px;">Executive Summary</h2><p>${insights.executive_summary}</p>`;
-    }
-    if (insights?.key_findings?.length) {
-      insightsHtml += `<h2 style="margin-top:20px;">Key Findings</h2><ol>`;
-      insights.key_findings.forEach((f) => {
-        const badge =
-          f.severity === "positive"
-            ? "color:#22c55e;"
-            : f.severity === "critical"
-              ? "color:#ef4444;"
-              : f.severity === "concerning"
-                ? "color:#f59e0b;"
-                : "color:#666;";
-        insightsHtml += `<li style="margin-bottom:6px;"><span style="font-size:11px;font-weight:700;${badge}text-transform:uppercase;">${f.severity || ""}</span> <strong>${f.finding}</strong>${f.evidence ? `<br><span style="color:#666;font-size:13px;">${f.evidence}</span>` : ""}</li>`;
-      });
-      insightsHtml += `</ol>`;
-    }
-    if (insights?.recommended_actions?.length) {
-      insightsHtml += `<h2 style="margin-top:20px;">Recommended Actions</h2><ol>`;
-      insights.recommended_actions.forEach((a) => {
-        const pColor =
-          a.priority === "high"
-            ? "#ef4444"
-            : a.priority === "keep_doing"
-              ? "#22c55e"
-              : a.priority === "medium"
-                ? "#f59e0b"
-                : "#666";
-        insightsHtml += `<li style="margin-bottom:6px;"><span style="font-size:11px;font-weight:700;color:${pColor};text-transform:uppercase;">${a.priority === "keep_doing" ? "KEEP DOING" : a.priority || ""}</span> ${a.action}${a.impact ? `<br><span style="color:#666;font-size:13px;">${a.impact}</span>` : ""}</li>`;
-      });
-      insightsHtml += `</ol>`;
-    }
-    if (insights?.cam_ascent_callouts?.length) {
-      insightsHtml += `<h2 style="margin-top:20px;">Where CAM Ascent Can Help</h2>`;
-      insights.cam_ascent_callouts.forEach((c) => {
-        insightsHtml += `<div style="margin-bottom:8px;"><strong>${c.area}</strong><br><span style="color:#666;font-size:13px;">${c.opportunity}</span>${c.suggested_service ? `<br><span style="color:#1AB06E;font-size:13px;">${c.suggested_service}</span>` : ""}</div>`;
-      });
-    }
-
-    let alertsHtml = "";
     const activeAlerts = alerts.filter((a) => !a.dismissed);
-    if (activeAlerts.length > 0) {
-      alertsHtml = `<h2 style="margin-top:28px;color:#dc2626;">Warnings &amp; Alerts (${activeAlerts.length})</h2>`;
-      activeAlerts.forEach((a) => {
-        alertsHtml += `<div style="border-left:3px solid ${a.severity === "critical" ? "#ef4444" : "#f59e0b"};padding:8px 12px;margin-bottom:6px;background:#fef2f2;border-radius:0 6px 6px 0;">
-          <strong>${a.alert_community || ""}</strong> — ${a.description}${a.solved ? ' <span style="color:#22c55e;">(Resolved)</span>' : ""}
-        </div>`;
-      });
-    }
 
+    // Cohort split for the stacked-sentiment SVG (single-round shape:
+    // one bar showing the round's D/P/Pr breakdown).
+    const cohortData = [
+      {
+        round: round.round_number,
+        detractors: nps.detractors || 0,
+        passives: nps.passives || 0,
+        promoters: nps.promoters || 0,
+      },
+    ];
+
+    // Response rate as a horizontal bar
+    const respRateData = [
+      {
+        label: `R${round.round_number}`,
+        value: response_rate.percentage || 0,
+        max: 100,
+        suffix: "%",
+      },
+    ];
+
+    // Active filter chip
     const hasActiveFilters =
       filters.community_id || filters.manager || filters.property_type || filters.location;
     const filterParts = [];
-    if (filters.community_id)
-      filterParts.push(
-        "Community: " +
-          (filter_options?.communities?.find((c) => Number(c.id) === Number(filters.community_id))
-            ?.name || filters.community_id)
+    if (filters.community_id) {
+      const c = filter_options?.communities?.find(
+        (x) => Number(x.id) === Number(filters.community_id)
       );
+      filterParts.push("Community: " + (c?.name || filters.community_id));
+    }
     if (filters.manager) filterParts.push("Manager: " + filters.manager);
     if (filters.property_type)
       filterParts.push("Type: " + formatPropertyType(filters.property_type));
     if (filters.location) filterParts.push("Location: " + filters.location);
+
+    // ── Section: Snapshot stats ─────────────────────────────────────
+    const snapshotHtml = `
+      <div class="row tight">
+        <div class="card" style="text-align:center;">
+          <div class="uppercase-eyebrow">NPS score</div>
+          <div class="stat" style="justify-content:center;margin-top:6px;">
+            <span class="v" style="color:${pdfNpsHex(nps.score)};">${pdfFormatNps(nps.score)}</span>
+          </div>
+        </div>
+        <div class="card" style="text-align:center;">
+          <div class="uppercase-eyebrow">Response rate</div>
+          <div class="stat" style="justify-content:center;margin-top:6px;">
+            <span class="v">${response_rate.percentage}<span class="u">%</span></span>
+          </div>
+          <div class="micro" style="margin-top:4px;">${response_rate.completed} of ${response_rate.invited}</div>
+        </div>
+        <div class="card" style="text-align:center;">
+          <div class="uppercase-eyebrow">Status</div>
+          <div style="margin-top:10px;">
+            <span class="pill ${isConcluded ? "good" : "amber"}">${isConcluded ? "Concluded" : "In progress"}</span>
+          </div>
+          <div class="micro" style="margin-top:6px;">${pdfEscapeHtml(pdfFormatShortDate(round.launched_at))} → ${pdfEscapeHtml(isConcluded ? pdfFormatShortDate(round.concluded_at) : pdfFormatShortDate(round.closes_at))}</div>
+        </div>
+      </div>`;
+
+    // ── Section: Cohort split (stacked sentiment SVG) ───────────────
+    const cohortHtml = `
+      <h2>Cohort split</h2>
+      <div class="card">
+        <p class="micro" style="margin-bottom:8px;">
+          Detractor (coral) / Passive (amber) / Promoter (pulse) share for this round.
+        </p>
+        ${stackedSentimentSvg(cohortData, { width: 720, height: 180 })}
+        <div style="display:flex;gap:14px;margin-top:8px;font-size:12px;">
+          <span><span style="display:inline-block;width:10px;height:10px;background:${PdfC.coral};border-radius:2px;margin-right:6px;"></span>Detractors ${dPct}%</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:${PdfC.amber};border-radius:2px;margin-right:6px;"></span>Passives ${paPct}%</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:${PdfC.pulse};border-radius:2px;margin-right:6px;"></span>Promoters ${pPct}%</span>
+        </div>
+      </div>`;
+
+    // ── Section: Response rate (horizontal bar) ─────────────────────
+    const respRateHtml = `
+      <h2>Response rate</h2>
+      <div class="card">${horizontalBarsSvg(respRateData)}</div>`;
+
+    // ── Section: Revenue at risk ────────────────────────────────────
+    let revenueHtml = "";
+    if (ca?.revenue_at_risk?.total_portfolio_value > 0) {
+      const rar = ca.revenue_at_risk;
+      const riskColor =
+        rar.percent_at_risk >= 20
+          ? PdfC.coral
+          : rar.percent_at_risk >= 10
+            ? PdfC.amber
+            : PdfC.pulseDeep;
+      revenueHtml = `
+        <h2>Revenue at risk</h2>
+        <div class="card">
+          <div class="row tight">
+            <div>
+              <div class="uppercase-eyebrow">Portfolio</div>
+              <div class="stat"><span class="v" style="font-size:24px;">${pdfFormatCurrency(rar.total_portfolio_value)}</span></div>
+            </div>
+            <div>
+              <div class="uppercase-eyebrow">At risk</div>
+              <div class="stat"><span class="v" style="font-size:24px;color:${PdfC.coral};">${pdfFormatCurrency(rar.at_risk_value)}</span></div>
+            </div>
+            <div>
+              <div class="uppercase-eyebrow">% at risk</div>
+              <div class="stat"><span class="v" style="font-size:24px;color:${riskColor};">${rar.percent_at_risk}%</span></div>
+            </div>
+          </div>
+          ${
+            rar.at_risk_communities?.length > 0
+              ? renderTable(
+                  [
+                    { label: "Community", key: "name" },
+                    {
+                      label: "Contract value",
+                      key: "contract_value",
+                      align: "right",
+                      render: (v) => `<span class="num">${pdfFormatCurrency(v)}</span>`,
+                    },
+                    {
+                      label: "NPS",
+                      key: "median",
+                      align: "right",
+                      render: (v) =>
+                        `<span class="num" style="color:${PdfC.coral};">${v ?? "—"}</span>`,
+                    },
+                  ],
+                  rar.at_risk_communities
+                )
+              : ""
+          }
+        </div>`;
+    }
+
+    // ── Section: Warnings ───────────────────────────────────────────
+    let alertsHtml = "";
+    if (activeAlerts.length > 0) {
+      const items = activeAlerts
+        .map(
+          (a) => `
+        <div style="border-left:3px solid ${a.severity === "critical" ? PdfC.coral : PdfC.amber};
+                    padding:10px 14px;margin:8px 0;
+                    background:${a.severity === "critical" ? PdfC.coralTint : PdfC.amberTint};
+                    border-radius:0 8px 8px 0;">
+          <strong>${pdfEscapeHtml(a.alert_community || "—")}</strong>
+          <span style="color:${PdfC.ink2};"> — ${pdfEscapeHtml(a.description || "")}</span>
+          ${a.solved ? `<span class="pill good" style="margin-left:6px;">Resolved</span>` : ""}
+        </div>`
+        )
+        .join("");
+      alertsHtml = `<h2 style="color:${PdfC.coral};">Warnings &amp; alerts (${activeAlerts.length})</h2>${items}`;
+    }
+
+    // ── Section: Community scores ──────────────────────────────────
+    const communityHtml =
+      community_cohorts.length > 1
+        ? `<h2>Community scores</h2>${renderTable(
+            [
+              { label: "Community", key: "name" },
+              {
+                label: "Median NPS",
+                key: "median",
+                align: "center",
+                render: (v) => {
+                  const color = v >= 9 ? PdfC.pulseDeep : v >= 7 ? PdfC.amber : PdfC.coral;
+                  return `<span class="num" style="color:${color};">${v ?? "—"}</span>`;
+                },
+              },
+              { label: "Respondents", key: "respondents", align: "center" },
+            ],
+            community_cohorts
+          )}`
+        : "";
+
+    // ── Section: Manager performance ────────────────────────────────
+    const managerHtml =
+      ca?.manager_performance?.length > 0
+        ? `<h2>Manager performance</h2>${renderTable(
+            [
+              {
+                label: "Manager",
+                key: "manager",
+                render: (_, r) => r.manager || r.name || "—",
+              },
+              { label: "Communities", key: "communities", align: "center" },
+              { label: "Respondents", key: "respondents", align: "center" },
+              {
+                label: "NPS",
+                key: "nps",
+                align: "right",
+                render: (v) =>
+                  `<span class="num" style="color:${pdfNpsHex(v)};">${pdfFormatNps(v)}</span>`,
+              },
+            ],
+            ca.manager_performance
+          )}`
+        : "";
+
+    // ── Section: Location performance ──────────────────────────────
+    const locationHtml =
+      ca?.location_performance?.length > 0
+        ? `<h2>NPS by location</h2>${renderTable(
+            [
+              { label: "Location", key: "location" },
+              { label: "Respondents", key: "respondents", align: "center" },
+              {
+                label: "NPS",
+                key: "nps",
+                align: "right",
+                render: (v) =>
+                  `<span class="num" style="color:${pdfNpsHex(v)};">${pdfFormatNps(v)}</span>`,
+              },
+            ],
+            ca.location_performance
+          )}`
+        : "";
+
+    // ── Section: Property type analysis ────────────────────────────
+    const propertyHtml =
+      ca?.property_type_analysis?.length > 0
+        ? `<h2>Property type analysis</h2>${renderTable(
+            [
+              {
+                label: "Property type",
+                key: "property_type",
+                render: (v) => formatPropertyType(v),
+              },
+              { label: "Communities", key: "communities", align: "center" },
+              { label: "Respondents", key: "respondents", align: "center" },
+              {
+                label: "NPS",
+                key: "nps",
+                align: "right",
+                render: (v) =>
+                  `<span class="num" style="color:${pdfNpsHex(v)};">${pdfFormatNps(v)}</span>`,
+              },
+            ],
+            ca.property_type_analysis
+          )}`
+        : "";
+
+    // ── Section: Size trends ───────────────────────────────────────
+    const sizeHtml =
+      ca?.size_trends?.length > 0
+        ? `<h2>Size-based trends</h2>${renderTable(
+            [
+              { label: "Cohort", key: "name" },
+              { label: "Communities", key: "communities", align: "center" },
+              { label: "Respondents", key: "respondents", align: "center" },
+              {
+                label: "NPS",
+                key: "nps",
+                align: "right",
+                render: (_, r) => {
+                  const v = r.nps ?? r.median ?? 0;
+                  return `<span class="num" style="color:${pdfNpsHex(v)};">${pdfFormatNps(v)}</span>`;
+                },
+              },
+            ],
+            ca.size_trends
+          )}`
+        : "";
+
+    // ── Section: AI insights ───────────────────────────────────────
+    let insightsHtml = "";
+    if (insights?.executive_summary && !insights.error) {
+      insightsHtml += `<h2>Executive summary</h2>
+        <div class="card"><p>${pdfEscapeHtml(insights.executive_summary)}</p></div>`;
+    }
+    if (insights?.key_findings?.length) {
+      insightsHtml += `<h2>Key findings</h2><ol>`;
+      insights.key_findings.forEach((f) => {
+        const cls =
+          f.severity === "positive"
+            ? "good"
+            : f.severity === "critical"
+              ? "warn"
+              : f.severity === "concerning"
+                ? "amber"
+                : "neutral";
+        insightsHtml += `<li style="margin:0 0 10px;">
+          <span class="pill ${cls}">${pdfEscapeHtml(f.severity || "")}</span>
+          <strong style="margin-left:6px;">${pdfEscapeHtml(f.finding)}</strong>
+          ${f.evidence ? `<div class="muted" style="margin-top:4px;">${pdfEscapeHtml(f.evidence)}</div>` : ""}
+        </li>`;
+      });
+      insightsHtml += `</ol>`;
+    }
+    if (insights?.recommended_actions?.length) {
+      insightsHtml += `<h2>Recommended actions</h2><ol>`;
+      insights.recommended_actions.forEach((a) => {
+        const cls =
+          a.priority === "high"
+            ? "warn"
+            : a.priority === "keep_doing"
+              ? "good"
+              : a.priority === "medium"
+                ? "amber"
+                : "neutral";
+        const label = a.priority === "keep_doing" ? "Keep doing" : a.priority || "";
+        insightsHtml += `<li style="margin:0 0 10px;">
+          <span class="pill ${cls}">${pdfEscapeHtml(label)}</span>
+          <strong style="margin-left:6px;">${pdfEscapeHtml(a.action)}</strong>
+          ${a.impact ? `<div class="muted" style="margin-top:4px;">${pdfEscapeHtml(a.impact)}</div>` : ""}
+        </li>`;
+      });
+      insightsHtml += `</ol>`;
+    }
+    if (insights?.cam_ascent_callouts?.length) {
+      insightsHtml += `<h2>Where CAM Ascent can help</h2>`;
+      insights.cam_ascent_callouts.forEach((c) => {
+        insightsHtml += `<div class="card">
+          <strong>${pdfEscapeHtml(c.area)}</strong>
+          <p class="muted" style="margin-top:6px;">${pdfEscapeHtml(c.opportunity || "")}</p>
+          ${c.suggested_service ? `<p style="margin-top:6px;color:${PdfC.pulseDeep};font-weight:600;">${pdfEscapeHtml(c.suggested_service)}</p>` : ""}
+        </div>`;
+      });
+    }
+
+    // ── Section: Respondent summaries (opt-in) ─────────────────────
+    let summaryHtml = "";
+    if (includeSummariesInPrint && completedSessions.length > 0) {
+      summaryHtml = `<h2>Respondent summaries (${completedSessions.length})</h2>`;
+      completedSessions.forEach((s) => {
+        const score = s.nps_score;
+        const color = score >= 9 ? PdfC.pulseDeep : score >= 7 ? PdfC.amber : PdfC.coral;
+        summaryHtml += `<div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;">
+            <strong>${pdfEscapeHtml([s.first_name, s.last_name].filter(Boolean).join(" ") || "Anonymous")}</strong>
+            <span class="num" style="color:${color};font-weight:700;">NPS ${score ?? "—"}</span>
+          </div>
+          ${s.community_name ? `<div class="micro" style="margin-top:2px;">${pdfEscapeHtml(s.community_name)}</div>` : ""}
+          ${s.summary ? `<p style="margin-top:8px;">${pdfEscapeHtml(s.summary)}</p>` : ""}
+        </div>`;
+      });
+    }
+
     const filterNote = hasActiveFilters
-      ? `<p style="font-size:12px;color:#3B9FE7;margin:8px 0;font-style:italic;">Filtered by: ${filterParts.join(", ")}</p>`
+      ? `<p class="micro" style="color:${PdfC.plum};font-style:italic;">Filtered by: ${pdfEscapeHtml(filterParts.join(", "))}</p>`
       : "";
 
-    w.document.write(`<!DOCTYPE html><html><head><title>Round ${round.round_number} Report</title>
-      <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 24px; color: #333; font-size: 14px; line-height: 1.5; }
-        h1 { font-size: 22px; margin-bottom: 4px; }
-        h2 { font-size: 16px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-        th { text-align: left; padding: 8px 12px; background: #f9fafb; border-bottom: 2px solid #e5e7eb; font-size: 12px; text-transform: uppercase; color: #666; }
-        .metrics { display: flex; gap: 16px; margin: 16px 0; }
-        .metric-card { flex: 1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; text-align: center; }
-        .metric-value { font-size: 32px; font-weight: 700; }
-        .metric-label { font-size: 12px; color: #666; text-transform: uppercase; }
-        @media print { body { padding: 0; } .no-print { display: none !important; } }
-      </style>
-    </head><body>
-      <div class="no-print" style="margin-bottom:16px;">
-        <button onclick="window.print()" style="padding:8px 20px;background:#3B9FE7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">Print / Save as PDF</button>
-        <button onclick="window.close()" style="padding:8px 20px;background:#f3f4f6;color:#333;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;margin-left:8px;">Close</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:16px;">
-        <img src="/api/admin/account/logo" style="height:40px;max-width:160px;object-fit:contain;" onerror="this.style.display='none'" />
-        <div>
-          <h1 style="margin-bottom:0;">Survey Round ${round.round_number} Report</h1>
-          <p style="color:#666;margin-top:2px;">${formatDate(round.launched_at)} — ${isConcluded ? formatDate(round.concluded_at) : `Closes ${formatDate(round.closes_at)}`} | ${isActive ? "In Progress" : "Concluded"}</p>
-        </div>
-      </div>
-      ${filterNote}
+    const html = `<!DOCTYPE html><html><head>
+<meta charset="utf-8"/>
+<title>Round ${round.round_number} report</title>
+<style>${baseStyles()}</style>
+</head><body>
+${toolbar()}
+${brandBar({
+  logoUrl: "/api/admin/account/logo",
+  eyebrow: `Round ${round.round_number} report`,
+  title: `${isConcluded ? "Concluded" : "In progress"} · ${pdfFormatShortDate(round.launched_at)} → ${pdfFormatShortDate(isConcluded ? round.concluded_at : round.closes_at)}`,
+})}
+${filterNote}
+${snapshotHtml}
+${cohortHtml}
+${respRateHtml}
+${revenueHtml}
+${alertsHtml}
+${communityHtml}
+${managerHtml}
+${locationHtml}
+${propertyHtml}
+${sizeHtml}
+${insightsHtml}
+${summaryHtml}
+${footer()}
+</body></html>`;
 
-      <div class="metrics">
-        <div class="metric-card">
-          <div class="metric-value" style="color:${npsColor(nps.score)};">${nps.score ?? "—"}</div>
-          <div class="metric-label">NPS Score</div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-value">${response_rate.percentage}%</div>
-          <div class="metric-label">Response Rate</div>
-          <div style="font-size:12px;color:#666;">${response_rate.completed} of ${response_rate.invited}</div>
-        </div>
-      </div>
-
-      ${npsBarHtml}
-      ${revenueHtml}
-      ${alertsHtml}
-
-      ${
-        community_cohorts.length > 1
-          ? `
-        <h2 style="margin-top:28px;">Community Scores</h2>
-        <table>
-          <thead><tr><th>Community</th><th style="text-align:center;">Median NPS</th><th style="text-align:center;">Respondents</th></tr></thead>
-          <tbody>${communityRows}</tbody>
-        </table>
-      `
-          : ""
-      }
-
-      ${managerHtml}
-      ${locationHtml}
-      ${propertyHtml}
-      ${sizeHtml}
-
-      ${insightsHtml}
-
-      ${summaryHtml}
-
-      <div style="margin-top:32px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:11px;color:#999;">
-        Generated ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} — ResidentPulse by CAM Ascent
-      </div>
-    </body></html>`);
-    w.document.close();
+    openReportWindow(html, { title: `Round ${round.round_number} report` });
   };
 
   // ────────────────────────────────────────────────────────────────────
