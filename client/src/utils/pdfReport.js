@@ -415,17 +415,26 @@ export function horizontalBarsSvg(data, { width = 720, rowHeight = 28 } = {}) {
  *
  *   columns: [{ label, key, align, render? }]
  *   rows:    array of objects whose keys match columns[].key
+ *
+ * Escape policy: raw r[c.key] values are HTML-escaped (safe default).
+ * c.render() callbacks are the opt-in "trust me, this is HTML" path —
+ * their string output is injected verbatim. This lets callers compose
+ * markup like `<span class="num">+160</span>` without it being
+ * rendered as visible literal text.
+ *
+ * (The previous implementation escaped everything — including render()
+ * output — which surfaced as raw `&lt;span ...&gt;` strings in the
+ * Communities improving / declining most and Manager performance
+ * tables on the Trends + Round Dashboard PDF exports.)
  */
 export function renderTable(columns, rows) {
   if (!rows || rows.length === 0) return "";
+  const alignCls = (a) => (a === "right" ? "right" : a === "center" ? "center" : "");
   return `
     <table>
       <thead>
         <tr>${columns
-          .map(
-            (c) =>
-              `<th class="${c.align === "right" ? "right" : c.align === "center" ? "center" : ""}">${escapeHtml(c.label)}</th>`
-          )
+          .map((c) => `<th class="${alignCls(c.align)}">${escapeHtml(c.label)}</th>`)
           .join("")}</tr>
       </thead>
       <tbody>
@@ -434,10 +443,15 @@ export function renderTable(columns, rows) {
             (r) =>
               `<tr>${columns
                 .map((c) => {
-                  const cls = c.align === "right" ? "right" : c.align === "center" ? "center" : "";
-                  const raw = c.render ? c.render(r[c.key], r) : r[c.key];
-                  const v = raw == null ? "—" : raw;
-                  return `<td class="${cls}">${typeof v === "string" || typeof v === "number" ? escapeHtml(String(v)) : v}</td>`;
+                  const cls = alignCls(c.align);
+                  if (c.render) {
+                    // render() is the trust-this-HTML escape hatch.
+                    const html = c.render(r[c.key], r);
+                    return `<td class="${cls}">${html == null || html === "" ? "—" : html}</td>`;
+                  }
+                  const v = r[c.key];
+                  if (v == null) return `<td class="${cls}">—</td>`;
+                  return `<td class="${cls}">${escapeHtml(String(v))}</td>`;
                 })
                 .join("")}</tr>`
           )
