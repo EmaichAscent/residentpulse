@@ -71,6 +71,107 @@ router.get("/dashboard", async (req, res) => {
   }
 });
 
+// Today stack — computed operational signals (PR 7 of the SuperAdmin
+// overhaul). Replaces the bare vanity totals on the dashboard with
+// the four signals from the design handoff §1:
+//
+//   1. Closing this week    — rounds with closes_at within 7 days
+//   2. Active rounds (+ Δ)  — current count + delta vs 7 days ago
+//   3. Dormant w/ active    — silent-churn signal: clients with an
+//                             active round whose admins haven't
+//                             logged in for 14+ days
+//   4. Prompts pending      — prompt_versions created in last 7 days
+//                             (proxy for "regenerated but not yet
+//                             test-interviewed" until we track runs)
+//
+// Each signal returns { count, label, detail, sample[] } where sample
+// is up to 5 client rows the operator can drill into.
+router.get("/today-stack", async (req, res) => {
+  try {
+    // 1. Closing this week
+    const closingRows = await db.all(
+      `SELECT sr.id, sr.round_number, sr.closes_at, c.id as client_id, c.company_name,
+              ROUND(EXTRACT(EPOCH FROM (sr.closes_at - NOW())) / 86400)::int as days_left
+       FROM survey_rounds sr
+       JOIN clients c ON c.id = sr.client_id
+       WHERE sr.status = 'in_progress'
+         AND sr.is_test = FALSE
+         AND sr.closes_at IS NOT NULL
+         AND sr.closes_at BETWEEN NOW() AND NOW() + INTERVAL '7 days'
+       ORDER BY sr.closes_at ASC
+       LIMIT 5`
+    );
+    const closingCount = await db.get(
+      `SELECT COUNT(*) as count FROM survey_rounds
+       WHERE status = 'in_progress' AND is_test = FALSE
+         AND closes_at IS NOT NULL
+         AND closes_at BETWEEN NOW() AND NOW() + INTERVAL '7 days'`
+    );
+
+    // 2. Active rounds (current + 7-days-ago for delta).
+    const activeNow = await db.get(
+      `SELECT COUNT(*) as count FROM survey_rounds
+       WHERE status = 'in_progress' AND is_test = FALSE`
+    );
+    // "Active 7 days ago" = launched on or before T-7 AND (closed after T-7
+    // OR still in_progress). Approximation: launched <= T-7 AND
+    // (closes_at IS NULL OR closes_at >= T-7).
+    const activeLastWeek = await db.get(
+      `SELECT COUNT(*) as count FROM survey_rounds
+       WHERE is_test = FALSE
+         AND launched_at IS NOT NULL
+         AND launched_at <= NOW() - INTERVAL '7 days'
+         AND (closes_at IS NULL OR closes_at >= NOW() - INTERVAL '7 days')`
+    );
+
+    // 3. Dormant w/ active rounds — silent churn signal.
+    const dormantRows = await db.all(
+      `SELECT c.id, c.company_name, c.client_code,
+              MAX(ca.last_login_at) as last_login,
+              COUNT(DISTINCT sr.id) as active_round_count
+       FROM clients c
+       JOIN survey_rounds sr
+         ON sr.client_id = c.id AND sr.status = 'in_progress' AND sr.is_test = FALSE
+       LEFT JOIN client_admins ca ON ca.client_id = c.id
+       WHERE c.status = 'active'
+       GROUP BY c.id, c.company_name, c.client_code
+       HAVING MAX(ca.last_login_at) IS NULL
+          OR MAX(ca.last_login_at) < NOW() - INTERVAL '14 days'
+       ORDER BY MAX(ca.last_login_at) ASC NULLS FIRST
+       LIMIT 5`
+    );
+
+    // 4. Prompts recently regenerated (proxy for "pending review" until
+    // we track test-interview runs).
+    const recentPrompts = await db.get(
+      `SELECT COUNT(*) as count FROM prompt_versions
+       WHERE created_at >= NOW() - INTERVAL '7 days'`
+    );
+
+    res.json({
+      closing_this_week: {
+        count: Number(closingCount?.count) || 0,
+        sample: closingRows,
+      },
+      active_rounds: {
+        count: Number(activeNow?.count) || 0,
+        last_week: Number(activeLastWeek?.count) || 0,
+        delta: (Number(activeNow?.count) || 0) - (Number(activeLastWeek?.count) || 0),
+      },
+      dormant_with_active: {
+        count: dormantRows.length,
+        sample: dormantRows,
+      },
+      prompts_recent: {
+        count: Number(recentPrompts?.count) || 0,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "Today-stack error");
+    res.status(500).json({ error: "Failed to load today stack" });
+  }
+});
+
 // Activity log (paginated)
 router.get("/activity-log", async (req, res) => {
   try {
