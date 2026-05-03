@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { diffLines, diffStats } from "../utils/lineDiff";
+import SuperAdminTestInterview from "./SuperAdminTestInterview";
 
 /**
  * SuperAdmin Prompts Library — read-only structured-block view of the
@@ -70,6 +71,10 @@ export default function SuperAdminPromptsLibrary() {
   // Compare on a row in the versions list.
   const [diffTarget, setDiffTarget] = useState(null);
   const [rollingBack, setRollingBack] = useState(false);
+
+  // Test interview modal — scripted persona runs that show which
+  // prompt rule fired on each AI message. Opened from the page header.
+  const [testOpen, setTestOpen] = useState(false);
 
   const reload = () => {
     setLoading(true);
@@ -225,6 +230,14 @@ export default function SuperAdminPromptsLibrary() {
             edits land in production immediately.
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setTestOpen(true)}
+          style={pulseBtnStyle}
+          title="Run a scripted persona against the live prompts"
+        >
+          Test interview →
+        </button>
       </div>
 
       {/* Sub-tabs (Board / Onboarding / Supplement) */}
@@ -334,6 +347,9 @@ export default function SuperAdminPromptsLibrary() {
           onClose={() => setDiffTarget(null)}
         />
       )}
+
+      {/* Scripted persona test-interview modal. */}
+      <SuperAdminTestInterview open={testOpen} onClose={() => setTestOpen(false)} />
     </div>
   );
 }
