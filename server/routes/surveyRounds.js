@@ -374,6 +374,131 @@ router.get("/:id/preflight", async (req, res) => {
   }
 });
 
+/**
+ * Sample-quote lookup for trending topics. Powers the per-row
+ * interpretation in TrendsView's Trending Topics card — instead of
+ * showing a generic templated sentence, we surface the actual board
+ * message that mentioned the word, so the operator sees the real
+ * context residents used.
+ *
+ * Query params:
+ *   words  — comma-separated list of words to look up (case-insensitive)
+ *
+ * Response:
+ *   { snippets: { [word]: { quote, attribution, fullMessage } } }
+ *
+ * For each word we pick the LONGEST user message in this round that
+ * contains the word (longer = usually more context). Snippet is
+ * trimmed to ~140 chars centered on the keyword. Attribution is the
+ * community name + NPS score from the source session.
+ *
+ * Returns an empty {} for words with no matching message — the client
+ * falls back to the templated sentence in that case.
+ */
+router.get("/:roundId/topic-snippets", async (req, res) => {
+  try {
+    const roundId = Number(req.params.roundId);
+    if (!Number.isFinite(roundId)) {
+      return res.status(400).json({ error: "Invalid roundId" });
+    }
+
+    const wordsParam = (req.query.words || "").toString();
+    const words = wordsParam
+      .split(",")
+      .map((w) => w.trim().toLowerCase())
+      .filter((w) => w.length >= 3 && /^[a-z'-]+$/.test(w))
+      .slice(0, 30); // hard cap to bound query count
+
+    if (words.length === 0) {
+      return res.json({ snippets: {} });
+    }
+
+    // Verify the round belongs to this client (defense in depth on
+    // the public endpoint).
+    const round = await db.get(
+      "SELECT id FROM survey_rounds WHERE id = ? AND client_id = ? AND is_test = ?",
+      [roundId, req.clientId, req.isTestMode]
+    );
+    if (!round) {
+      return res.status(404).json({ error: "Round not found" });
+    }
+
+    const snippets = {};
+
+    // One ILIKE per word — bounded by the 30-word cap above. Could be
+    // batched into a single CTE later if perf ever becomes an issue.
+    for (const word of words) {
+      const row = await db.get(
+        `SELECT m.content,
+                s.nps_score,
+                COALESCE(c.community_name, s.community_name) AS community_name
+         FROM messages m
+         JOIN sessions s ON s.id = m.session_id
+         LEFT JOIN communities c ON c.id = s.community_id
+         WHERE s.round_id = $1
+           AND s.client_id = $2
+           AND s.is_mock IS NOT TRUE
+           AND COALESCE(s.is_test, FALSE) = $3
+           AND m.role = 'user'
+           AND m.content ILIKE $4
+         ORDER BY LENGTH(m.content) DESC
+         LIMIT 1`,
+        [roundId, req.clientId, req.isTestMode, `%${word}%`]
+      );
+
+      if (!row) continue;
+
+      const fullMessage = row.content || "";
+      const snippet = trimAroundKeyword(fullMessage, word, 140);
+      const attributionParts = [];
+      if (row.community_name) attributionParts.push(row.community_name);
+      if (row.nps_score != null) attributionParts.push(`NPS ${row.nps_score}`);
+
+      snippets[word] = {
+        quote: snippet,
+        attribution: attributionParts.join(" · "),
+        fullMessage,
+      };
+    }
+
+    res.json({ snippets });
+  } catch (err) {
+    logger.error({ err, clientId: req.clientId }, "Error loading topic snippets");
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Trim a long message down to a snippet of ~maxLen chars centered on
+ * the keyword. Adds leading/trailing ellipses when content was cut.
+ * Case-insensitive word find.
+ */
+function trimAroundKeyword(content, word, maxLen) {
+  if (!content) return "";
+  if (content.length <= maxLen) return content.trim();
+
+  const lower = content.toLowerCase();
+  const idx = lower.indexOf(word.toLowerCase());
+  if (idx < 0) return content.slice(0, maxLen).trim() + "…";
+
+  const half = Math.floor(maxLen / 2);
+  let start = Math.max(0, idx - half);
+  let end = Math.min(content.length, idx + word.length + half);
+
+  // Snap start back to a word boundary so we don't cut a word in half
+  while (start > 0 && /\S/.test(content[start - 1]) && /\S/.test(content[start])) {
+    start--;
+  }
+  // Snap end forward similarly
+  while (end < content.length && /\S/.test(content[end - 1]) && /\S/.test(content[end])) {
+    end++;
+  }
+
+  const prefix = start > 0 ? "…" : "";
+  const suffix = end < content.length ? "…" : "";
+  return (prefix + content.slice(start, end).trim() + suffix).replace(/\s+/g, " ");
+}
+
 // Cross-round trends data (must be before /:id routes)
 router.get("/trends", async (req, res) => {
   try {
