@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useOutletContext, useNavigate } from "react-router-dom";
 import { NpsGauge, Sparkline } from "./charts/NpsCharts";
+import CadenceToggle from "./CadenceToggle";
 
 /**
  * Home — strategic landing page for client admins.
@@ -637,30 +638,13 @@ function SurveyRoundsCard({
           <span className="text-[12px]" style={{ color: "var(--ink-3)" }}>
             Cadence
           </span>
-          <div
-            className="inline-flex rounded-lg p-0.5"
-            style={{ backgroundColor: "var(--paper-2)", border: "1px solid var(--line)" }}
-          >
-            {[2, 4].map((n) => {
-              const active = cadence === n;
-              const disabled = cadenceUpdating || n > maxCadence;
-              return (
-                <button
-                  key={n}
-                  onClick={() => !active && !disabled && onCadenceChange(n)}
-                  disabled={disabled}
-                  type="button"
-                  className="px-2.5 py-1 text-[11.5px] font-semibold rounded-md transition disabled:opacity-50"
-                  style={{
-                    backgroundColor: active ? "var(--ink)" : "transparent",
-                    color: active ? "white" : "var(--ink-3)",
-                  }}
-                >
-                  {n}×/yr
-                </button>
-              );
-            })}
-          </div>
+          <CadenceToggle
+            value={cadence}
+            maxAllowed={maxCadence}
+            onChange={onCadenceChange}
+            disabled={cadenceUpdating}
+            size="sm"
+          />
         </div>
       </div>
 
