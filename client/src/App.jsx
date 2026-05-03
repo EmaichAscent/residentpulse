@@ -18,11 +18,16 @@ import SuperAdminClientDetailPage from "./pages/SuperAdminClientDetailPage";
 import SuperAdminForgotPasswordPage from "./pages/SuperAdminForgotPasswordPage";
 import SuperAdminResetPasswordPage from "./pages/SuperAdminResetPasswordPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import Home from "./components/Home";
+import Actions from "./components/Actions";
 import RoundsLanding from "./components/RoundsLanding";
 import RoundDashboard from "./components/RoundDashboard";
 import TrendsView from "./components/TrendsView";
-import CommunityManager from "./components/CommunityManager";
-import UserManager from "./components/UserManager";
+// Communities + Members rebuilt to match the design handoff. The old
+// CommunityManager + UserManager files stay on disk for reference (CSV
+// edge cases + reactivation flows) but are no longer routed.
+import Communities from "./components/Communities";
+import Members from "./components/Members";
 import AccountSettings from "./components/AccountSettings";
 import SuperAdminDashboard from "./components/SuperAdminDashboard";
 import SuperAdminClients from "./components/SuperAdminClients";
@@ -88,12 +93,14 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="rounds" replace />} />
+            <Route index element={<Navigate to="home" replace />} />
+            <Route path="home" element={<Home />} />
+            <Route path="actions" element={<Actions />} />
             <Route path="rounds" element={<RoundsLanding />} />
             <Route path="rounds/:roundId" element={<RoundDashboard />} />
             <Route path="trends" element={<TrendsView />} />
-            <Route path="communities" element={<CommunityManager />} />
-            <Route path="members" element={<UserManager />} />
+            <Route path="communities" element={<Communities />} />
+            <Route path="members" element={<Members />} />
             <Route path="account" element={<AccountSettings />} />
           </Route>
           {/* 404 catch-all */}

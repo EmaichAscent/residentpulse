@@ -78,7 +78,7 @@ function LocationAutocomplete({ value, onChange, locations, onCreateLocation, cl
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleCreate}
               className="w-full text-left px-3 py-2 text-sm font-medium hover:bg-green-50 transition"
-              style={{ color: "var(--cam-green)" }}
+              style={{ color: "var(--pulse)" }}
             >
               + Create "{text.trim()}"
             </button>
@@ -380,6 +380,27 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
 
   return (
     <div className="space-y-6">
+      {/* Page header — Fraunces serif to match Home/Actions/Trends */}
+      <div data-testid="communities-header">
+        <p
+          className="text-[11px] font-semibold uppercase tracking-wider mb-1"
+          style={{ color: "var(--ink-4)", letterSpacing: "0.12em" }}
+        >
+          {communities.length} communities · roster + data hygiene
+        </p>
+        <h1
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 32,
+            fontWeight: 500,
+            letterSpacing: "-0.02em",
+            color: "var(--ink)",
+          }}
+        >
+          Communities
+        </h1>
+      </div>
+
       {/* Search Bar with Import and Add Buttons */}
       <div>
         <div className="flex gap-3">
@@ -411,7 +432,7 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
           </a>
           <label
             className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg cursor-pointer transition hover:opacity-90 whitespace-nowrap"
-            style={{ backgroundColor: "var(--cam-blue)" }}
+            style={{ backgroundColor: "var(--pulse)" }}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -447,7 +468,7 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
               setFormError("");
             }}
             className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 whitespace-nowrap"
-            style={{ backgroundColor: "var(--cam-blue)" }}
+            style={{ backgroundColor: "var(--pulse)" }}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -477,7 +498,7 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
           <button
             onClick={downloadSampleCSV}
             className="font-medium hover:underline"
-            style={{ color: "var(--cam-blue)" }}
+            style={{ color: "var(--pulse)" }}
           >
             Download sample CSV
           </button>
@@ -575,7 +596,7 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
               onClick={confirmImport}
               disabled={uploading}
               className="px-5 py-2 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
-              style={{ backgroundColor: "var(--cam-blue)" }}
+              style={{ backgroundColor: "var(--pulse)" }}
             >
               {uploading
                 ? "Importing..."
@@ -688,7 +709,7 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
                 type="submit"
                 disabled={saving}
                 className="px-5 py-2.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
-                style={{ backgroundColor: "var(--cam-blue)" }}
+                style={{ backgroundColor: "var(--pulse)" }}
               >
                 {saving ? "Saving..." : "Add Community"}
               </button>
@@ -831,7 +852,7 @@ Oak Ridge HOA,Orlando Office,36000,Mike Chen,single_family,85`;
                             onClick={handleSaveEdit}
                             disabled={editSaving}
                             className="px-4 py-1.5 text-xs font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
-                            style={{ backgroundColor: "var(--cam-blue)" }}
+                            style={{ backgroundColor: "var(--pulse)" }}
                           >
                             {editSaving ? "Saving..." : "Save"}
                           </button>

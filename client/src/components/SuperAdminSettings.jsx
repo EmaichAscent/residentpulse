@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import ConfirmModal from "./ConfirmModal";
 import TypedConfirmModal from "./TypedConfirmModal";
+import PromptVersionHistory from "./PromptVersionHistory";
+import TestInterviewModal from "./TestInterviewModal";
 
 const EMPTY_PLAN = {
   name: "",
@@ -58,6 +60,9 @@ export default function SuperAdminSettings() {
   const [interviewSaving, setInterviewSaving] = useState(false);
   const [interviewSaved, setInterviewSaved] = useState(null); // key that was just saved
   const [interviewError, setInterviewError] = useState(null);
+
+  // ── Test Interview modal ──
+  const [showTestInterview, setShowTestInterview] = useState(false);
 
   // ── Plans state ──
   const [plans, setPlans] = useState([]);
@@ -344,12 +349,22 @@ export default function SuperAdminSettings() {
     <div className="space-y-8">
       {/* ━━━━ SYSTEM PROMPT CARD ━━━━ */}
       <div className="bg-white rounded-xl border p-6">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">System Prompt</h2>
-          <p className="text-sm text-gray-500">
-            The global prompt used when interviewing board members. Client-specific supplements are
-            appended automatically.
-          </p>
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">System Prompt</h2>
+            <p className="text-sm text-gray-500">
+              The global prompt used when interviewing board members. Client-specific supplements
+              are appended automatically.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowTestInterview(true)}
+            className="flex-shrink-0 text-sm font-semibold px-4 py-2 rounded-lg text-white transition"
+            style={{ backgroundColor: "var(--ink)" }}
+            title="Step through scripted persona transcripts to see V2 rules fire"
+          >
+            Test with sample resident
+          </button>
         </div>
 
         {/* Prompt textarea */}
@@ -600,6 +615,15 @@ export default function SuperAdminSettings() {
                 <span className="text-sm text-red-600 font-medium">{interviewError}</span>
               )}
             </div>
+            <PromptVersionHistory
+              key={interviewTab}
+              promptKey={interviewTab}
+              currentText={interviewPrompts[interviewTab] || ""}
+              onLoadVersion={(text) =>
+                setInterviewPrompts({ ...interviewPrompts, [interviewTab]: text })
+              }
+              onRestored={loadInterviewPrompts}
+            />
           </>
         )}
       </div>
@@ -756,6 +780,7 @@ export default function SuperAdminSettings() {
         confirmLabel="Delete"
         destructive
       />
+      <TestInterviewModal isOpen={showTestInterview} onClose={() => setShowTestInterview(false)} />
     </div>
   );
 }

@@ -2,6 +2,25 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import InterviewChat from "../components/InterviewChat";
 
+/**
+ * AdminOnboardingPage — three-step setup flow for new client admins.
+ *
+ *   Step 1 · Company Info     → structured form (size, years, geo, etc.)
+ *   Step 2 · AI Interview     → InterviewChat (V2.1 onboarding prompt)
+ *   Step 3 · Review           → confirm AI summary, /confirm endpoint
+ *                               builds the interview_prompt_supplement
+ *
+ * Phase-3 redesign notes:
+ *   • Replaces the generic blue header strip + plain step pills with
+ *     the v2 token system: paper background, Fraunces display type,
+ *     pulse-green accents, dark "ink" buttons.
+ *   • Mobile-first: full-bleed below sm, centered card-shaped column
+ *     above sm to match the resident chat aesthetic.
+ *   • Step indicator is a thin progress strip (matches resident chat
+ *     ProgressBar) plus a numbered pill row underneath.
+ *   • Success card uses pulse-tint dot + Fraunces title + btn-pulse.
+ */
+
 const COMPANY_SIZES = [
   "1-5 employees",
   "6-15 employees",
@@ -20,8 +39,8 @@ const YEARS_OPTIONS = [
 ];
 
 const STEPS = [
-  { key: "form", label: "Company Info" },
-  { key: "chat", label: "AI Interview" },
+  { key: "form", label: "Company info" },
+  { key: "chat", label: "AI interview" },
   { key: "confirm", label: "Review" },
 ];
 
@@ -182,42 +201,29 @@ export default function AdminOnboardingPage() {
     navigate("/admin");
   };
 
-  const handleEndEarly = async () => {
-    try {
-      const res = await fetch(`/api/admin/interview/${interviewId}/message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          message: "I'd like to wrap up. Can you summarize what we've discussed?",
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setSummaryMessage(data.message);
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            role: "user",
-            content: "I'd like to wrap up. Can you summarize what we've discussed?",
-            timestamp: new Date().toISOString(),
-          },
-          { role: "assistant", content: data.message, timestamp: new Date().toISOString() },
-        ]);
-        setStep("confirm");
-      }
-    } catch (err) {
-      console.error("End early error:", err);
+  // Finish Interview advances directly to the Review step. The
+  // previous version POSTed a synthetic "I'd like to wrap up" message
+  // to the AI before advancing — but if the conversation had already
+  // wrapped naturally (the common case under V2.1), the /message
+  // endpoint required status='in_progress' and could refuse, leaving
+  // the user stuck on the chat step with no feedback.
+  //
+  // Recap content for the Review step is the last AI message from the
+  // existing transcript (the natural close), with a generic fallback
+  // when there isn't one. The /confirm endpoint generates the actual
+  // supplement; this is just a preview of what the user is approving.
+  const handleEndEarly = () => {
+    if (!interviewId) {
+      setLaunchError("No interview found. Refresh the page and complete the form again.");
+      return;
     }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
-      </div>
+    const lastAssistant = [...chatMessages].reverse().find((m) => m.role === "assistant");
+    setSummaryMessage(
+      lastAssistant?.content ||
+        "Here's the conversation we had. Confirm to generate the AI supplement that briefs board interviews on your priorities."
     );
-  }
+    setStep("confirm");
+  };
 
   const handleLaunchRound = async () => {
     setLaunchingRound(true);
@@ -240,327 +246,647 @@ export default function AdminOnboardingPage() {
     }
   };
 
-  // Success screen
-  if (confirmResult) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-8 text-center">
-          <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg
-              className="w-7 h-7 text-green-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          </div>
-          <h2 className="text-lg font-bold text-gray-900 mb-2">Profile Complete!</h2>
-          <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-            Your company profile has been saved. Our AI interviewer will now use this context to
-            have more relevant, personalized conversations with your members.
-          </p>
-          {launchError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-600">{launchError}</p>
-            </div>
-          )}
-          {launchRoundId ? (
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={handleLaunchRound}
-                disabled={launchingRound}
-                className="px-6 py-2.5 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 disabled:opacity-50"
-                style={{ backgroundColor: "var(--cam-green)" }}
-              >
-                {launchingRound ? "Launching..." : "Launch Round Now"}
-              </button>
-              <button
-                onClick={() => navigate("/admin/rounds")}
-                className="px-6 py-2.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-              >
-                Not Now
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => navigate("/admin/rounds")} className="btn-primary-sm px-8">
-              Go to Dashboard
-            </button>
-          )}
-        </div>
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{
+          background: "linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%)",
+        }}
+      >
+        <div
+          className="w-7 h-7 rounded-full animate-spin"
+          style={{
+            border: "3px solid var(--paper-3)",
+            borderTopColor: "var(--pulse)",
+          }}
+        />
       </div>
     );
   }
 
+  // ── Success screen ────────────────────────────────────────────────
+  if (confirmResult) {
+    return (
+      <PageShell>
+        <div
+          className="rounded-3xl bg-white text-center"
+          style={{
+            border: "1px solid var(--line)",
+            boxShadow: "var(--shadow-lg)",
+            padding: "40px 32px",
+            maxWidth: 480,
+            margin: "0 auto",
+          }}
+        >
+          <div
+            className="rounded-full mx-auto flex items-center justify-center"
+            style={{
+              width: 56,
+              height: 56,
+              background: "linear-gradient(135deg, var(--pulse), var(--pulse-deep))",
+              boxShadow: "0 6px 20px rgba(31,165,113,0.25)",
+            }}
+          >
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+          <h2
+            className="mt-4 font-medium"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 26,
+              letterSpacing: "-0.02em",
+              color: "var(--ink)",
+            }}
+          >
+            You're all set.
+          </h2>
+          <p
+            className="mt-2 text-[14px] leading-relaxed"
+            style={{ color: "var(--ink-3)", maxWidth: 360, margin: "8px auto 0" }}
+          >
+            Your company profile is saved. The AI interviewer will use this context to ask board
+            members about the things that actually matter to <em>your</em> communities.
+          </p>
+
+          {launchError && (
+            <div
+              className="mt-5 rounded-lg p-3 text-[12.5px] text-left"
+              style={{
+                backgroundColor: "var(--coral-tint)",
+                color: "var(--coral)",
+                border: "1px solid var(--coral-soft, rgba(232,93,76,0.25))",
+              }}
+            >
+              {launchError}
+            </div>
+          )}
+
+          <div className="mt-6 flex flex-col sm:flex-row gap-2 justify-center">
+            {launchRoundId ? (
+              <>
+                <button
+                  onClick={handleLaunchRound}
+                  disabled={launchingRound}
+                  className="font-semibold text-white rounded-xl transition hover:opacity-90 disabled:opacity-50"
+                  style={{
+                    backgroundColor: "var(--pulse)",
+                    boxShadow: "var(--shadow-sm)",
+                    padding: "11px 22px",
+                    fontSize: 14,
+                  }}
+                >
+                  {launchingRound ? "Launching…" : "Launch round now →"}
+                </button>
+                <button
+                  onClick={() => navigate("/admin")}
+                  className="font-semibold rounded-xl transition"
+                  style={{
+                    backgroundColor: "transparent",
+                    color: "var(--ink-2)",
+                    border: "1px solid var(--line-2)",
+                    padding: "11px 22px",
+                    fontSize: 14,
+                  }}
+                >
+                  Not now
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => navigate("/admin")}
+                className="font-semibold text-white rounded-xl transition hover:opacity-90"
+                style={{
+                  backgroundColor: "var(--pulse)",
+                  boxShadow: "var(--shadow-sm)",
+                  padding: "11px 26px",
+                  fontSize: 14,
+                }}
+              >
+                Go to your dashboard →
+              </button>
+            )}
+          </div>
+        </div>
+      </PageShell>
+    );
+  }
+
   const stepIndex = STEPS.findIndex((s) => s.key === step);
+  const progressPercent = ((stepIndex + 1) / STEPS.length) * 100;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
-      <div className="shadow-sm flex-shrink-0" style={{ backgroundColor: "var(--cam-blue)" }}>
-        <div className="max-w-2xl mx-auto px-4 py-3 flex justify-between items-center">
-          <div>
-            <h1 className="text-lg font-bold text-white">
-              {interviewType === "re_interview" ? "Company Check-In" : "Company Profile Setup"}
-            </h1>
-            <p className="text-xs text-white/60">{user?.company_name}</p>
-          </div>
-          <button
-            onClick={handleSkip}
-            className="text-xs text-white/50 hover:text-white/80 transition"
+    <PageShell>
+      {/* Header band */}
+      <div className="mb-4 flex items-start justify-between gap-4 px-1">
+        <div className="min-w-0">
+          <div
+            className="text-[10.5px] font-semibold uppercase mb-1"
+            style={{ letterSpacing: "0.12em", color: "var(--ink-4)" }}
           >
-            Do this later
-          </button>
+            {interviewType === "re_interview" ? "Company check-in" : "Onboarding"}
+          </div>
+          <h1
+            className="font-medium"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 26,
+              letterSpacing: "-0.02em",
+              color: "var(--ink)",
+            }}
+          >
+            {interviewType === "re_interview"
+              ? "What's changed since we last spoke?"
+              : "Let's brief the AI on your business."}
+          </h1>
+          {user?.company_name && (
+            <p className="text-[12.5px] mt-1 truncate" style={{ color: "var(--ink-3)" }}>
+              {user.company_name}
+            </p>
+          )}
         </div>
+        <button
+          type="button"
+          onClick={handleSkip}
+          className="flex-shrink-0 text-[12px] underline transition hover:opacity-80"
+          style={{ color: "var(--ink-4)" }}
+        >
+          Do this later
+        </button>
       </div>
 
-      {/* Step indicator */}
-      <div className="bg-white border-b flex-shrink-0">
-        <div className="max-w-2xl mx-auto px-4 py-2.5 flex items-center gap-2">
-          {STEPS.map((s, i) => (
-            <div key={s.key} className="flex items-center gap-2">
-              {i > 0 && (
-                <div className={`w-8 h-px ${i <= stepIndex ? "bg-blue-400" : "bg-gray-200"}`} />
-              )}
-              <div className="flex items-center gap-1.5">
-                <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium ${
-                    i < stepIndex
-                      ? "bg-blue-500 text-white"
-                      : i === stepIndex
-                        ? "bg-blue-500 text-white"
-                        : "bg-gray-200 text-gray-400"
-                  }`}
+      {/* Progress strip + step pills */}
+      <div className="mb-5">
+        <div
+          className="relative overflow-hidden rounded-full"
+          style={{ height: 3, backgroundColor: "var(--paper-3)" }}
+          aria-hidden="true"
+        >
+          <div
+            className="h-full transition-all duration-500"
+            style={{ width: `${progressPercent}%`, backgroundColor: "var(--pulse)" }}
+          />
+        </div>
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          {STEPS.map((s, i) => {
+            const isCurrent = i === stepIndex;
+            const isDone = i < stepIndex;
+            return (
+              <div key={s.key} className="flex items-center gap-2">
+                <span
+                  className="rounded-full flex items-center justify-center text-[11px] font-semibold transition"
+                  style={{
+                    width: 22,
+                    height: 22,
+                    backgroundColor: isDone
+                      ? "var(--pulse)"
+                      : isCurrent
+                        ? "var(--ink)"
+                        : "var(--paper-3)",
+                    color: isDone || isCurrent ? "white" : "var(--ink-4)",
+                  }}
                 >
-                  {i < stepIndex ? (
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={3}
-                        d="M5 13l4 4L19 7"
-                      />
+                  {isDone ? (
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
                     </svg>
                   ) : (
                     i + 1
                   )}
-                </div>
+                </span>
                 <span
-                  className={`text-xs font-medium ${
-                    i <= stepIndex ? "text-gray-700" : "text-gray-400"
-                  }`}
+                  className="text-[12.5px] font-medium"
+                  style={{
+                    color: isCurrent ? "var(--ink)" : isDone ? "var(--ink-3)" : "var(--ink-4)",
+                  }}
                 >
                   {s.label}
                 </span>
+                {i < STEPS.length - 1 && (
+                  <span
+                    className="hidden sm:inline-block"
+                    style={{
+                      width: 24,
+                      height: 1,
+                      backgroundColor: "var(--line-2)",
+                    }}
+                  />
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      {/* Step: Structured Form */}
+      {/* Step content */}
       {step === "form" && (
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-lg mx-auto px-4 py-6">
-            {/* Preamble */}
-            <div className="mb-6">
-              <div className="flex items-center gap-3 mb-3">
-                <img
-                  src="/camascent-chat-icon.png"
-                  alt="CAM Ascent"
-                  className="w-10 h-10 rounded-full object-contain bg-white border border-gray-200 flex-shrink-0"
-                />
-                <div>
-                  <h2 className="text-base font-semibold text-gray-900">
-                    {interviewType === "re_interview"
-                      ? "Let's catch up on what's changed"
-                      : "Help our AI understand your business"}
-                  </h2>
-                </div>
-              </div>
-              <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-gray-700 leading-relaxed space-y-2">
-                <p>
-                  <strong>Why this matters:</strong> When our AI interviews your board members, it
-                  needs to understand the unique context of your management company — your size,
-                  your market, what makes you different.
-                </p>
-                <p>
-                  Without this, every board gets the same generic questions. With it, the AI can ask
-                  about the things that actually matter to <em>your</em> communities and surface
-                  insights that are specific to how you operate.
-                </p>
-                <p className="text-gray-500 text-xs">
-                  This takes about 5 minutes. You'll answer a few quick questions below, then have a
-                  brief conversation with our AI to fill in the details.
-                </p>
-              </div>
-            </div>
-
-            {/* Form card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-              <form onSubmit={handleFormSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Number of Employees
-                    </label>
-                    <select
-                      value={companySize}
-                      onChange={(e) => setCompanySize(e.target.value)}
-                      className="input-field-sm"
-                      required
-                    >
-                      <option value="">Select...</option>
-                      {COMPANY_SIZES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Years in Business
-                    </label>
-                    <select
-                      value={yearsInBusiness}
-                      onChange={(e) => setYearsInBusiness(e.target.value)}
-                      className="input-field-sm"
-                      required
-                    >
-                      <option value="">Select...</option>
-                      {YEARS_OPTIONS.map((y) => (
-                        <option key={y} value={y}>
-                          {y}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Geographic Area
-                    </label>
-                    <input
-                      type="text"
-                      value={geographicArea}
-                      onChange={(e) => setGeographicArea(e.target.value)}
-                      placeholder="e.g., South Florida"
-                      className="input-field-sm"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Communities Managed
-                    </label>
-                    <input
-                      type="number"
-                      value={communitiesManaged}
-                      onChange={(e) => setCommunitiesManaged(e.target.value)}
-                      placeholder="e.g., 25"
-                      min="1"
-                      className="input-field-sm"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    What sets your company apart?
-                  </label>
-                  <textarea
-                    value={competitiveAdvantages}
-                    onChange={(e) => setCompetitiveAdvantages(e.target.value)}
-                    placeholder="e.g., Technology-forward approach, dedicated community managers, strong financial reporting..."
-                    rows={2}
-                    className="input-field-sm resize-none"
-                  />
-                </div>
-
-                <button type="submit" disabled={submitting} className="btn-primary-sm w-full">
-                  {submitting ? "Starting interview..." : "Continue to AI Interview"}
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Step: Chat */}
-      {step === "chat" && interviewId && (
-        <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full px-4 py-4 min-h-0">
-          <InterviewChat
-            interviewId={interviewId}
-            initialMessages={chatMessages}
-            onComplete={handleSummaryDetected}
-            onEndEarly={handleEndEarly}
+        <div className="space-y-4">
+          <PreambleCard interviewType={interviewType} />
+          <FormCard
+            companySize={companySize}
+            setCompanySize={setCompanySize}
+            yearsInBusiness={yearsInBusiness}
+            setYearsInBusiness={setYearsInBusiness}
+            geographicArea={geographicArea}
+            setGeographicArea={setGeographicArea}
+            communitiesManaged={communitiesManaged}
+            setCommunitiesManaged={setCommunitiesManaged}
+            competitiveAdvantages={competitiveAdvantages}
+            setCompetitiveAdvantages={setCompetitiveAdvantages}
+            submitting={submitting}
+            onSubmit={handleFormSubmit}
           />
         </div>
       )}
 
-      {/* Step: Confirmation */}
-      {step === "confirm" && (
-        <div className="flex-1 overflow-y-auto">
-          {confirming && (
-            <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-xl shadow-xl p-8 max-w-sm w-full mx-4 text-center">
-                <div
-                  className="w-10 h-10 border-3 border-gray-200 rounded-full animate-spin mx-auto mb-4"
-                  style={{ borderTopColor: "var(--cam-blue)", borderWidth: "3px" }}
-                />
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                  Building your profile...
-                </h3>
-                <p className="text-sm text-gray-500">
-                  Our AI is generating a personalized context for your board member interviews. This
-                  takes a few seconds.
-                </p>
-              </div>
-            </div>
-          )}
-          <div className="max-w-lg mx-auto px-4 py-6">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-              <h2 className="text-base font-semibold text-gray-900 mb-1">Does this look right?</h2>
-              <p className="text-xs text-gray-500 mb-4">
-                Here's what our AI captured. Once confirmed, this context will be used to
-                personalize board member interviews. You won't need to edit this manually.
-              </p>
-
-              <div className="bg-gray-50 rounded-lg p-4 mb-5 text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-                {summaryMessage}
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={handleConfirm}
-                  disabled={confirming}
-                  className="flex-1 btn-primary-sm"
-                >
-                  {confirming ? "Saving..." : "Yes, looks good"}
-                </button>
-                <button
-                  onClick={handleAddMore}
-                  disabled={confirming}
-                  className="flex-1 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-                >
-                  Let me add more
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {step === "chat" && interviewId && (
+        <InterviewChat
+          interviewId={interviewId}
+          initialMessages={chatMessages}
+          onComplete={handleSummaryDetected}
+          onEndEarly={handleEndEarly}
+        />
       )}
+
+      {step === "confirm" && (
+        <ConfirmCard
+          summary={summaryMessage}
+          confirming={confirming}
+          onConfirm={handleConfirm}
+          onAddMore={handleAddMore}
+        />
+      )}
+
+      {confirming && step === "confirm" && <ConfirmingOverlay />}
+    </PageShell>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Subcomponents
+// ──────────────────────────────────────────────────────────────────────
+
+function PageShell({ children }) {
+  return (
+    <div
+      className="min-h-[100dvh] py-6 px-4 sm:py-10"
+      style={{
+        background: "linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%)",
+        fontFamily: "var(--font-sans)",
+      }}
+    >
+      <div className="max-w-[640px] mx-auto">{children}</div>
+    </div>
+  );
+}
+
+function PreambleCard({ interviewType }) {
+  return (
+    <div
+      className="rounded-2xl bg-white"
+      style={{
+        border: "1px solid var(--line)",
+        boxShadow: "var(--shadow-sm)",
+        padding: 22,
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className="rounded-full flex-shrink-0 flex items-center justify-center"
+          style={{
+            width: 36,
+            height: 36,
+            background: "linear-gradient(135deg, var(--pulse), var(--pulse-deep))",
+            boxShadow: "0 2px 8px rgba(31,165,113,0.25)",
+          }}
+          aria-hidden="true"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="white"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 12h4l2-7 4 14 2-7h6" />
+          </svg>
+        </div>
+        <div className="min-w-0">
+          <h2
+            className="font-medium"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 18,
+              letterSpacing: "-0.01em",
+              color: "var(--ink)",
+            }}
+          >
+            {interviewType === "re_interview"
+              ? "Quick check-in to keep your AI brief sharp"
+              : "Why a five-minute brief makes board interviews dramatically better"}
+          </h2>
+          <p className="mt-2 text-[13.5px] leading-relaxed" style={{ color: "var(--ink-3)" }}>
+            When the AI interviews your board members, it needs the unique context of your
+            management company — your size, your market, what makes you different. Without it, every
+            board gets the same generic questions. With it, the AI asks about the things that
+            actually matter to <em>your</em> communities.
+          </p>
+          <p className="mt-2 text-[12px]" style={{ color: "var(--ink-4)" }}>
+            Five minutes total. A few quick questions below, then a short conversation.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormCard({
+  companySize,
+  setCompanySize,
+  yearsInBusiness,
+  setYearsInBusiness,
+  geographicArea,
+  setGeographicArea,
+  communitiesManaged,
+  setCommunitiesManaged,
+  competitiveAdvantages,
+  setCompetitiveAdvantages,
+  submitting,
+  onSubmit,
+}) {
+  return (
+    <div
+      className="rounded-2xl bg-white"
+      style={{
+        border: "1px solid var(--line)",
+        boxShadow: "var(--shadow-sm)",
+        padding: 22,
+      }}
+    >
+      <form onSubmit={onSubmit} className="space-y-4">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Number of employees">
+            <select
+              value={companySize}
+              onChange={(e) => setCompanySize(e.target.value)}
+              className="w-full text-[13.5px] rounded-lg outline-none transition"
+              style={{
+                border: "1px solid var(--line-2)",
+                padding: "9px 12px",
+                color: "var(--ink)",
+                backgroundColor: "white",
+              }}
+              required
+            >
+              <option value="">Select…</option>
+              {COMPANY_SIZES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Years in business">
+            <select
+              value={yearsInBusiness}
+              onChange={(e) => setYearsInBusiness(e.target.value)}
+              className="w-full text-[13.5px] rounded-lg outline-none transition"
+              style={{
+                border: "1px solid var(--line-2)",
+                padding: "9px 12px",
+                color: "var(--ink)",
+                backgroundColor: "white",
+              }}
+              required
+            >
+              <option value="">Select…</option>
+              {YEARS_OPTIONS.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Geographic area">
+            <input
+              type="text"
+              value={geographicArea}
+              onChange={(e) => setGeographicArea(e.target.value)}
+              placeholder="e.g., South Florida"
+              className="w-full text-[13.5px] rounded-lg outline-none transition"
+              style={{
+                border: "1px solid var(--line-2)",
+                padding: "9px 12px",
+                color: "var(--ink)",
+                backgroundColor: "white",
+              }}
+              required
+            />
+          </Field>
+          <Field label="Communities managed">
+            <input
+              type="number"
+              value={communitiesManaged}
+              onChange={(e) => setCommunitiesManaged(e.target.value)}
+              placeholder="e.g., 25"
+              min="1"
+              className="w-full text-[13.5px] rounded-lg outline-none transition"
+              style={{
+                border: "1px solid var(--line-2)",
+                padding: "9px 12px",
+                color: "var(--ink)",
+                backgroundColor: "white",
+              }}
+              required
+            />
+          </Field>
+        </div>
+
+        <Field label="What sets your company apart?">
+          <textarea
+            value={competitiveAdvantages}
+            onChange={(e) => setCompetitiveAdvantages(e.target.value)}
+            placeholder="e.g., technology-forward approach, dedicated community managers, strong financial reporting…"
+            rows={3}
+            className="w-full text-[13.5px] rounded-lg outline-none transition resize-none"
+            style={{
+              border: "1px solid var(--line-2)",
+              padding: "9px 12px",
+              color: "var(--ink)",
+              backgroundColor: "white",
+              lineHeight: 1.45,
+            }}
+          />
+        </Field>
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="w-full font-semibold text-white rounded-xl transition hover:opacity-90 disabled:opacity-50"
+          style={{
+            backgroundColor: "var(--pulse)",
+            boxShadow: "var(--shadow-sm)",
+            padding: "11px 18px",
+            fontSize: 14,
+          }}
+        >
+          {submitting ? "Starting interview…" : "Continue to AI interview →"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label
+        className="block text-[11px] font-semibold uppercase mb-1.5"
+        style={{ letterSpacing: "0.08em", color: "var(--ink-4)" }}
+      >
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function ConfirmCard({ summary, confirming, onConfirm, onAddMore }) {
+  return (
+    <div
+      className="rounded-2xl bg-white"
+      style={{
+        border: "1px solid var(--line)",
+        boxShadow: "var(--shadow-sm)",
+        padding: 22,
+      }}
+    >
+      <h2
+        className="font-medium"
+        style={{
+          fontFamily: "var(--font-display)",
+          fontSize: 20,
+          letterSpacing: "-0.015em",
+          color: "var(--ink)",
+        }}
+      >
+        Does this look right?
+      </h2>
+      <p className="mt-1 text-[12.5px]" style={{ color: "var(--ink-3)" }}>
+        Here's what the AI captured. Once confirmed, this becomes the brief that personalizes every
+        board interview. You won't need to edit this manually.
+      </p>
+
+      <div
+        className="mt-4 rounded-xl text-[13.5px] leading-relaxed whitespace-pre-line"
+        style={{
+          backgroundColor: "var(--paper-2)",
+          color: "var(--ink-2)",
+          padding: 16,
+          border: "1px solid var(--line)",
+        }}
+      >
+        {summary}
+      </div>
+
+      <div className="mt-5 flex flex-col sm:flex-row gap-2">
+        <button
+          onClick={onConfirm}
+          disabled={confirming}
+          className="flex-1 font-semibold text-white rounded-xl transition hover:opacity-90 disabled:opacity-50"
+          style={{
+            backgroundColor: "var(--pulse)",
+            boxShadow: "var(--shadow-sm)",
+            padding: "11px 18px",
+            fontSize: 14,
+          }}
+        >
+          {confirming ? "Saving…" : "Yes, looks good"}
+        </button>
+        <button
+          onClick={onAddMore}
+          disabled={confirming}
+          type="button"
+          className="flex-1 font-semibold rounded-xl transition"
+          style={{
+            backgroundColor: "transparent",
+            color: "var(--ink-2)",
+            border: "1px solid var(--line-2)",
+            padding: "11px 18px",
+            fontSize: 14,
+          }}
+        >
+          Let me add more
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmingOverlay() {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(36,42,52,0.45)" }}
+    >
+      <div
+        className="bg-white rounded-2xl text-center"
+        style={{
+          padding: "28px 24px",
+          maxWidth: 360,
+          width: "100%",
+          boxShadow: "var(--shadow-lg)",
+        }}
+      >
+        <div
+          className="w-9 h-9 rounded-full animate-spin mx-auto mb-3"
+          style={{
+            border: "3px solid var(--paper-3)",
+            borderTopColor: "var(--pulse)",
+          }}
+        />
+        <h3
+          className="font-medium"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 17,
+            letterSpacing: "-0.01em",
+            color: "var(--ink)",
+          }}
+        >
+          Building your brief…
+        </h3>
+        <p className="mt-1 text-[12.5px]" style={{ color: "var(--ink-3)" }}>
+          Generating the personalized context the AI will use for every board interview.
+        </p>
+      </div>
     </div>
   );
 }

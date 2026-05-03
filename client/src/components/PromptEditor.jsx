@@ -46,17 +46,28 @@ export default function PromptEditor({ isSuperAdmin = false }) {
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         rows={14}
-        className="w-full px-4 py-3 text-base border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition resize-y"
+        className="w-full px-4 py-3 text-base rounded-xl outline-none transition resize-y"
+        style={{
+          border: "1px solid var(--line-2)",
+          backgroundColor: "var(--paper)",
+          color: "var(--ink)",
+          fontFamily: "var(--font-mono)",
+        }}
       />
       <div className="mt-4 flex items-center gap-4">
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-8 py-3 text-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition disabled:opacity-50"
+          className="px-8 py-3 text-lg font-semibold text-white rounded-xl transition disabled:opacity-50 hover:opacity-90"
+          style={{ backgroundColor: "var(--ink)" }}
         >
-          {saving ? "Saving..." : "Save Prompt"}
+          {saving ? "Saving…" : "Save prompt"}
         </button>
-        {saved && <span className="text-green-600 font-medium">Saved!</span>}
+        {saved && (
+          <span className="font-medium" style={{ color: "var(--pulse-deep)" }}>
+            Saved!
+          </span>
+        )}
         {saveError && <span className="text-red-600 font-medium">{saveError}</span>}
       </div>
     </div>

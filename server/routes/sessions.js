@@ -20,10 +20,17 @@ router.get("/logo/:clientId", async (req, res) => {
   res.send(buffer);
 });
 
-// Get session details including messages
+// Get session details including messages and the community manager name
+// (so the chat welcome can personalize: "Sarah at Zee Best asked me to check in").
 router.get("/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const session = await db.get("SELECT * FROM sessions WHERE id = ?", [id]);
+  const session = await db.get(
+    `SELECT s.*, c.community_manager_name
+     FROM sessions s
+     LEFT JOIN communities c ON c.id = s.community_id
+     WHERE s.id = ?`,
+    [id]
+  );
   if (!session) return res.status(404).json({ error: "Session not found" });
 
   const messages = await db.all(
@@ -111,6 +118,11 @@ router.get("/validate-token/:token", async (req, res) => {
       "SELECT value FROM settings WHERE key = 'google_review_url' AND client_id = ?",
       [user.client_id]
     );
+    const reviewThresholdSetting = await db.get(
+      "SELECT value FROM settings WHERE key = 'google_review_threshold' AND client_id = ?",
+      [user.client_id]
+    );
+    const googleReviewThreshold = reviewThresholdSetting ? Number(reviewThresholdSetting.value) : 9;
     // Resolution chain: location-specific URL → main URL → null
     const mainUrl = reviewUrl?.value || null;
     const googleReviewUrl =
@@ -128,6 +140,7 @@ router.get("/validate-token/:token", async (req, res) => {
       company_name: clientInfo?.company_name || "",
       has_logo: clientInfo?.has_logo || false,
       google_review_url: googleReviewUrl,
+      google_review_threshold: googleReviewThreshold,
     });
   } catch (err) {
     logger.error({ err }, "Token validation error");

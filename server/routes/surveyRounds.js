@@ -177,6 +177,203 @@ router.post("/schedule", async (req, res) => {
   }
 });
 
+/**
+ * Recent activity feed for the Home page. Returns the most recent
+ * completed survey responses across all rounds, with sentiment
+ * (good/mid/bad based on NPS bucket) and a flagged boolean if there's
+ * an active critical alert tied to the session.
+ */
+router.get("/recent-activity", async (req, res) => {
+  try {
+    const limit = Math.min(20, Number(req.query.limit) || 8);
+    const sessions = await db.all(
+      `SELECT s.id, s.nps_score, s.created_at,
+              COALESCE(u.first_name, '') AS first_name,
+              COALESCE(u.last_name, '') AS last_name,
+              COALESCE(c.community_name, s.community_name) AS community_name,
+              EXISTS(
+                SELECT 1 FROM critical_alerts ca
+                WHERE ca.session_id = s.id
+                  AND ca.dismissed = FALSE
+                  AND COALESCE(ca.solved, FALSE) = FALSE
+              ) AS flagged
+       FROM sessions s
+       LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN communities c ON c.id = s.community_id
+       WHERE s.client_id = ? AND s.is_test = ?
+         AND s.completed = TRUE
+         AND s.is_mock IS NOT TRUE
+         AND s.nps_score IS NOT NULL
+       ORDER BY s.created_at DESC
+       LIMIT ?`,
+      [req.clientId, req.isTestMode, limit]
+    );
+
+    const enriched = sessions.map((s) => {
+      const score = Number(s.nps_score);
+      const tone = score >= 9 ? "good" : score <= 6 ? "bad" : "mid";
+      return {
+        id: s.id,
+        first_name: s.first_name,
+        last_name: s.last_name,
+        community_name: s.community_name,
+        nps_score: score,
+        flagged: !!s.flagged,
+        tone,
+        created_at: s.created_at,
+      };
+    });
+
+    res.json(enriched);
+  } catch (err) {
+    logger.error({ err }, "Error loading recent activity");
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Schedule a single off-cycle round at a custom date.
+ *
+ * Distinct from POST /schedule (which is the very first round + auto-fills
+ * planned rounds per cadence). This endpoint just inserts ONE planned
+ * round at the requested date with the next available round_number.
+ *
+ * Body: { scheduled_date: ISO, label?: string }
+ * Returns: the new planned round.
+ */
+router.post("/custom", async (req, res) => {
+  try {
+    const { scheduled_date, window_days } = req.body || {};
+    if (!scheduled_date) {
+      return res.status(400).json({ error: "scheduled_date is required" });
+    }
+    const parsed = new Date(scheduled_date);
+    if (isNaN(parsed.getTime())) {
+      return res.status(400).json({ error: "Invalid scheduled_date" });
+    }
+    const validatedWindow = validateWindowDays(window_days);
+    if (validatedWindow.error) return res.status(400).json({ error: validatedWindow.error });
+
+    const last = await db.get(
+      `SELECT round_number FROM survey_rounds
+       WHERE client_id = ? AND is_test = ?
+       ORDER BY round_number DESC LIMIT 1`,
+      [req.clientId, req.isTestMode]
+    );
+    const nextNumber = (last?.round_number || 0) + 1;
+
+    const result = await db.run(
+      `INSERT INTO survey_rounds (client_id, round_number, scheduled_date, status, is_test, window_days)
+       VALUES (?, ?, ?, 'planned', ?, ?)`,
+      [req.clientId, nextNumber, parsed.toISOString(), req.isTestMode, validatedWindow.value]
+    );
+    const round = await db.get("SELECT * FROM survey_rounds WHERE id = ?", [
+      result.lastInsertRowid,
+    ]);
+    res.json(round);
+  } catch (err) {
+    logger.error({ err, clientId: req.clientId }, "Error scheduling custom round");
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Validate the per-round response window. Bounds (7..60) are product
+ * policy: < 7 days doesn't give residents enough lead time and skews
+ * NPS toward whoever happens to be on email that week; > 60 days
+ * stretches the round past the next-round cadence boundary at 4×/yr
+ * (90 days).
+ *
+ * Default: 21 days — gives weekly cadence (Day 1 launch / Day 8 / Day
+ * 15 / Day 22 close). The schema default also pins to 21; we still
+ * pass an explicit value here so partial UI updates don't accidentally
+ * leave the column unset and silently regress.
+ *
+ * Returns { value: <int> } on success, { error: <string> } on failure.
+ */
+function validateWindowDays(input) {
+  if (input == null || input === "") return { value: 21 };
+  const n = Number(input);
+  if (!Number.isInteger(n)) return { error: "window_days must be an integer" };
+  if (n < 7 || n > 60) return { error: "window_days must be between 7 and 60" };
+  return { value: n };
+}
+
+/**
+ * Pre-flight checklist data for a planned round. Powers the
+ * "Next round" hero on the Rounds page — four checks:
+ *
+ *   roster_synced_at        — most recent users.created_at|updated_at
+ *   prompt_version          — latest prompt_versions row label
+ *   prompt_approved         — whether a prompt version exists at all
+ *                             (no per-version approval flag yet — defaults
+ *                             true when there's any version on file)
+ *   reminders_set           — true once a round is in 'planned' status
+ *                             (admin_reminders are auto-scheduled on insert)
+ *   communities_missing_contacts — communities that don't have a manager
+ *                             name or any active users assigned
+ */
+router.get("/:id/preflight", async (req, res) => {
+  try {
+    const roundId = Number(req.params.id);
+    const round = await db.get(
+      "SELECT * FROM survey_rounds WHERE id = ? AND client_id = ? AND is_test = ?",
+      [roundId, req.clientId, req.isTestMode]
+    );
+    if (!round) return res.status(404).json({ error: "Round not found" });
+
+    const rosterRow = await db.get(
+      `SELECT MAX(updated_at) AS latest
+       FROM users WHERE client_id = ? AND is_test = ?`,
+      [req.clientId, req.isTestMode]
+    );
+
+    // prompt_versions has columns (id, prompt_text, label, created_by,
+    // created_at) and a prompt_key TEXT added in Phase 2. Earlier rows
+    // may not have client_id either — the per-client copies are
+    // distinguishable by created_by but the table is global. We pick
+    // the most recent system_prompt version regardless of client and
+    // count "any version on file" as approved.
+    const promptRow = await db.get(
+      `SELECT label, created_at FROM prompt_versions
+       WHERE prompt_key = 'system_prompt'
+       ORDER BY created_at DESC LIMIT 1`
+    );
+
+    const memberCounts = await db.get(
+      `SELECT COUNT(*) AS invitees,
+              COUNT(DISTINCT community_id) AS communities
+       FROM users
+       WHERE client_id = ? AND is_test = ? AND active = TRUE`,
+      [req.clientId, req.isTestMode]
+    );
+
+    const missingContacts = await db.get(
+      `SELECT COUNT(*) AS count FROM communities c
+       WHERE c.client_id = ?
+         AND (c.community_manager_name IS NULL OR c.community_manager_name = '')`,
+      [req.clientId]
+    );
+
+    res.json({
+      roster_synced_at: rosterRow?.latest || null,
+      prompt_version: promptRow?.label || "default",
+      prompt_approved: !!promptRow,
+      reminders_set: round.status === "planned",
+      communities_missing_contacts: Number(missingContacts?.count || 0),
+      audience: {
+        invitees: Number(memberCounts?.invitees || 0),
+        communities: Number(memberCounts?.communities || 0),
+        window_days: 30,
+        reminder_days: [14, 7, 1],
+      },
+    });
+  } catch (err) {
+    logger.error({ err, clientId: req.clientId }, "Error loading preflight");
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Cross-round trends data (must be before /:id routes)
 router.get("/trends", async (req, res) => {
   try {
@@ -256,6 +453,7 @@ router.get("/trends", async (req, res) => {
       const npsScores = completed.filter((s) => s.nps_score != null).map((s) => s.nps_score);
       const promoters = npsScores.filter((n) => n >= 9).length;
       const detractors = npsScores.filter((n) => n <= 6).length;
+      const passives = npsScores.length - promoters - detractors;
       const npsScore =
         npsScores.length > 0
           ? Math.round(((promoters - detractors) / npsScores.length) * 100)
@@ -409,6 +607,11 @@ router.get("/trends", async (req, res) => {
         launched_at: round.launched_at,
         concluded_at: round.concluded_at,
         nps_score: npsScore,
+        // Per-cohort respondent counts — drive the Trends page
+        // "Cohort movement" stacked bars and the AI narrative copy.
+        promoters,
+        passives,
+        detractors,
         response_count: completed.length,
         invited_count: round.members_invited || 0,
         response_rate:
@@ -425,12 +628,218 @@ router.get("/trends", async (req, res) => {
       });
     }
 
+    // ── Post-pass: prev + change deltas on manager / location / size ──
+    // trendsData is in chronological order (oldest → newest). For each
+    // round after the first, look at the immediately-previous round and
+    // attach `prev` (their NPS that round) and `change` (this round
+    // minus prev) to each manager/location/size cohort entry. Frontend
+    // already renders a change pill when these fields are present.
+    for (let i = 1; i < trendsData.length; i++) {
+      const cur = trendsData[i];
+      const prev = trendsData[i - 1];
+
+      attachPrevChange(cur.manager_performance, prev.manager_performance, "manager");
+      attachPrevChange(cur.location_performance, prev.location_performance, "location");
+      attachPrevChange(cur.size_performance, prev.size_performance, "name");
+    }
+
+    // ── Dual cohorts: communities in the same extreme cohort across
+    // ≥2 consecutive rounds ending with the latest round. Surfaces the
+    // silent-churn list (dual detractors) and the case-study list
+    // (dual promoters) on the Trends page.
+    if (trendsData.length >= 2) {
+      const latest = trendsData[trendsData.length - 1];
+      const latestCommunityData = communityDataByRound[latest.id] || [];
+      const metaByName = new Map();
+      for (const c of latestCommunityData) {
+        metaByName.set(c.community_name.trim().toLowerCase(), c);
+      }
+
+      // Build per-community history (chronological)
+      const history = new Map();
+      for (const r of trendsData) {
+        for (const c of r.community_details || []) {
+          const key = c.name;
+          if (!history.has(key)) history.set(key, []);
+          history.get(key).push({
+            round_number: r.round_number,
+            cohort: c.cohort,
+            median: c.median,
+            // Convert median (0-10) to a rough NPS-style score for display.
+            nps: c.median != null ? Math.round((c.median - 5) * 20) : null,
+            respondents: c.respondents,
+          });
+        }
+      }
+
+      const dualDetractors = [];
+      const dualPromoters = [];
+      for (const [name, hist] of history.entries()) {
+        if (hist.length < 2) continue;
+        const last = hist[hist.length - 1];
+        // Must end on the latest round to count
+        if (last.round_number !== latest.round_number) continue;
+
+        // Walk backwards while still in the same cohort
+        let consecutive = 1;
+        for (let j = hist.length - 2; j >= 0; j--) {
+          if (hist[j].cohort === last.cohort) consecutive++;
+          else break;
+        }
+        if (consecutive < 2) continue;
+        if (last.cohort !== "detractor" && last.cohort !== "promoter") continue;
+
+        const meta = metaByName.get(name.trim().toLowerCase());
+        // Compute simple linear trend across the consecutive run:
+        // 'improving'/'declining' if first vs last NPS differs by ≥10,
+        // otherwise 'flat'. For detractors, improving = NPS getting
+        // less-bad; for promoters, declining = NPS getting less-good.
+        const runStart = hist[hist.length - consecutive];
+        const runEnd = last;
+        let trend = "flat";
+        if (runStart.nps != null && runEnd.nps != null) {
+          const delta = runEnd.nps - runStart.nps;
+          if (Math.abs(delta) >= 10) trend = delta > 0 ? "improving" : "declining";
+        }
+
+        const entry = {
+          name,
+          cohort: last.cohort,
+          consecutive_rounds: consecutive,
+          latest_nps: last.nps,
+          latest_median: last.median,
+          contract_value: meta?.contract_value ? Number(meta.contract_value) : null,
+          community_manager_name: meta?.community_manager_name || null,
+          trend,
+          history: hist.slice(-Math.min(consecutive, 4)).map((h) => ({
+            round_number: h.round_number,
+            nps: h.nps,
+            median: h.median,
+          })),
+        };
+
+        if (last.cohort === "detractor") dualDetractors.push(entry);
+        else dualPromoters.push(entry);
+      }
+
+      // Detractors: longest run first, then ARR-at-risk highest first
+      dualDetractors.sort(
+        (a, b) =>
+          b.consecutive_rounds - a.consecutive_rounds ||
+          (b.contract_value || 0) - (a.contract_value || 0)
+      );
+      // Promoters: longest run first, then NPS strongest first
+      dualPromoters.sort(
+        (a, b) =>
+          b.consecutive_rounds - a.consecutive_rounds || (b.latest_nps ?? 0) - (a.latest_nps ?? 0)
+      );
+
+      latest.dual_detractors = dualDetractors;
+      latest.dual_promoters = dualPromoters;
+    }
+
     res.json({ is_paid_tier: isPaidTier, rounds: trendsData });
   } catch (err) {
     logger.error({ err }, "Error fetching trends");
     res.status(500).json({ error: err.message });
   }
 });
+
+// Helper: walk current-round entries, look up matching prev-round entry
+// by `keyField`, and attach `prev` + `change` when found. Mutates in
+// place. Used by the trends post-pass for managers, locations, sizes.
+function attachPrevChange(curList, prevList, keyField) {
+  if (!Array.isArray(curList) || !Array.isArray(prevList)) return;
+  const prevMap = new Map();
+  for (const p of prevList) {
+    if (p[keyField]) prevMap.set(p[keyField], p.nps);
+  }
+  for (const c of curList) {
+    const prevNps = prevMap.get(c[keyField]);
+    if (prevNps != null && c.nps != null) {
+      c.prev = prevNps;
+      c.change = c.nps - prevNps;
+    }
+  }
+}
+
+// Helper for the dashboard endpoint: given a roundId, return that
+// round's per-manager and per-location NPS as flat lists. Used to feed
+// `attachPrevChange` so the current round's manager/location entries
+// pick up `prev` + `change` for the change pill.
+async function computeRoundManagerLocationPerf(roundId, clientId, isTestMode) {
+  // Pull completed sessions with their NPS + community + location.
+  const sessions = await db.all(
+    `SELECT s.nps_score,
+            COALESCE(sc.community_name, s.community_name) as community_name,
+            COALESCE(loc.name, s.management_company) as location_name
+       FROM sessions s
+       LEFT JOIN communities sc ON sc.id = s.community_id
+       LEFT JOIN locations loc ON loc.id = sc.location_id
+       WHERE s.round_id = ? AND s.client_id = ? AND s.is_mock IS NOT TRUE
+         AND s.is_test = ? AND s.completed = TRUE AND s.nps_score IS NOT NULL`,
+    [roundId, clientId, isTestMode]
+  );
+  if (sessions.length === 0) return null;
+
+  // Prefer round_community_snapshots for the manager mapping (matches
+  // how the current round's analytics resolves manager names too).
+  const hasSnap = await db.get(
+    "SELECT 1 FROM round_community_snapshots WHERE round_id = ? LIMIT 1",
+    [roundId]
+  );
+  const communityRows = hasSnap
+    ? await db.all(
+        `SELECT community_name, community_manager_name
+           FROM round_community_snapshots WHERE round_id = ? AND status = 'active'`,
+        [roundId]
+      )
+    : await db.all(
+        `SELECT community_name, community_manager_name
+           FROM communities WHERE client_id = ? AND status = 'active'`,
+        [clientId]
+      );
+
+  const mgrByCommunity = new Map();
+  for (const c of communityRows) {
+    if (c.community_name && c.community_manager_name) {
+      mgrByCommunity.set(c.community_name.trim().toLowerCase(), c.community_manager_name);
+    }
+  }
+
+  const managerScores = {};
+  const locationScores = {};
+  for (const s of sessions) {
+    if (s.community_name) {
+      const mgr = mgrByCommunity.get(s.community_name.trim().toLowerCase());
+      if (mgr) {
+        if (!managerScores[mgr]) managerScores[mgr] = [];
+        managerScores[mgr].push(s.nps_score);
+      }
+    }
+    if (s.location_name) {
+      if (!locationScores[s.location_name]) locationScores[s.location_name] = [];
+      locationScores[s.location_name].push(s.nps_score);
+    }
+  }
+
+  const toNps = (scores) => {
+    const p = scores.filter((n) => n >= 9).length;
+    const d = scores.filter((n) => n <= 6).length;
+    return scores.length > 0 ? Math.round(((p - d) / scores.length) * 100) : null;
+  };
+
+  return {
+    managers: Object.entries(managerScores).map(([manager, scores]) => ({
+      manager,
+      nps: toNps(scores),
+    })),
+    locations: Object.entries(locationScores).map(([location, scores]) => ({
+      location,
+      nps: toNps(scores),
+    })),
+  };
+}
 
 // Round dashboard — single endpoint for all round data
 router.get("/:id/dashboard", async (req, res) => {
@@ -571,10 +980,34 @@ router.get("/:id/dashboard", async (req, res) => {
 
     const communityCohorts = [];
     for (const [name, scores] of Object.entries(communities)) {
-      scores.sort((a, b) => a - b);
-      const median = scores[Math.floor(scores.length / 2)];
-      const cohort = median >= 9 ? "promoter" : median >= 7 ? "passive" : "detractor";
-      communityCohorts.push({ name, median, cohort, respondents: scores.length });
+      // Filter nulls before computing aggregates — sessions without an
+      // NPS score shouldn't pollute the cohort math.
+      const valid = scores.filter((n) => n != null);
+      const sorted = [...valid].sort((a, b) => a - b);
+      const median = sorted.length > 0 ? sorted[Math.floor(sorted.length / 2)] : null;
+      const cohort =
+        median == null
+          ? "passive"
+          : median >= 9
+            ? "promoter"
+            : median >= 7
+              ? "passive"
+              : "detractor";
+      const promoters = valid.filter((n) => n >= 9).length;
+      const detractors = valid.filter((n) => n <= 6).length;
+      const passives = valid.length - promoters - detractors;
+      const nps =
+        valid.length > 0 ? Math.round(((promoters - detractors) / valid.length) * 100) : null;
+      communityCohorts.push({
+        name,
+        median,
+        cohort,
+        respondents: valid.length,
+        nps,
+        promoters,
+        passives,
+        detractors,
+      });
     }
 
     // Community analytics for paid tiers
@@ -913,11 +1346,101 @@ router.get("/:id/dashboard", async (req, res) => {
     // Insights (concluded rounds only)
     const insights = round.insights_json || null;
 
+    // Recommended actions + their logged-action status. The Round
+    // Results page uses this to show "of the 3 AI-recommended actions,
+    // 1 is in progress, 1 hasn't been logged yet". Without this view
+    // there's no visual link between a round's AI suggestions and the
+    // Actions screen — operators had to navigate over and remember
+    // which round each pick came from.
+    //
+    // Matching: actions.theme === recommended_action.action (the full
+    // recommendation text). The /api/admin/actions/brief endpoint uses
+    // the same convention, so logging from either surface stays in
+    // sync.
+    let recommendedActionsStatus = [];
+    if (insights?.recommended_actions && Array.isArray(insights.recommended_actions)) {
+      const recs = insights.recommended_actions;
+      const themes = recs.map((r) => r.action || r.theme).filter(Boolean);
+      const loggedActions =
+        themes.length > 0
+          ? await db.all(
+              "SELECT id, theme, status FROM actions WHERE client_id = ? AND theme = ANY($2::text[])",
+              [req.clientId, themes]
+            )
+          : [];
+      const loggedByTheme = new Map(loggedActions.map((a) => [a.theme, a]));
+
+      // Accept/reject decisions for this round's picks. Joined here so
+      // the frontend can show the right UI state per pick without a
+      // second roundtrip.
+      const decisions = await db.all(
+        `SELECT theme, decision, decided_at FROM recommendation_decisions
+         WHERE round_id = ? AND client_id = ?`,
+        [roundId, req.clientId]
+      );
+      const decisionByTheme = new Map(decisions.map((d) => [d.theme, d]));
+
+      recommendedActionsStatus = recs.map((r, i) => {
+        const theme = r.action || r.theme;
+        const logged = theme ? loggedByTheme.get(theme) : null;
+        const decision = theme ? decisionByTheme.get(theme) : null;
+        return {
+          rank: i + 1,
+          action: theme || `Pick ${i + 1}`,
+          priority: r.priority || "medium",
+          impact: r.impact || null,
+          rationale: r.rationale || null,
+          // Surfaces drive the NPS-lift projection on Round Results
+          // and the "N mentions · M communities · NPS X when raised"
+          // metric line on Home. Older insights generated before
+          // these prompts shipped won't carry them; the frontend
+          // handles null gracefully.
+          affected_count: typeof r.affected_count === "number" ? r.affected_count : null,
+          affected_detractor_count:
+            typeof r.affected_detractor_count === "number" ? r.affected_detractor_count : null,
+          mentions: typeof r.mentions === "number" ? r.mentions : null,
+          community_count: typeof r.community_count === "number" ? r.community_count : null,
+          nps_when_raised: typeof r.nps_when_raised === "number" ? r.nps_when_raised : null,
+          logged_action_id: logged?.id || null,
+          logged_action_status: logged?.status || null,
+          decision: decision?.decision || null,
+          decided_at: decision?.decided_at || null,
+        };
+      });
+    }
+
     // Interview summary (customer's stated goals)
     const interviewResult = await db.get(
       "SELECT interview_summary FROM admin_interviews WHERE client_id = ? AND status = 'completed' ORDER BY completed_at DESC LIMIT 1",
       [req.clientId]
     );
+
+    // ── prev/change for manager + location performance ────────────────
+    // Only meaningful for concluded rounds. Find the immediately-prior
+    // concluded round, compute its manager and location NPS scores,
+    // and merge `prev` + `change` into the current round's analytics
+    // arrays. The frontend already renders change pills when these
+    // fields are present (TrendsView.jsx ManagerLocationDeltasCard).
+    if (round.status === "concluded" && communityAnalytics) {
+      const prevRound = await db.get(
+        `SELECT id FROM survey_rounds
+         WHERE client_id = ? AND is_test = ? AND status = 'concluded'
+           AND round_number < ?
+         ORDER BY round_number DESC LIMIT 1`,
+        [req.clientId, req.isTestMode, round.round_number]
+      );
+      if (prevRound) {
+        const prevPerf = await computeRoundManagerLocationPerf(
+          prevRound.id,
+          req.clientId,
+          req.isTestMode
+        );
+        if (prevPerf) {
+          attachPrevChange(communityAnalytics.manager_performance, prevPerf.managers, "manager");
+          attachPrevChange(communityAnalytics.location_performance, prevPerf.locations, "location");
+        }
+      }
+    }
 
     res.json({
       round: {
@@ -955,6 +1478,7 @@ router.get("/:id/dashboard", async (req, res) => {
       alerts,
       word_frequencies: wordFrequencies,
       insights,
+      recommended_actions_status: recommendedActionsStatus,
       interview_summary: interviewResult?.interview_summary || null,
       delivery,
     });
@@ -1019,7 +1543,7 @@ router.get("/:id/export", async (req, res) => {
 router.patch("/:id/reschedule", async (req, res) => {
   try {
     const roundId = Number(req.params.id);
-    const { scheduled_date } = req.body;
+    const { scheduled_date, window_days } = req.body;
 
     if (!scheduled_date) {
       return res.status(400).json({ error: "scheduled_date is required" });
@@ -1028,6 +1552,15 @@ router.patch("/:id/reschedule", async (req, res) => {
     const parsedDate = new Date(scheduled_date + "T00:00:00Z");
     if (isNaN(parsedDate.getTime())) {
       return res.status(400).json({ error: "Invalid date format" });
+    }
+
+    // window_days is optional on reschedule — undefined means "leave it".
+    // null/empty also means "leave it" so the configure modal can omit it
+    // without forcing us to default-stomp the existing per-round value.
+    const windowProvided = window_days !== undefined && window_days !== null && window_days !== "";
+    const validatedWindow = windowProvided ? validateWindowDays(window_days) : null;
+    if (validatedWindow?.error) {
+      return res.status(400).json({ error: validatedWindow.error });
     }
 
     const round = await db.get(
@@ -1039,10 +1572,17 @@ router.patch("/:id/reschedule", async (req, res) => {
       return res.status(400).json({ error: "Only planned rounds can be rescheduled" });
     }
 
-    await db.run(
-      "UPDATE survey_rounds SET scheduled_date = ?, admin_reminder_14_sent = FALSE, admin_reminder_7_sent = FALSE, admin_reminder_1_sent = FALSE WHERE id = ?",
-      [scheduled_date, roundId]
-    );
+    if (validatedWindow) {
+      await db.run(
+        "UPDATE survey_rounds SET scheduled_date = ?, window_days = ?, admin_reminder_14_sent = FALSE, admin_reminder_7_sent = FALSE, admin_reminder_1_sent = FALSE WHERE id = ?",
+        [scheduled_date, validatedWindow.value, roundId]
+      );
+    } else {
+      await db.run(
+        "UPDATE survey_rounds SET scheduled_date = ?, admin_reminder_14_sent = FALSE, admin_reminder_7_sent = FALSE, admin_reminder_1_sent = FALSE WHERE id = ?",
+        [scheduled_date, roundId]
+      );
+    }
 
     const updated = await db.get("SELECT * FROM survey_rounds WHERE id = ?", [roundId]);
     res.json(updated);
@@ -1340,10 +1880,15 @@ router.post("/:id/launch", async (req, res) => {
       });
     }
 
-    // Calculate close date (30 days from now)
+    // Calculate close date from the round's configured window. Falls
+    // back to 21 if the column is missing (defensive — the column is
+    // NOT NULL DEFAULT 21 after the add-survey-round-window-days
+    // migration runs, but legacy rounds created before the migration
+    // could in theory still hit this path on the first deploy).
+    const windowDays = Number(round.window_days) > 0 ? Number(round.window_days) : 21;
     const now = new Date();
     const closesAt = new Date(now);
-    closesAt.setDate(closesAt.getDate() + 30);
+    closesAt.setDate(closesAt.getDate() + windowDays);
 
     // Update round status
     await db.run(

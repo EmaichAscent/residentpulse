@@ -19,6 +19,7 @@ import authRoutes from "./routes/auth.js";
 import signupRoutes from "./routes/signup.js";
 import superadminRoutes from "./routes/superadmin.js";
 import surveyRoundsRoutes from "./routes/surveyRounds.js";
+import actionsRoutes from "./routes/actions.js";
 import interviewRoutes from "./routes/interview.js";
 import webhookRoutes from "./routes/webhooks.js";
 import zohoWebhookRoutes from "./routes/zohoWebhooks.js";
@@ -118,6 +119,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/admin/users", userRoutes);
 app.use("/api/admin/insights", insightsRoutes);
 app.use("/api/admin/survey-rounds", surveyRoundsRoutes);
+app.use("/api/admin/actions", actionsRoutes);
 app.use("/api/admin/interview", interviewRoutes);
 
 // Survey session routes

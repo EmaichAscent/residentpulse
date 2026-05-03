@@ -1,552 +1,843 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { BrandRow, FieldLabel } from "./ClientAdminLoginPage";
 
+/**
+ * /admin/signup — full rebuild matching DESIGN/handoff/auth-spec.md.
+ *
+ * Layout (collapses to single column under 1024px):
+ *   LEFT  : sticky 360px rail — brand, pitch, 4-step progress, legal
+ *   RIGHT : scrollable main (max 920px centered):
+ *             01 · Choose your plan (6 tiles, 3-col grid)
+ *             02 · Company information (2-col form)
+ *             03 · Create your admin account (2-col form)
+ *             — selected plan summary card —
+ *             [ Create my workspace → ] + legal microcopy
+ *
+ * Flow: POST /api/signup/register with the full body. Free plan →
+ * email verification screen. Paid plan → redirect to the Zoho
+ * checkout URL the endpoint returns. The /register endpoint already
+ * handles both cases — only the page presentation changed.
+ *
+ * New field per Mike's directive: # of communities you manage —
+ * optional bucket dropdown that persists to clients.community_count_estimate.
+ */
 export default function SignUpPage() {
+  const navigate = useNavigate();
+
   const [plans, setPlans] = useState([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
   const [selectedPlanId, setSelectedPlanId] = useState(null);
 
-  // Company fields
+  // Company info
   const [companyName, setCompanyName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
   const [addressLine2, setAddressLine2] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [zip, setZip] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
+  const [communityCountEstimate, setCommunityCountEstimate] = useState("");
 
-  // Admin fields
-  const [adminFirstName, setAdminFirstName] = useState("");
-  const [adminLastName, setAdminLastName] = useState("");
+  // Admin account
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     fetch("/api/signup/plans")
-      .then((res) => res.json())
-      .then((data) => {
-        setPlans(data);
-        // Auto-select free plan
-        const free = data.find((p) => p.name === "free");
+      .then((res) => (res.ok ? res.json() : []))
+      .then((list) => {
+        setPlans(Array.isArray(list) ? list : []);
+        // Default-select the Free plan per the spec.
+        const free = (Array.isArray(list) ? list : []).find((p) => p.name === "free");
         if (free) setSelectedPlanId(free.id);
       })
-      .catch(() => {});
+      .catch(() => setPlans([]))
+      .finally(() => setLoadingPlans(false));
   }, []);
 
   const selectedPlan = plans.find((p) => p.id === selectedPlanId);
-  const isPaidPlan = selectedPlan && selectedPlan.price_cents > 0;
-
-  const formatPrice = (cents) => {
-    if (!cents || cents === 0) return null;
-    return `$${(cents / 100).toLocaleString()}`;
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
+    // Client-side validation. Server re-validates so this is just UX.
     if (!selectedPlanId) {
-      setError("Please select a plan.");
+      setError("Pick a plan above.");
       return;
     }
-
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
       return;
     }
-
+    if (!/\d/.test(password) || !/[!@#$%^&*(),.?":{}|<>_\-+=[\]\\;'/`~]/.test(password)) {
+      setError("Password must include a number and a symbol.");
+      return;
+    }
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError("Passwords don't match.");
       return;
     }
 
-    setLoading(true);
-
+    setSubmitting(true);
     try {
       const res = await fetch("/api/signup/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          company_name: companyName,
-          address_line1: addressLine1,
-          address_line2: addressLine2,
-          city,
-          state,
-          zip,
-          phone_number: phoneNumber,
-          admin_first_name: adminFirstName,
-          admin_last_name: adminLastName,
-          admin_email: adminEmail,
+          company_name: companyName.trim(),
+          address_line1: addressLine1.trim(),
+          address_line2: addressLine2.trim() || null,
+          city: city.trim(),
+          state: state.trim().toUpperCase(),
+          zip: zip.trim(),
+          phone_number: phoneNumber.trim(),
+          admin_first_name: firstName.trim() || null,
+          admin_last_name: lastName.trim() || null,
+          admin_email: adminEmail.trim().toLowerCase(),
           password,
           plan_id: selectedPlanId,
+          community_count_estimate: communityCountEstimate || null,
         }),
       });
-
-      const data = await res.json();
-
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || "Something went wrong");
+        setError(data.error || "Something went wrong. Please try again.");
+        return;
       }
 
-      // Paid plan: redirect to Zoho checkout
+      // Paid plan: redirect to Zoho checkout. The /register endpoint
+      // already creates the checkout session and returns the URL.
       if (data.requires_payment && data.checkout_url) {
         window.location.href = data.checkout_url;
         return;
       }
 
-      // Free plan: show verification email screen
+      // Free plan: show success screen.
       setSubmitted(true);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Network error. Please try again.");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   if (submitted) {
-    return (
-      <div className="min-h-screen relative">
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: "url('/hero-community.jpg')" }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-br from-gray-900/85 via-gray-900/75 to-gray-800/80" />
-        </div>
-        <div className="relative flex flex-col items-center justify-center min-h-screen px-4">
-          <div className="max-w-md w-full">
-            <div className="text-center mb-8">
-              <h1 className="text-4xl font-extrabold text-white tracking-tight mb-2">
-                ResidentPulse
-              </h1>
-              <a
-                href="https://camascent.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 text-white/70 hover:text-white/90 transition-colors"
-              >
-                <span className="text-base font-medium">Powered by</span>
-                <img src="/CAMAscent.png" alt="CAM Ascent" className="h-8 object-contain" />
-                <span className="text-base font-semibold">CAM Ascent Analytical Insights</span>
-              </a>
-            </div>
-            <div className="bg-white shadow-2xl rounded-2xl p-8">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg
-                    className="w-8 h-8 text-green-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                    />
-                  </svg>
-                </div>
-                <h2 className="text-xl font-bold text-gray-900 mb-2">Check Your Email</h2>
-                <p className="text-gray-600 mb-2">We've sent a verification link to:</p>
-                <p className="font-semibold text-gray-900 mb-4">{adminEmail}</p>
-                <p className="text-sm text-gray-500 mb-6">
-                  Click the link in the email to activate your account. The link expires in 24
-                  hours.
-                </p>
-                <Link
-                  to="/admin/login"
-                  className="block text-center text-sm hover:underline"
-                  style={{ color: "var(--cam-blue)" }}
-                >
-                  Back to login
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <SignupSuccess email={adminEmail} navigate={navigate} />;
   }
 
   return (
-    <div className="min-h-screen relative">
-      {/* Hero background image with overlay — matches login page */}
-      <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('/hero-community.jpg')" }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-900/85 via-gray-900/75 to-gray-800/80" />
+    <div
+      className="min-h-screen w-full"
+      style={{
+        backgroundColor: "var(--paper)",
+        fontFamily: "var(--font-sans)",
+        color: "var(--ink)",
+      }}
+    >
+      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[360px_1fr]">
+        <LeftRail />
+
+        <main className="w-full px-6 py-8 sm:px-10 sm:py-10 lg:px-12" style={{ maxWidth: 920 }}>
+          <div className="flex items-center justify-between mb-3">
+            <div
+              className="text-[11px] font-semibold uppercase"
+              style={{ letterSpacing: "0.12em", color: "var(--ink-3)" }}
+            >
+              Get started · free trial
+            </div>
+            <div className="text-[12.5px]" style={{ color: "var(--ink-3)" }}>
+              Already have an account?{" "}
+              <Link
+                to="/admin/login"
+                className="font-semibold"
+                style={{ color: "var(--pulse-deep)" }}
+              >
+                Log in
+              </Link>
+            </div>
+          </div>
+
+          <h1
+            className="font-normal mb-8"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 36,
+              letterSpacing: "-0.02em",
+              color: "var(--ink)",
+            }}
+          >
+            Create your workspace
+          </h1>
+          <p className="text-[14px] mb-6" style={{ color: "var(--ink-2)" }}>
+            Three quick sections — plan, company, account. We'll have you up and running in minutes.
+          </p>
+
+          <form onSubmit={handleSubmit}>
+            {/* 01 — Plans */}
+            <SectionHeading number="01" title="Choose your plan">
+              <span className="text-[11.5px]" style={{ color: "var(--ink-4)", fontWeight: 400 }}>
+                All plans include 4 survey rounds/year unless noted.
+              </span>
+            </SectionHeading>
+            {loadingPlans ? (
+              <p className="text-[13px] mb-6" style={{ color: "var(--ink-4)" }}>
+                Loading plans…
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
+                {plans.map((p) => (
+                  <PlanTile
+                    key={p.id}
+                    plan={p}
+                    selected={selectedPlanId === p.id}
+                    onSelect={() => setSelectedPlanId(p.id)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* 02 — Company */}
+            <SectionHeading number="02" title="Company information">
+              <span className="text-[11.5px]" style={{ color: "var(--ink-4)" }}>
+                This appears on surveys and invitations.
+              </span>
+            </SectionHeading>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+              <FieldLabel label="Management company name" required>
+                <input
+                  className="auth-input"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="e.g. Coastal Community Management"
+                  required
+                />
+              </FieldLabel>
+              <FieldLabel label="Phone number" required>
+                <input
+                  className="auth-input"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="(555) 123-4567"
+                  type="tel"
+                  required
+                />
+              </FieldLabel>
+            </div>
+            <FieldLabel label="Address line 1" required>
+              <input
+                className="auth-input"
+                value={addressLine1}
+                onChange={(e) => setAddressLine1(e.target.value)}
+                placeholder="100 Main Street"
+                required
+              />
+            </FieldLabel>
+            <FieldLabel label="Address line 2 (optional)">
+              <input
+                className="auth-input"
+                value={addressLine2}
+                onChange={(e) => setAddressLine2(e.target.value)}
+                placeholder="Suite, floor, etc."
+              />
+            </FieldLabel>
+            <div className="grid gap-3 mb-2 grid-cols-1 sm:grid-cols-[2fr_1fr_1fr]">
+              <FieldLabel label="City" required>
+                <input
+                  className="auth-input"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Safety Harbor"
+                  required
+                />
+              </FieldLabel>
+              <FieldLabel label="State" required>
+                <input
+                  className="auth-input"
+                  value={state}
+                  onChange={(e) => setState(e.target.value.toUpperCase().slice(0, 2))}
+                  placeholder="FL"
+                  maxLength={2}
+                  required
+                />
+              </FieldLabel>
+              <FieldLabel label="ZIP code" required>
+                <input
+                  className="auth-input"
+                  value={zip}
+                  onChange={(e) => setZip(e.target.value)}
+                  placeholder="34695"
+                  required
+                />
+              </FieldLabel>
+            </div>
+            <FieldLabel label="# of communities you manage (optional)">
+              <select
+                className="auth-select"
+                value={communityCountEstimate}
+                onChange={(e) => setCommunityCountEstimate(e.target.value)}
+              >
+                <option value="">— Select —</option>
+                <option value="1-10">1-10</option>
+                <option value="10-50">10-50</option>
+                <option value="50-100">50-100</option>
+                <option value="80-100">80-100</option>
+                <option value="100-250">100-250</option>
+                <option value="250+">250+</option>
+              </select>
+            </FieldLabel>
+
+            {/* 03 — Admin account */}
+            <SectionHeading number="03" title="Create your admin account">
+              <span className="text-[11.5px]" style={{ color: "var(--ink-4)" }}>
+                You'll be the workspace owner.
+              </span>
+            </SectionHeading>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+              <FieldLabel label="First name" required>
+                <input
+                  className="auth-input"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Mike"
+                  required
+                />
+              </FieldLabel>
+              <FieldLabel label="Last name" required>
+                <input
+                  className="auth-input"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Hardy"
+                  required
+                />
+              </FieldLabel>
+            </div>
+            <FieldLabel label="Email" required>
+              <input
+                className="auth-input"
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+                placeholder="admin@yourcompany.com"
+                type="email"
+                required
+                autoComplete="email"
+              />
+            </FieldLabel>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+              <FieldLabel label="Password" required>
+                <input
+                  className="auth-input"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Min 8 characters"
+                  type="password"
+                  required
+                  autoComplete="new-password"
+                />
+              </FieldLabel>
+              <FieldLabel label="Confirm password" required>
+                <input
+                  className="auth-input"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  type="password"
+                  required
+                  autoComplete="new-password"
+                />
+              </FieldLabel>
+            </div>
+            <p className="text-[11.5px] mb-6" style={{ color: "var(--ink-4)" }}>
+              8+ characters with a number and symbol.
+            </p>
+
+            {/* Plan summary + submit */}
+            {selectedPlan && (
+              <div
+                className="rounded-xl p-4 mb-4 flex items-center justify-between"
+                style={{
+                  backgroundColor: "var(--paper-2)",
+                  border: "1px solid var(--line)",
+                }}
+              >
+                <div>
+                  <div className="text-[12.5px]" style={{ color: "var(--ink-2)" }}>
+                    <span className="font-semibold">Selected plan:</span>{" "}
+                    {selectedPlan.display_name}{" "}
+                    <span style={{ color: "var(--ink-4)" }}>
+                      {selectedPlan.price_cents
+                        ? `· $${selectedPlan.price_cents / 100}/mo`
+                        : "· No card required"}
+                    </span>
+                  </div>
+                  <div className="text-[11.5px] mt-0.5" style={{ color: "var(--ink-3)" }}>
+                    Up to {selectedPlan.member_limit} board members ·{" "}
+                    {selectedPlan.survey_rounds_per_year} survey rounds / year
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    document
+                      .querySelector("[data-section='01']")
+                      ?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="text-[12.5px] font-semibold"
+                  style={{ color: "var(--pulse-deep)" }}
+                >
+                  Change plan
+                </button>
+              </div>
+            )}
+
+            {error && (
+              <div
+                className="mb-3 px-3 py-2 rounded-lg text-[12.5px]"
+                style={{
+                  backgroundColor: "var(--coral-tint)",
+                  color: "var(--coral)",
+                  border: "1px solid var(--coral-soft)",
+                }}
+              >
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full font-semibold rounded-lg transition disabled:opacity-50"
+              style={{
+                backgroundColor: "var(--pulse)",
+                color: "white",
+                padding: "14px 16px",
+                fontSize: 14.5,
+              }}
+            >
+              {submitting ? "Creating workspace…" : "Create my workspace →"}
+            </button>
+
+            <p className="text-center mt-4 text-[11.5px]" style={{ color: "var(--ink-4)" }}>
+              By creating an account, you agree to our{" "}
+              <a href="#" style={{ color: "var(--ink-3)", textDecoration: "underline" }}>
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a href="#" style={{ color: "var(--ink-3)", textDecoration: "underline" }}>
+                Privacy Policy
+              </a>
+              .<br />
+              <span style={{ color: "var(--ink-5)" }}>* Required field</span>
+            </p>
+          </form>
+        </main>
       </div>
 
-      <div className="relative flex flex-col items-center justify-center min-h-screen px-4 py-8">
-        <div className="max-w-3xl w-full">
-          {/* Branding */}
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-extrabold text-white tracking-tight mb-2">
-              ResidentPulse
-            </h1>
-            <a
-              href="https://camascent.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2 mb-4 text-white/70 hover:text-white/90 transition-colors"
-            >
-              <span className="text-base font-medium">Powered by</span>
-              <img src="/CAMAscent.png" alt="CAM Ascent" className="h-8 object-contain" />
-              <span className="text-base font-semibold">CAM Ascent Analytical Insights</span>
-            </a>
-            <p className="text-white/70 text-sm">Create Your Account</p>
-          </div>
+      {/* Reuse the auth-input / auth-select styles from the login page
+            via inline injection — keeps the auth pages decoupled from
+            global CSS. */}
+      <style>{`
+        .auth-input {
+          width: 100%;
+          padding: 10px 12px;
+          font-size: 13.5px;
+          color: var(--ink);
+          background: white;
+          border: 1px solid var(--line-2);
+          border-radius: 8px;
+          outline: none;
+          transition: border-color 120ms, box-shadow 120ms;
+        }
+        .auth-input:focus {
+          border-color: var(--pulse);
+          box-shadow: 0 0 0 3px rgba(31,165,113,0.15);
+        }
+        .auth-select {
+          width: 100%;
+          padding: 10px 12px;
+          font-size: 13.5px;
+          color: var(--ink);
+          background: white;
+          border: 1px solid var(--line-2);
+          border-radius: 8px;
+          outline: none;
+          cursor: pointer;
+        }
+        .auth-select:focus {
+          border-color: var(--pulse);
+          box-shadow: 0 0 0 3px rgba(31,165,113,0.15);
+        }
+      `}</style>
+    </div>
+  );
+}
 
-          {/* Form Card */}
-          <div className="bg-white shadow-2xl rounded-2xl p-8">
-            <form onSubmit={handleSubmit}>
-              {/* Section 1: Choose Plan */}
-              <div className="mb-8">
-                <h2 className="text-lg font-bold text-gray-900 mb-4">Choose Your Plan</h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {plans.map((plan) => {
-                    const isFree = plan.name === "free";
-                    const price = formatPrice(plan.price_cents);
-                    const isSelected = selectedPlanId === plan.id;
-                    return (
-                      <button
-                        key={plan.id}
-                        type="button"
-                        onClick={() => setSelectedPlanId(plan.id)}
-                        className={`relative p-4 rounded-xl border-2 text-left transition ${
-                          isSelected
-                            ? "border-blue-500 bg-blue-50"
-                            : "border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        {isSelected && (
-                          <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                            <svg
-                              className="w-3 h-3 text-white"
-                              fill="currentColor"
-                              viewBox="0 0 20 20"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                          </div>
-                        )}
-                        <p className="font-bold text-gray-900">{plan.display_name}</p>
-                        <p className="text-sm text-gray-600 mt-1">
-                          Up to {plan.member_limit.toLocaleString()} board members
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {plan.survey_rounds_per_year} survey rounds/year
-                        </p>
-                        {isFree ? (
-                          <p
-                            className="text-xs font-semibold mt-2"
-                            style={{ color: "var(--cam-green)" }}
-                          >
-                            Free Forever
-                          </p>
-                        ) : (
-                          <p
-                            className="text-sm font-bold mt-2"
-                            style={{ color: "var(--cam-blue)" }}
-                          >
-                            {price}
-                            <span className="text-xs font-normal text-gray-500">/mo</span>
-                          </p>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+// ──────────────────────────────────────────────────────────────────────
+// Left rail — sticky pitch + steps
+// ──────────────────────────────────────────────────────────────────────
 
-              {/* Section 2: Company Information */}
-              <div className="mb-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-3">Company Information</h2>
+function LeftRail() {
+  return (
+    <aside
+      className="flex flex-col px-6 py-8 sm:px-10 sm:py-10 lg:sticky lg:top-0 lg:h-screen"
+      style={{
+        borderRight: "1px solid var(--line)",
+        backgroundColor: "var(--paper)",
+      }}
+    >
+      <BrandRow />
 
-                <div className="grid grid-cols-2 gap-3 mb-2.5">
-                  <div>
-                    <label
-                      htmlFor="companyName"
-                      className="block text-xs font-medium text-gray-700 mb-0.5"
-                    >
-                      Management Company Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="companyName"
-                      type="text"
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      className="input-field text-sm py-1.5"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="phoneNumber"
-                      className="block text-xs font-medium text-gray-700 mb-0.5"
-                    >
-                      Phone Number <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="phoneNumber"
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      className="input-field text-sm py-1.5"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-2.5">
-                  <div>
-                    <label
-                      htmlFor="addressLine1"
-                      className="block text-xs font-medium text-gray-700 mb-0.5"
-                    >
-                      Address Line 1 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="addressLine1"
-                      type="text"
-                      value={addressLine1}
-                      onChange={(e) => setAddressLine1(e.target.value)}
-                      className="input-field text-sm py-1.5"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="addressLine2"
-                      className="block text-xs font-medium text-gray-700 mb-0.5"
-                    >
-                      Address Line 2 <span className="text-gray-400">(optional)</span>
-                    </label>
-                    <input
-                      id="addressLine2"
-                      type="text"
-                      value={addressLine2}
-                      onChange={(e) => setAddressLine2(e.target.value)}
-                      className="input-field text-sm py-1.5"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label
-                      htmlFor="city"
-                      className="block text-xs font-medium text-gray-700 mb-0.5"
-                    >
-                      City <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="city"
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      className="input-field text-sm py-1.5"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="state"
-                      className="block text-xs font-medium text-gray-700 mb-0.5"
-                    >
-                      State <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="state"
-                      type="text"
-                      value={state}
-                      onChange={(e) => setState(e.target.value)}
-                      className="input-field text-sm py-1.5"
-                      maxLength={2}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="zip" className="block text-xs font-medium text-gray-700 mb-0.5">
-                      ZIP Code <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="zip"
-                      type="text"
-                      value={zip}
-                      onChange={(e) => setZip(e.target.value)}
-                      className="input-field text-sm py-1.5"
-                      maxLength={10}
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 3: Admin Account */}
-              <div className="mb-5">
-                <h2 className="text-lg font-bold text-gray-900 mb-3">Admin Account</h2>
-
-                <div className="grid grid-cols-2 gap-3 mb-2.5">
-                  <div>
-                    <label
-                      htmlFor="adminFirstName"
-                      className="block text-xs font-medium text-gray-700 mb-0.5"
-                    >
-                      First Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="adminFirstName"
-                      type="text"
-                      value={adminFirstName}
-                      onChange={(e) => setAdminFirstName(e.target.value)}
-                      className="input-field text-sm py-1.5"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="adminLastName"
-                      className="block text-xs font-medium text-gray-700 mb-0.5"
-                    >
-                      Last Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="adminLastName"
-                      type="text"
-                      value={adminLastName}
-                      onChange={(e) => setAdminLastName(e.target.value)}
-                      className="input-field text-sm py-1.5"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="mb-2.5">
-                  <label
-                    htmlFor="adminEmail"
-                    className="block text-xs font-medium text-gray-700 mb-0.5"
-                  >
-                    Email <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="adminEmail"
-                    type="email"
-                    value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
-                    className="input-field text-sm py-1.5"
-                    placeholder="admin@yourcompany.com"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label
-                      htmlFor="password"
-                      className="block text-xs font-medium text-gray-700 mb-0.5"
-                    >
-                      Password <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="input-field text-sm py-1.5"
-                      placeholder="Min 8 characters"
-                      required
-                      minLength={8}
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="confirmPassword"
-                      className="block text-xs font-medium text-gray-700 mb-0.5"
-                    >
-                      Confirm Password <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="confirmPassword"
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="input-field text-sm py-1.5"
-                      placeholder="••••••••"
-                      required
-                      minLength={8}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-xs text-gray-400 mb-3">
-                <span className="text-red-500">*</span> Required fields
-              </p>
-
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                  <p className="text-sm text-red-600">{error}</p>
-                </div>
-              )}
-
-              <button type="submit" disabled={loading} className="w-full btn-primary">
-                {loading
-                  ? isPaidPlan
-                    ? "Redirecting to Payment..."
-                    : "Creating Account..."
-                  : isPaidPlan
-                    ? "Continue to Payment"
-                    : "Create Account"}
-              </button>
-
-              {isPaidPlan && (
-                <p className="text-xs text-gray-500 text-center mt-2">
-                  You'll be redirected to our secure payment partner to complete your subscription.
-                </p>
-              )}
-
-              <div className="text-center mt-4">
-                <Link
-                  to="/admin/login"
-                  className="text-sm hover:underline"
-                  style={{ color: "var(--cam-blue)" }}
-                >
-                  Already have an account? Log in
-                </Link>
-              </div>
-
-              <p className="text-xs text-gray-400 text-center mt-4">
-                By creating an account, you agree to our{" "}
-                <a
-                  href="/legal/terms-of-service.html"
-                  target="_blank"
-                  className="underline hover:text-gray-600"
-                >
-                  Terms of Service
-                </a>{" "}
-                and{" "}
-                <a
-                  href="/legal/privacy-policy.html"
-                  target="_blank"
-                  className="underline hover:text-gray-600"
-                >
-                  Privacy Policy
-                </a>
-                .
-              </p>
-            </form>
-          </div>
+      <div className="flex-1">
+        <div
+          className="text-[11px] font-semibold uppercase mb-3"
+          style={{ letterSpacing: "0.12em", color: "var(--ink-3)" }}
+        >
+          Built for HOA management
         </div>
+        <h1
+          className="font-normal mb-3"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 32,
+            lineHeight: 1.15,
+            letterSpacing: "-0.02em",
+            color: "var(--ink)",
+          }}
+        >
+          Start with{" "}
+          <em style={{ color: "var(--pulse-deep)", fontStyle: "italic" }}>Free Forever</em>. Upgrade
+          when you grow.
+        </h1>
+        <p
+          className="mb-8"
+          style={{
+            fontSize: 13.5,
+            lineHeight: 1.55,
+            color: "var(--ink-2)",
+          }}
+        >
+          No credit card required. Set up in under 5 minutes — invite your first board members
+          today.
+        </p>
+
+        <ol className="flex flex-col gap-3.5 relative">
+          {[
+            {
+              n: 1,
+              title: "Choose a plan",
+              sub: "Right-size for your portfolio.",
+              state: "active",
+            },
+            {
+              n: 2,
+              title: "Tell us about your company",
+              sub: "Used on surveys & invitations.",
+              state: "active",
+            },
+            {
+              n: 3,
+              title: "Create your admin account",
+              sub: "You'll be the workspace owner.",
+              state: "active",
+            },
+            { n: 4, title: "Confirm & sign in", sub: "Land on your dashboard.", state: "pending" },
+          ].map((s, i, arr) => (
+            <Step key={s.n} step={s} isLast={i === arr.length - 1} />
+          ))}
+        </ol>
+      </div>
+
+      <div className="text-[11px]" style={{ color: "var(--ink-4)" }}>
+        Already have an account?{" "}
+        <Link to="/admin/login" className="font-semibold" style={{ color: "var(--pulse-deep)" }}>
+          Log in
+        </Link>
+        <div className="flex gap-3 mt-2">
+          <a href="#" style={{ color: "var(--ink-4)" }}>
+            Privacy
+          </a>
+          <a href="#" style={{ color: "var(--ink-4)" }}>
+            Terms
+          </a>
+          <a href="#" style={{ color: "var(--ink-4)" }}>
+            Status
+          </a>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function Step({ step, isLast }) {
+  const fill =
+    step.state === "active" ? "var(--ink)" : step.state === "done" ? "var(--pulse)" : "transparent";
+  const border = step.state === "pending" ? "1.5px solid var(--line-2)" : "none";
+  const color = step.state === "pending" ? "var(--ink-4)" : "white";
+  return (
+    <li className="flex gap-3 items-start relative">
+      <div
+        className="rounded-full flex items-center justify-center font-semibold flex-shrink-0"
+        style={{
+          width: 24,
+          height: 24,
+          backgroundColor: fill,
+          color,
+          fontSize: 11,
+          border,
+          zIndex: 1,
+        }}
+      >
+        {step.n}
+      </div>
+      {!isLast && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: 11,
+            top: 24,
+            bottom: -14,
+            width: 2,
+            backgroundColor: "var(--line)",
+          }}
+        />
+      )}
+      <div>
+        <div
+          className="font-semibold text-[13px]"
+          style={{ color: step.state === "pending" ? "var(--ink-3)" : "var(--ink)" }}
+        >
+          {step.title}
+        </div>
+        <div className="text-[11.5px]" style={{ color: "var(--ink-4)" }}>
+          {step.sub}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Section + plan tiles
+// ──────────────────────────────────────────────────────────────────────
+
+function SectionHeading({ number, title, children }) {
+  return (
+    <div
+      className="flex items-center justify-between mb-4 mt-2"
+      data-section={number}
+      style={{ borderTop: "1px solid var(--line)", paddingTop: 22 }}
+    >
+      <h2 className="flex items-center gap-3">
+        <span
+          className="font-mono font-semibold"
+          style={{ fontSize: 12, color: "var(--ink-4)", letterSpacing: "0.04em" }}
+        >
+          {number}
+        </span>
+        <span
+          className="font-semibold"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 22,
+            color: "var(--ink)",
+            letterSpacing: "-0.01em",
+          }}
+        >
+          {title}
+        </span>
+      </h2>
+      {children}
+    </div>
+  );
+}
+
+function PlanTile({ plan, selected, onSelect }) {
+  const isFree = plan.name === "free";
+  const isMostPopular = plan.name === "growth-1000";
+  const badge = isFree
+    ? { label: "START HERE", bg: "var(--pulse)", color: "white" }
+    : isMostPopular
+      ? { label: "MOST POPULAR", bg: "var(--ink)", color: "white" }
+      : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="rounded-2xl bg-white text-left transition relative"
+      style={{
+        padding: "16px 18px",
+        border: selected ? "2px solid var(--pulse)" : "1px solid var(--line)",
+        backgroundColor: selected ? "var(--pulse-tint)" : "white",
+        boxShadow: selected ? "0 0 0 1px var(--pulse)" : "none",
+        cursor: "pointer",
+      }}
+    >
+      {badge && (
+        <span
+          className="absolute font-bold uppercase"
+          style={{
+            top: -10,
+            right: 14,
+            backgroundColor: badge.bg,
+            color: badge.color,
+            fontSize: 9.5,
+            letterSpacing: "0.08em",
+            padding: "3px 8px",
+            borderRadius: 4,
+          }}
+        >
+          {badge.label}
+        </span>
+      )}
+      <div className="flex items-start justify-between mb-1">
+        <span
+          className="font-semibold"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 18,
+            color: "var(--ink)",
+            letterSpacing: "-0.005em",
+          }}
+        >
+          {plan.display_name}
+        </span>
+        <span
+          className="rounded-full flex items-center justify-center flex-shrink-0"
+          style={{
+            width: 18,
+            height: 18,
+            border: selected ? "none" : "1.5px solid var(--line-2)",
+            backgroundColor: selected ? "var(--pulse)" : "transparent",
+          }}
+        >
+          {selected && (
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          )}
+        </span>
+      </div>
+      <div className="text-[11.5px] mb-2" style={{ color: "var(--ink-3)", lineHeight: 1.45 }}>
+        Up to <strong style={{ color: "var(--ink-2)" }}>{plan.member_limit}</strong> board members ·{" "}
+        <strong style={{ color: "var(--ink-2)" }}>
+          {plan.survey_rounds_per_year} survey rounds
+        </strong>{" "}
+        / year
+      </div>
+      <div>
+        {plan.price_cents != null && plan.price_cents > 0 ? (
+          <span style={{ color: "var(--ink)" }}>
+            <span
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: 22,
+                fontWeight: 500,
+              }}
+            >
+              ${plan.price_cents / 100}
+            </span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--ink-3)" }}>
+              {" "}
+              /mo
+            </span>
+          </span>
+        ) : (
+          <span className="font-semibold text-[12px]" style={{ color: "var(--pulse-deep)" }}>
+            Free Forever
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Free-plan success screen
+// ──────────────────────────────────────────────────────────────────────
+
+function SignupSuccess({ email, navigate }) {
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center px-6"
+      style={{ backgroundColor: "var(--paper)", fontFamily: "var(--font-sans)" }}
+    >
+      <div
+        className="rounded-2xl bg-white p-10 max-w-md w-full text-center"
+        style={{ boxShadow: "var(--shadow-lg)", border: "1px solid var(--line)" }}
+      >
+        <div
+          className="rounded-full mx-auto mb-4 flex items-center justify-center"
+          style={{
+            width: 56,
+            height: 56,
+            backgroundColor: "var(--pulse-tint)",
+            color: "var(--pulse-deep)",
+          }}
+        >
+          <svg
+            width="28"
+            height="28"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+            <polyline points="22,6 12,13 2,6" />
+          </svg>
+        </div>
+        <h1
+          className="font-medium mb-2"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 26,
+            color: "var(--ink)",
+            letterSpacing: "-0.015em",
+          }}
+        >
+          Check your inbox
+        </h1>
+        <p className="text-[13.5px] mb-5" style={{ color: "var(--ink-3)" }}>
+          We sent a verification link to <strong style={{ color: "var(--ink)" }}>{email}</strong>.
+          Click the link to confirm your email and finish setting up your workspace.
+        </p>
+        <button
+          onClick={() => navigate("/admin/login")}
+          className="w-full font-semibold rounded-lg transition"
+          style={{
+            backgroundColor: "var(--pulse)",
+            color: "white",
+            padding: "12px 16px",
+            fontSize: 14,
+          }}
+        >
+          Back to sign in
+        </button>
+        <p className="text-[11.5px] mt-4" style={{ color: "var(--ink-4)" }}>
+          Didn't get it? Check spam, or contact support@residentpulse.ai.
+        </p>
       </div>
     </div>
   );

@@ -4,6 +4,36 @@ import logger from "./logger.js";
 import { createMessage } from "./anthropicClient.js";
 const MODEL = "claude-sonnet-4-5-20250929";
 
+/**
+ * Defensive normalizer for topic_themes output. The prompt asks for
+ * 1–3 word labels but Claude sometimes returns full sentences when
+ * the input feedback is verbose. This squeezes any long theme into a
+ * short label for the bar chart while preserving the original prose
+ * in `evidence` (for the expandable detail panel below the row).
+ *
+ *   theme = "Strong community managers are a decisive ..."
+ *     → theme = "Strong community" (or first 3 words, max 24 chars)
+ *     → evidence = the original sentence (preserved)
+ *
+ * If `evidence` already exists, the original prose isn't overwritten.
+ */
+function compactizeTheme(t) {
+  if (!t || typeof t !== "object") return t;
+  const original = typeof t.theme === "string" ? t.theme.trim() : "";
+  if (!original || original.length <= 24) return t;
+  const words = original.replace(/\s+/g, " ").split(" ");
+  const out = words.slice(0, 3).join(" ");
+  const finalShort = out.length > 24 ? `${out.slice(0, 23)}…` : `${out}…`;
+  return {
+    ...t,
+    theme: finalShort,
+    // Preserve the long phrasing in evidence so the row's expand
+    // panel still has the full context. Don't overwrite if the AI
+    // already produced a separate evidence field.
+    evidence: t.evidence || original,
+  };
+}
+
 /** Resilient JSON parser — handles truncated or wrapped JSON from LLM responses */
 function safeParseJSON(text, fallback) {
   // Try direct parse
@@ -294,15 +324,27 @@ Community Patterns: ${JSON.stringify(cs.community_patterns || [])}`
   )
   .join("\n\n")}`;
 
-    // Run the 3 analysis passes on the combined chunk summaries
-    const [findings, actions, callouts] = await Promise.all([
+    // Run the 4 analysis passes on the combined chunk summaries.
+    // topic_themes is a separate pass (rather than rolled into synthesis)
+    // because its output schema is fundamentally different — it's
+    // weighted topic frequencies for the dashboard's "What boards are
+    // talking about" section, not narrative findings.
+    const [findings, actions, callouts, themes] = await Promise.all([
       runAnalysisPass(synthesisContext, "key_findings"),
       runAnalysisPass(synthesisContext, "recommended_actions"),
       runAnalysisPass(synthesisContext, "cam_ascent_callouts"),
+      runAnalysisPass(synthesisContext, "topic_themes"),
     ]);
 
     // Final synthesis
     synthesis = await runSynthesis(synthesisContext, findings, actions, callouts);
+    // topic_themes isn't part of synthesis — it's a structured side
+    // output. Stash it onto the synthesis for the storage step below.
+    // Defensive truncation in case the model produced long phrases:
+    // keep the original full text in `evidence` for the expand panel
+    // and short-form in `theme` for the bar-chart label.
+    synthesis.promoter_themes = (themes?.promoter_themes || []).map(compactizeTheme);
+    synthesis.detractor_themes = (themes?.detractor_themes || []).map(compactizeTheme);
   }
 
   // Store insights
@@ -311,6 +353,8 @@ Community Patterns: ${JSON.stringify(cs.community_patterns || [])}`
     recommended_actions: synthesis.recommended_actions,
     cam_ascent_callouts: synthesis.cam_ascent_callouts,
     executive_summary: synthesis.executive_summary,
+    promoter_themes: synthesis.promoter_themes || [],
+    detractor_themes: synthesis.detractor_themes || [],
     nps_score: npsScore,
     response_count: sessions.length,
     chunks_analyzed: chunks.length,
@@ -356,6 +400,13 @@ Return a JSON array of 3 actions, each with:
 - "priority": "high" | "medium" | "low" | "keep_doing"
 - "impact": Brief description of expected impact if implemented
 - "rationale": Why this action matters based on the feedback
+- "affected_count": Number of board-member sessions whose feedback informed this recommendation (count distinct respondents, not mentions). Estimate from the chunk-level positive/negative themes if exact counts aren't available.
+- "affected_detractor_count": Subset of affected_count who scored 0-6 (detractors). The dashboard uses this to project an NPS lift estimate, so be honest — it should NEVER exceed affected_count, and should generally be lower.
+- "mentions": Total times this issue was raised across all transcripts (a count of mentions, not distinct sessions — same person mentioning it twice counts as 2). If unsure, use affected_count × 1.5 as a rough estimate.
+- "community_count": Distinct communities whose board members raised this issue. Always ≤ affected_count.
+- "nps_when_raised": Average NPS score of the sessions that raised this theme. For "keep_doing" picks reinforcing promoter feedback this should be high (8-10); for high-priority detractor concerns it should be low (2-5). Range: 0-10 integer.
+
+All five counts must be integers. If a recommendation is a "keep doing" reinforcing what promoters praised, set affected_detractor_count to 0 and use affected_count for the promoter count; nps_when_raised should reflect the promoter average.
 
 Only output valid JSON array, no other text.
 
@@ -373,7 +424,56 @@ Return a JSON array of 1-2 callouts (keep it focused), each with:
 Only output valid JSON array, no other text.
 
 ${context}`,
+
+    topic_themes: `Analyze the chunk-level theme summaries below and produce two ranked lists of TOPICS that distinguish promoters from detractors. These power the "What boards are talking about" visualization on the round dashboard — bar chart with weighted bars, plus an expandable detail panel per row.
+
+Look across all batches. The "positive_themes" lists in each batch are what promoters/passives praised. The "negative_themes" lists are what detractors/passives complained about. Aggregate by topic, count frequency, and produce a single ranked list for each side.
+
+CRITICAL — theme labels must be SHORT:
+  • 1 word ideal, 2 words acceptable, 3 words MAX.
+  • Hard cap: 25 characters.
+  • GOOD examples: "responsive", "communication", "vendors", "fees", "slow response", "manager turnover", "budget process".
+  • BAD examples (DO NOT do this): "Strong individual managers" (4 words), "Community manager turnover" (3 words but 26+ chars), "Systemic budget process issues" (full phrase), "Communication breakdown patterns" (paraphrase).
+  • Picture it as a column header in a table — if it doesn't fit, it's too long.
+
+If you find yourself wanting a longer phrase, split it into two themes (e.g. "manager turnover" + "continuity") rather than concatenating. The detail panel below each row is where nuance lives, not the label.
+
+Return a JSON object with this exact shape:
+{
+  "promoter_themes": [
+    {
+      "theme": "responsive",
+      "weight": 95,
+      "evidence": "47 promoter sessions cited fast manager response times across 12 communities. Most-cited example: emergency maintenance dispatched within hours.",
+      "sample_quote": "Our manager Sarah is the most responsive person I've ever worked with — same day, every time.",
+      "sample_attribution": "Aspen Park board, NPS 9"
+    }
+  ],
+  "detractor_themes": [
+    {
+      "theme": "slow response",
+      "weight": 92,
+      "evidence": "28 detractor sessions complained about days-long delays on routine maintenance and communication.",
+      "sample_quote": "We've had three pool issues this year and the response is always 'we'll look into it.' Then nothing happens.",
+      "sample_attribution": "Crystal Heights board, NPS 1"
+    }
+  ]
+}
+
+Rules:
+- Provide 5-8 themes per side (whichever side has more signal — if there's not enough material for 5 detractor themes, fewer is fine).
+- weight is 0-100. The HIGHEST-frequency theme on each side gets the highest weight (90-100). Subsequent themes scale down by relative frequency. This drives the bar fill widths on the dashboard.
+- evidence is a 1-2 sentence summary of WHY this theme ranks where it does — quantify if possible (e.g. "47 sessions across 12 communities") and reference the specific behavior. This shows in the row's expanded detail panel.
+- sample_quote is a SHORT (under 30 words) verbatim or near-verbatim quote pulled from the notable_feedback or evidence in the chunk summaries. Avoid composite paraphrasing — pick the strongest single quote.
+- sample_attribution: format as "{community name} board, NPS {score}" if you have it, or just "Anonymous, NPS {score}" if not. Pick the source for the sample_quote.
+- Sort each list by weight descending.
+- Only output valid JSON object, no preamble.
+
+${context}`,
   };
+
+  // topic_themes returns an object, not an array — use the right default.
+  const fallback = passType === "topic_themes" ? { promoter_themes: [], detractor_themes: [] } : [];
 
   const response = await createMessage({
     model: MODEL,
@@ -382,7 +482,7 @@ ${context}`,
   });
 
   const text = response.content[0].text.trim();
-  return safeParseJSON(text, []);
+  return safeParseJSON(text, fallback);
 }
 
 /**
@@ -402,7 +502,7 @@ ${context}
 Produce a final JSON object with these fields:
 1. "executive_summary": A 2-4 sentence narrative overview. Lead with something positive, then address the key concern, then the path forward. This sets the tone — balanced, not doom-and-gloom.
 2. "key_findings": 4-5 findings max (deduplicated, refined). At least 1-2 MUST be positive. Each: {"finding", "evidence", "severity"}
-3. "recommended_actions": 3 actions max (the company can only implement 1-3 changes per quarter). Include 1 "keep_doing" action. Each: {"action", "priority", "impact", "rationale"}
+3. "recommended_actions": 3 actions max (the company can only implement 1-3 changes per quarter). Include 1 "keep_doing" action. Each: {"action", "priority", "impact", "rationale", "affected_count", "affected_detractor_count", "mentions", "community_count", "nps_when_raised"}. Preserve the integer counts from the input — they drive the NPS-lift projection on the dashboard and the "N mentions · M communities · NPS X when raised" line on the Home page.
 4. "cam_ascent_callouts": 1-2 focused callouts (deduplicated, refined). Each: {"area", "opportunity", "suggested_service"}
 
 Deduplicate overlapping items. Be tight and high-impact — less is more. Only output valid JSON, no other text.`;
