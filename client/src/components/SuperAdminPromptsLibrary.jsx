@@ -21,7 +21,7 @@ import SuperAdminTestInterview from "./SuperAdminTestInterview";
  *   GET /api/superadmin/prompts/:key/blocks
  *     → { prompt_key, prompt_text, blocks, version_number, label,
  *         note, created_by, created_at }
- *   GET /api/superadmin/prompt-versions?key=:key
+ *   GET /api/superadmin/prompt/versions?key=:key
  *     → existing endpoint — returns all versions for that key
  *
  * Edit + diff modal land in PR 4. This PR is intentionally read-only
@@ -76,16 +76,32 @@ export default function SuperAdminPromptsLibrary() {
   // prompt rule fired on each AI message. Opened from the page header.
   const [testOpen, setTestOpen] = useState(false);
 
+  // Defensive JSON fetcher — when the server's SPA fallback catches an
+  // unmatched API path it returns 200 + index.html, which makes
+  // `r.ok ? r.json() : ...` fail with the cryptic "Unexpected token '<'"
+  // parser error. We check content-type first so a typo'd URL surfaces
+  // as "Endpoint not found" instead.
+  const fetchJSON = async (url) => {
+    const r = await fetch(url, { credentials: "include" });
+    const ct = r.headers.get("content-type") || "";
+    if (!r.ok) {
+      throw new Error(`${r.status} ${r.statusText} — ${url}`);
+    }
+    if (!ct.includes("application/json")) {
+      throw new Error(
+        `Expected JSON from ${url} but got ${ct || "no content-type"}. ` +
+          `The route may not exist on the server.`
+      );
+    }
+    return r.json();
+  };
+
   const reload = () => {
     setLoading(true);
     setError(null);
     Promise.all([
-      fetch(`/api/superadmin/prompts/${activeKey}/blocks`, {
-        credentials: "include",
-      }).then((r) => (r.ok ? r.json() : Promise.reject(new Error("Failed to load prompt")))),
-      fetch(`/api/superadmin/prompt-versions?key=${activeKey}`, {
-        credentials: "include",
-      }).then((r) => (r.ok ? r.json() : [])),
+      fetchJSON(`/api/superadmin/prompts/${activeKey}/blocks`),
+      fetchJSON(`/api/superadmin/prompt/versions?key=${activeKey}`).catch(() => []),
     ])
       .then(([blocksData, versionsData]) => {
         setCurrent(blocksData);
@@ -100,12 +116,8 @@ export default function SuperAdminPromptsLibrary() {
     setLoading(true);
     setError(null);
     Promise.all([
-      fetch(`/api/superadmin/prompts/${activeKey}/blocks`, {
-        credentials: "include",
-      }).then((r) => (r.ok ? r.json() : Promise.reject(new Error("Failed to load prompt")))),
-      fetch(`/api/superadmin/prompt-versions?key=${activeKey}`, {
-        credentials: "include",
-      }).then((r) => (r.ok ? r.json() : [])),
+      fetchJSON(`/api/superadmin/prompts/${activeKey}/blocks`),
+      fetchJSON(`/api/superadmin/prompt/versions?key=${activeKey}`).catch(() => []),
     ])
       .then(([blocksData, versionsData]) => {
         if (cancelled) return;
@@ -648,7 +660,7 @@ function KindPill({ kind }) {
 
 /**
  * RecentVersionsCard — last N versions of the active prompt key.
- * Uses the existing /prompt-versions endpoint which returns all
+ * Uses the existing /prompt/versions endpoint which returns all
  * versions newest-first; we cap rendering at 6.
  */
 function RecentVersionsCard({ versions, currentText, onCompare }) {
