@@ -9,12 +9,14 @@
  *     forbidden-easy-answer probes, and sensitive-topic guidance.
  *
  * Each V2 prompt is composed of labelled blocks separated by `---`. The
- * editor today renders the result as a single textarea, but the block
- * structure is preserved here so a future structured editor can parse it
- * back into kind-tagged blocks (persona / phase / rules / critical).
+ * runtime keeps using the assembled string; structured-block views are
+ * derived at the bottom of this file via parsePromptToBlocks() (no
+ * duplicated content) for the SuperAdmin Prompts Library editor.
  *
  * Source of truth for V2 content: DESIGN/design_handoff_superadmin/src/sa/sa-prompts.jsx
  */
+
+import { parsePromptToBlocks } from "./blocks.js";
 
 // ──────────────────────────────────────────────────────────────────────────
 // V1 — originals. Used by the migration script to detect unmodified rows.
@@ -1766,3 +1768,19 @@ When this is a RE-INTERVIEW (admin updating priorities between rounds):
   3. Output a DIFF: what's added, removed, changed.
   4. Preserve unchanged sections verbatim — don't paraphrase.
   5. Surface the diff to the admin for approval.`;
+
+// ──────────────────────────────────────────────────────────────────────────
+// Block exports — structured-block view of each current V2 prompt.
+//
+// Derived from the string constants above via parsePromptToBlocks() so
+// they can never drift. The runtime (chat.js / interview.js) keeps
+// using the assembled strings; these block arrays are for the
+// SuperAdmin Prompts Library editor + version diff UI.
+//
+// Round-trip stability is asserted in defaults.test.js — anything we
+// parse must format back into the exact same bytes.
+// ──────────────────────────────────────────────────────────────────────────
+
+export const V2_SYSTEM_PROMPT_BLOCKS = parsePromptToBlocks(V2_SYSTEM_PROMPT);
+export const V2_INTERVIEW_INITIAL_BLOCKS = parsePromptToBlocks(V2_INTERVIEW_INITIAL);
+export const V2_PROMPT_GENERATION_BLOCKS = parsePromptToBlocks(V2_PROMPT_GENERATION);
