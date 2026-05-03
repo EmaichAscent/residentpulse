@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   ArchiveIconButton,
   ArchiveModal,
+  ImportResultModal,
   SearchInput,
   FilterSelect,
   FieldInput,
@@ -57,6 +58,15 @@ export default function Communities() {
   const [archiveTarget, setArchiveTarget] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [view, setView] = useState("active");
+  // CSV import — 2-step flow on the server side. POST
+  // /api/admin/communities/import/preview returns parsed rows + a
+  // per-row diff of what would change (no DB writes). The user reviews,
+  // then POST /api/admin/communities/import commits with the same file.
+  const [importing, setImporting] = useState(false);
+  const [importPreview, setImportPreview] = useState(null);
+  const [importFile, setImportFile] = useState(null);
+  const [importResult, setImportResult] = useState(null);
+  const importInputRef = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -178,6 +188,64 @@ export default function Communities() {
     } catch (err) {
       alert(err.message);
     }
+  };
+
+  // CSV import — POST /preview first to get the parsed rows + diff,
+  // then the modal lets the admin review and confirm. Confirm POSTs
+  // the same file to /import which commits the writes.
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportPreview(null);
+    setImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/admin/communities/import/preview", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Preview failed");
+      setImportPreview(data);
+      setImportFile(file);
+    } catch (err) {
+      setImportResult({ error: err.message });
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  };
+
+  const handleImportConfirm = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const res = await fetch("/api/admin/communities/import", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      setImportResult(data);
+      setImportPreview(null);
+      setImportFile(null);
+      await load();
+    } catch (err) {
+      setImportResult({ error: err.message });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleImportCancel = () => {
+    setImportPreview(null);
+    setImportFile(null);
   };
 
   if (loading) {
@@ -328,16 +396,21 @@ export default function Communities() {
             Export CSV
           </a>
           <button
-            onClick={() =>
-              alert(
-                "Import: drop a CSV with community_name, manager, region/location, property_type columns."
-              )
-            }
+            onClick={() => importInputRef.current?.click()}
+            disabled={importing}
             className="btn-ghost"
             type="button"
           >
-            Import
+            {importing ? "Uploading…" : "Import"}
           </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleImportFile}
+            className="hidden"
+            aria-hidden="true"
+          />
           <button onClick={() => setAddOpen(true)} className="btn-pulse" type="button">
             + Add community
           </button>
@@ -428,6 +501,27 @@ export default function Communities() {
           subjectKind="community"
           onCancel={() => setArchiveTarget(null)}
           onConfirm={handleArchive}
+        />
+      )}
+
+      {/* CSV import preview (step 1) — shows parsed rows + per-row diff
+            so the admin can review what will change before committing. */}
+      {importPreview && (
+        <ImportPreviewModal
+          preview={importPreview}
+          busy={importing}
+          onCancel={handleImportCancel}
+          onConfirm={handleImportConfirm}
+        />
+      )}
+
+      {/* CSV import result (step 2 / error) */}
+      {importResult && (
+        <ImportResultModal
+          result={importResult}
+          subject="community"
+          sampleHint="community_name, manager, region/location, property_type"
+          onClose={() => setImportResult(null)}
         />
       )}
     </div>
@@ -959,4 +1053,211 @@ function formatMoney(n) {
   if (num >= 10_000) return `$${Math.round(num / 1000)}K`;
   if (num >= 1000) return `$${(num / 1000).toFixed(1)}K`;
   return `$${num.toLocaleString()}`;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// CSV import preview modal
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * ImportPreviewModal — review step before committing the CSV import.
+ *
+ * Server returns { matched, unmatched, errors }:
+ *   matched[]    — rows whose community_name matches an existing one
+ *                  (will UPDATE the row, member_count shown for
+ *                  context)
+ *   unmatched[]  — rows with no exact name match (will INSERT a new
+ *                  community; suggestions[] surface fuzzy matches in
+ *                  case it's a typo of an existing name)
+ *   errors[]     — CSV parse errors (bad columns, invalid types, etc.)
+ *
+ * Confirm POSTs the same file to /communities/import which commits.
+ */
+function ImportPreviewModal({ preview, busy, onCancel, onConfirm }) {
+  const matched = preview.matched || [];
+  const unmatched = preview.unmatched || [];
+  const errors = preview.errors || [];
+  const totalChanges = matched.length + unmatched.length;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(36,42,52,0.45)" }}
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: 640,
+          width: "100%",
+          padding: 24,
+          boxShadow: "var(--shadow-lg)",
+          maxHeight: "85vh",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <h3
+          className="font-medium"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 22,
+            letterSpacing: "-0.015em",
+            color: "var(--ink)",
+            marginBottom: 4,
+          }}
+        >
+          Review CSV import
+        </h3>
+        <p className="text-[13px]" style={{ color: "var(--ink-3)", marginBottom: 16 }}>
+          {totalChanges} row{totalChanges === 1 ? "" : "s"} ready to import.
+          {matched.length > 0 && (
+            <>
+              {" "}
+              <strong style={{ color: "var(--ink)" }}>{matched.length}</strong> will update existing
+              communities;
+            </>
+          )}
+          {unmatched.length > 0 && (
+            <>
+              {" "}
+              <strong style={{ color: "var(--ink)" }}>{unmatched.length}</strong> will be added as
+              new communities.
+            </>
+          )}
+        </p>
+
+        <div style={{ overflowY: "auto", flex: 1, marginBottom: 16 }}>
+          {matched.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div
+                className="text-[10.5px] font-bold uppercase mb-2"
+                style={{ letterSpacing: "0.08em", color: "var(--pulse-deep)" }}
+              >
+                Will update ({matched.length})
+              </div>
+              <div
+                className="rounded-lg overflow-hidden"
+                style={{ border: "1px solid var(--line)" }}
+              >
+                {matched.slice(0, 30).map((row, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between text-[12.5px]"
+                    style={{
+                      padding: "8px 12px",
+                      borderBottom:
+                        i === Math.min(matched.length, 30) - 1 ? "none" : "1px solid var(--line)",
+                    }}
+                  >
+                    <span style={{ color: "var(--ink)" }}>{row.matched_name}</span>
+                    <span className="text-[11.5px]" style={{ color: "var(--ink-4)" }}>
+                      {row.member_count} member{row.member_count === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                ))}
+                {matched.length > 30 && (
+                  <div
+                    className="text-[11.5px] italic text-center"
+                    style={{ padding: 8, color: "var(--ink-4)" }}
+                  >
+                    …and {matched.length - 30} more.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {unmatched.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div
+                className="text-[10.5px] font-bold uppercase mb-2"
+                style={{ letterSpacing: "0.08em", color: "var(--amber)" }}
+              >
+                Will add as new ({unmatched.length})
+              </div>
+              <div
+                className="rounded-lg overflow-hidden"
+                style={{ border: "1px solid var(--line)" }}
+              >
+                {unmatched.slice(0, 30).map((row, i) => (
+                  <div
+                    key={i}
+                    className="text-[12.5px]"
+                    style={{
+                      padding: "8px 12px",
+                      borderBottom:
+                        i === Math.min(unmatched.length, 30) - 1 ? "none" : "1px solid var(--line)",
+                    }}
+                  >
+                    <div style={{ color: "var(--ink)" }}>{row.community_name}</div>
+                    {row.suggestions?.length > 0 && (
+                      <div className="text-[11px] mt-0.5" style={{ color: "var(--ink-4)" }}>
+                        Did you mean: {row.suggestions.map((s) => s.name).join(", ")}?
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {unmatched.length > 30 && (
+                  <div
+                    className="text-[11.5px] italic text-center"
+                    style={{ padding: 8, color: "var(--ink-4)" }}
+                  >
+                    …and {unmatched.length - 30} more.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {errors.length > 0 && (
+            <div>
+              <div
+                className="text-[10.5px] font-bold uppercase mb-2"
+                style={{ letterSpacing: "0.08em", color: "var(--coral)" }}
+              >
+                Skipped — CSV errors ({errors.length})
+              </div>
+              <div
+                className="rounded-lg"
+                style={{
+                  backgroundColor: "var(--coral-tint)",
+                  border: "1px solid rgba(232,93,76,0.3)",
+                  padding: 10,
+                  maxHeight: 120,
+                  overflowY: "auto",
+                }}
+              >
+                <ul
+                  className="text-[12px]"
+                  style={{ color: "var(--coral)", listStyle: "none", paddingLeft: 0, margin: 0 }}
+                >
+                  {errors.slice(0, 20).map((e, i) => (
+                    <li key={i} className="font-mono" style={{ marginBottom: 4 }}>
+                      {typeof e === "string" ? e : (e?.message ?? JSON.stringify(e))}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2" style={{ flexShrink: 0 }}>
+          <button onClick={onCancel} disabled={busy} className="btn-ghost" type="button">
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={busy || totalChanges === 0}
+            className="btn-pulse"
+            type="button"
+          >
+            {busy ? "Importing…" : `Confirm import (${totalChanges})`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
