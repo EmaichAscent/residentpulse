@@ -133,6 +133,19 @@ async function initializeSchema() {
       ON prompt_versions (prompt_key, created_at DESC)
     `);
 
+    // SuperAdmin PR 2: extend prompt_versions for the new structured-
+    // block editor — adds blocks_jsonb (authoritative when present),
+    // note (per-version commit message), version_number (explicit
+    // version label, auto-incremented in app layer). Idempotent ALTER.
+    try {
+      const blocksMigrationPath = join(__dirname, "migrations", "add-prompt-versions-blocks.sql");
+      const blocksMigrationSQL = readFileSync(blocksMigrationPath, "utf-8");
+      await client.query(blocksMigrationSQL);
+      logger.info("Prompt versions blocks migration applied successfully");
+    } catch (migrationErr) {
+      logger.info("Prompt versions blocks migration skipped (already applied or file not found)");
+    }
+
     // Phase 3 PR2: Actions — what the management company is doing about
     // org-wide patterns surfaced by the AI. Per-client; tied to a theme name
     // (free text for now). Receipts (sentiment delta after the next round)

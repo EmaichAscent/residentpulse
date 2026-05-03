@@ -5,6 +5,8 @@ import { hashPassword, generatePassword } from "../utils/password.js";
 import { generateClientCode } from "../utils/clientCode.js";
 import logger from "../utils/logger.js";
 import { createMessage } from "../utils/anthropicClient.js";
+import { getCurrentBlocks, saveNewVersion, getVersionById } from "../utils/promptVersions.js";
+import { blocksToPrompt, normalizeBlock } from "../prompts/blocks.js";
 
 const router = Router();
 
@@ -514,6 +516,144 @@ router.post("/prompt/versions/:id/restore", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "Error restoring prompt version");
     res.status(500).json({ error: "Failed to restore version" });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// SuperAdmin PR 2 — structured-block read/write for the new Prompts Library
+//
+// These complement the existing text-based endpoints. The new editor
+// reads/writes blocks; the runtime (chat.js / interview.js) keeps
+// reading from settings.value as a string. Both stay in sync because
+// the block writes also update settings.value (assembled from blocks).
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/superadmin/prompts/:key/blocks
+ *
+ * Returns the live blocks for a prompt_key — sourced from settings.value
+ * (the runtime source of truth), parsed into the structured-block
+ * format the SuperAdmin editor renders. Best-effort matches the result
+ * to a prompt_versions row so the UI can show "v7 · Updated 2 hours
+ * ago by mike@…" alongside the live content.
+ */
+router.get("/prompts/:key/blocks", async (req, res) => {
+  const key = req.params.key;
+  if (!VERSIONED_PROMPT_KEYS.includes(key)) {
+    return res.status(400).json({ error: "Invalid prompt key" });
+  }
+  try {
+    const result = await getCurrentBlocks(key);
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, "Error loading current prompt blocks");
+    res.status(500).json({ error: "Failed to load prompt blocks" });
+  }
+});
+
+/**
+ * PUT /api/superadmin/prompts/:key/blocks
+ * Body: { blocks: [{heading, kind, body}, …], note?: string, label?: string }
+ *
+ * Saves new blocks: creates a prompt_versions row (with both
+ * blocks_jsonb and the assembled prompt_text) AND updates the live
+ * settings.value so the runtime picks it up immediately.
+ *
+ * Idempotent — if the assembled text equals the current settings
+ * value, returns the current version row without creating a duplicate.
+ */
+router.put("/prompts/:key/blocks", async (req, res) => {
+  const key = req.params.key;
+  if (!VERSIONED_PROMPT_KEYS.includes(key)) {
+    return res.status(400).json({ error: "Invalid prompt key" });
+  }
+  const { blocks, note, label } = req.body || {};
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    return res.status(400).json({ error: "blocks (non-empty array) is required" });
+  }
+  try {
+    const normalized = blocks.map(normalizeBlock);
+    const assembledText = blocksToPrompt(normalized);
+
+    // Idempotent guard: if the new assembled text matches the current
+    // settings value byte-for-byte, this is a no-op. Return the
+    // current row so the client can refresh metadata without writing.
+    const currentSetting = await db.get(
+      "SELECT value FROM settings WHERE key = ? AND client_id IS NULL",
+      [key]
+    );
+    if (currentSetting?.value === assembledText) {
+      return res.json(await getCurrentBlocks(key));
+    }
+
+    // Auto-save the previous value as a version BEFORE we overwrite it
+    // — same pattern as autoSaveVersion() but using the new block-aware
+    // saveNewVersion helper so the previous-value version is logged with
+    // its own blocks_jsonb populated for the diff modal.
+    if (currentSetting?.value && currentSetting.value !== assembledText) {
+      await saveNewVersion({
+        promptKey: key,
+        promptText: currentSetting.value,
+        label: "Auto-save (pre-edit)",
+        note: "Auto-saved before structured-block edit",
+        createdBy: req.session.user?.email,
+      });
+    }
+
+    // Save the new blocks as a versioned row, then update settings.
+    const newVersion = await saveNewVersion({
+      promptKey: key,
+      blocks: normalized,
+      label: label || "Edited via structured editor",
+      note: note || null,
+      createdBy: req.session.user?.email,
+    });
+
+    await db.run("UPDATE settings SET value = ? WHERE key = ? AND client_id IS NULL", [
+      assembledText,
+      key,
+    ]);
+
+    res.json({
+      prompt_key: key,
+      prompt_text: assembledText,
+      blocks: newVersion.blocks,
+      version_number: newVersion.version_number,
+      label: newVersion.label,
+      note: newVersion.note,
+      created_by: newVersion.created_by,
+      created_at: newVersion.created_at,
+      version_id: newVersion.id,
+    });
+  } catch (err) {
+    logger.error({ err }, "Error saving prompt blocks");
+    res.status(500).json({ error: "Failed to save prompt blocks" });
+  }
+});
+
+/**
+ * GET /api/superadmin/prompts/:key/versions/:id/blocks
+ *
+ * Returns a specific prompt version's blocks — used by the diff modal
+ * to render the "before" side of a side-by-side comparison.
+ */
+router.get("/prompts/:key/versions/:id/blocks", async (req, res) => {
+  const key = req.params.key;
+  if (!VERSIONED_PROMPT_KEYS.includes(key)) {
+    return res.status(400).json({ error: "Invalid prompt key" });
+  }
+  try {
+    const version = await getVersionById(req.params.id);
+    if (!version) {
+      return res.status(404).json({ error: "Version not found" });
+    }
+    if (version.prompt_key !== key) {
+      return res.status(400).json({ error: "Version belongs to a different prompt key" });
+    }
+    res.json(version);
+  } catch (err) {
+    logger.error({ err }, "Error loading version blocks");
+    res.status(500).json({ error: "Failed to load version" });
   }
 });
 
