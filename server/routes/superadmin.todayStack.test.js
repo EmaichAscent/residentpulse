@@ -32,6 +32,35 @@ describe("SuperAdmin /today-stack endpoint — structural guards", () => {
     expect(source).toMatch(/active_rounds/);
     expect(source).toMatch(/dormant_with_active/);
     expect(source).toMatch(/prompts_recent/);
+    expect(source).toMatch(/no_round_scheduled/);
+  });
+
+  it("returns hero header totals (signals_count + clients + paying)", () => {
+    expect(source).toMatch(/signals_count/);
+    expect(source).toMatch(/clients_count/);
+    expect(source).toMatch(/paying_count/);
+  });
+
+  it("returns the 'What needs your attention' signals array", () => {
+    // Each signal must carry severity for the colored left-border on
+    // the dashboard's signal cards. Without severity the cards all
+    // render neutral.
+    expect(source).toMatch(/signals\s*[:,]/);
+    expect(source).toMatch(/severity:/);
+  });
+
+  it("sorts signals risk → attention → watch", () => {
+    expect(source).toMatch(/SEVERITY_ORDER/);
+  });
+
+  it("emits the five signal kinds the prototype defines", () => {
+    // Match the kind name in either single or double quotes — prettier
+    // can flip quote style without changing semantics.
+    const kinds = ["closing", "dormant-active", "churn-risk", "prompt-pending", "never-launched"];
+    for (const k of kinds) {
+      const re = new RegExp(`["']${k.replace(/-/g, "\\-")}["']`);
+      expect(source, `kind "${k}" should appear as a string literal`).toMatch(re);
+    }
   });
 
   it("computes a delta on active_rounds (vs 7 days ago)", () => {

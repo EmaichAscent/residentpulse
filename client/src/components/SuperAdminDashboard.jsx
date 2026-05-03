@@ -2,24 +2,21 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
 /**
- * SuperAdmin Dashboard — PR 7 of the SuperAdmin overhaul, per the
- * design handoff §1 ("Today" stack + filtered activity feed).
+ * SuperAdmin Dashboard — final form per design handoff §1, screenshot
+ * v2 (2026-05-03 feedback). Three sections, top to bottom:
  *
- * Replaces the previous bare-totals dashboard (Total Clients, Active
- * Rounds, Total Responses, Board Members) with computed operational
- * signals the founder can act on immediately:
+ *   1. Hero header        "Today, May 3" + "N signals · X clients · Y paying"
+ *   2. 4 stat cards       small right-edge tone dot, big display number
+ *   3. Signal cards       "What needs your attention" — colored left
+ *                          border per severity, title + detail + CTA
+ *   4. Activity table     4-column WHEN / EVENT / TARGET / ACTOR with
+ *                          event-type pills; logins excluded by default
  *
- *   • Closing this week    — rounds whose response window closes ≤7d
- *   • Active rounds (+ Δ)  — current vs 7 days ago, contextualized
- *   • Dormant w/ active    — silent-churn signal (active round, dark admin)
- *   • Prompts pending      — recently regenerated, may need review
- *
- * Activity feed below the Today stack collapses repeated logins into a
- * single "+ N login events" rollup so meaningful events (round
- * launched, prompt regenerated, impersonation) aren't drowned out.
- *
- * Filter chips: All / Rounds / Prompts / Sessions / System / Impersonation.
+ * The signal-card list IS the dashboard. The stat cards are scoreboard;
+ * the signals tell the operator what to do.
  */
+
+const ARROW = "→";
 
 export default function SuperAdminDashboard() {
   const [stack, setStack] = useState(null);
@@ -29,80 +26,52 @@ export default function SuperAdminDashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    Promise.all([loadTodayStack(), loadActivity()]).finally(() => setLoading(false));
+    Promise.all([loadStack(), loadActivity("all")]).finally(() => setLoading(false));
   }, []);
 
-  const loadTodayStack = async () => {
+  // Reload activity when the filter chip changes — we let the server do
+  // the filter so the kind-pill column always matches what's rendered
+  // (no client-side mismatch between "what was fetched" and "what's
+  // shown after filter").
+  useEffect(() => {
+    loadActivity(filter);
+  }, [filter]);
+
+  const loadStack = async () => {
     try {
       const res = await fetch("/api/superadmin/today-stack", { credentials: "include" });
-      if (res.ok) setStack(await res.json());
+      const ct = res.headers.get("content-type") || "";
+      if (!res.ok || !ct.includes("application/json")) {
+        throw new Error(`today-stack returned ${res.status}`);
+      }
+      setStack(await res.json());
     } catch (err) {
       console.error("Today-stack load error:", err);
     }
   };
 
-  const loadActivity = async () => {
+  const loadActivity = async (kind) => {
     try {
-      const res = await fetch("/api/superadmin/activity-log?limit=50", {
-        credentials: "include",
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setActivity(data.entries || []);
+      const url =
+        kind === "all"
+          ? "/api/superadmin/activity-log?limit=20"
+          : `/api/superadmin/activity-log?limit=20&kind=${encodeURIComponent(kind)}`;
+      const res = await fetch(url, { credentials: "include" });
+      const ct = res.headers.get("content-type") || "";
+      if (!res.ok || !ct.includes("application/json")) {
+        throw new Error(`activity-log returned ${res.status}`);
       }
+      const data = await res.json();
+      setActivity(data.entries || []);
     } catch (err) {
       console.error("Activity load error:", err);
     }
   };
 
-  // Categorize activity entries so the filter chips work.
-  const categorize = (entry) => {
-    if (entry.action === "login") return "logins";
-    if (entry.action?.includes("round")) return "rounds";
-    if (entry.action?.includes("prompt") || entry.action?.includes("supplement")) return "prompts";
-    if (entry.action?.includes("interview") || entry.action?.includes("session")) return "sessions";
-    if (entry.action?.includes("impersonat")) return "impersonation";
-    return "system";
-  };
-
-  // Apply filter + collapse runs of consecutive login events from the
-  // same actor into a single rollup row. This is the handoff's "logins
-  // are de-emphasized — a quiet '+ N login events' rollup, not 20 rows."
-  const visible = useMemo(() => {
-    const filtered = activity.filter((e) => {
-      const cat = categorize(e);
-      if (filter === "all") return true;
-      return cat === filter;
-    });
-
-    if (filter !== "all") return filtered.map((e) => ({ kind: "single", entry: e }));
-
-    // Roll up consecutive logins.
-    const out = [];
-    let loginRun = null;
-    for (const e of filtered) {
-      if (categorize(e) === "logins") {
-        if (loginRun) {
-          loginRun.count += 1;
-          loginRun.last = e.created_at;
-        } else {
-          loginRun = {
-            kind: "login_rollup",
-            count: 1,
-            first: e.created_at,
-            last: e.created_at,
-            entries: [e],
-          };
-          out.push(loginRun);
-        }
-        loginRun.entries.push(e);
-      } else {
-        loginRun = null;
-        out.push({ kind: "single", entry: e });
-      }
-    }
-    return out;
-  }, [activity, filter]);
+  const heroDate = useMemo(() => {
+    const d = new Date();
+    return `Today, ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  }, []);
 
   if (loading) {
     return (
@@ -112,386 +81,381 @@ export default function SuperAdminDashboard() {
     );
   }
 
+  const header = stack?.header || { signals_count: 0, clients_count: 0, paying_count: 0 };
+  const signals = stack?.signals || [];
+
   return (
     <div className="space-y-6" style={{ fontFamily: "var(--font-sans)" }}>
-      {/* Today-stack section eyebrow */}
+      {/* ── 1. Hero header ────────────────────────────────────────── */}
       <div>
-        <SectionEyebrow>Today</SectionEyebrow>
-        <p className="text-[12.5px] mt-1" style={{ color: "var(--ink-3)" }}>
-          Computed signals worth acting on this morning. Click any card to drill in.
-        </p>
+        <h1
+          className="font-medium"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 32,
+            letterSpacing: "-0.02em",
+            color: "var(--ink)",
+            lineHeight: 1.1,
+          }}
+        >
+          {heroDate}
+        </h1>
+        <div className="text-[13px] mt-1.5" style={{ color: "var(--ink-3)" }}>
+          {header.signals_count} {header.signals_count === 1 ? "signal needs" : "signals need"} your
+          attention · {header.clients_count} {header.clients_count === 1 ? "client" : "clients"} ·{" "}
+          {header.paying_count} paying
+        </div>
       </div>
 
-      {/* Today-stack 4-up grid */}
+      {/* ── 2. Stat cards ─────────────────────────────────────────── */}
       {stack && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <ClosingCard data={stack.closing_this_week} navigate={navigate} />
-          <ActiveRoundsCard data={stack.active_rounds} />
-          <DormantCard data={stack.dormant_with_active} navigate={navigate} />
-          <PromptsCard data={stack.prompts_recent} navigate={navigate} />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard
+            label="Closing this week"
+            value={stack.closing_this_week.count}
+            sub="Rounds with <7 days left"
+            tone={stack.closing_this_week.count > 0 ? "attention" : "neutral"}
+          />
+          <StatCard
+            label="Dormant w/ active round"
+            value={stack.dormant_with_active.count}
+            sub="Admin not seeing results"
+            tone={stack.dormant_with_active.count > 0 ? "risk" : "neutral"}
+          />
+          <StatCard
+            label="No round scheduled"
+            value={stack.no_round_scheduled?.count ?? 0}
+            sub="Of onboarded clients"
+            tone={(stack.no_round_scheduled?.count ?? 0) > 3 ? "attention" : "neutral"}
+          />
+          <StatCard
+            label="Active rounds"
+            value={stack.active_rounds.count}
+            sub={
+              stack.active_rounds.count === 0 ? "No live interviews now" : "Currently collecting"
+            }
+            tone="neutral"
+          />
         </div>
       )}
 
-      {/* Activity feed */}
-      <div className="bg-white rounded-xl" style={{ border: "1px solid var(--line)" }}>
-        <div
-          className="flex items-center justify-between px-4 py-3"
-          style={{ borderBottom: "1px solid var(--line)" }}
-        >
-          <SectionEyebrow>Activity</SectionEyebrow>
-          <div className="flex" style={{ gap: 4 }}>
-            {[
-              { key: "all", label: "All" },
-              { key: "rounds", label: "Rounds" },
-              { key: "prompts", label: "Prompts" },
-              { key: "sessions", label: "Sessions" },
-              { key: "logins", label: "Logins" },
-              { key: "impersonation", label: "Impersonation" },
-              { key: "system", label: "System" },
-            ].map((c) => {
-              const active = filter === c.key;
-              return (
-                <button
-                  key={c.key}
-                  type="button"
-                  onClick={() => setFilter(c.key)}
-                  className="text-[11.5px] font-semibold transition"
-                  style={{
-                    padding: "4px 10px",
-                    borderRadius: 999,
-                    background: active ? "var(--ink)" : "transparent",
-                    color: active ? "white" : "var(--ink-3)",
-                    border: active ? "1px solid var(--ink)" : "1px solid var(--line-2)",
-                    cursor: "pointer",
-                  }}
-                >
-                  {c.label}
-                </button>
-              );
-            })}
-          </div>
+      {/* ── 3. Signal cards ───────────────────────────────────────── */}
+      <div className="flex items-baseline justify-between mt-2">
+        <SectionEyebrow>What needs your attention</SectionEyebrow>
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <SeverityLegendPill severity="risk">Risk</SeverityLegendPill>
+          <SeverityLegendPill severity="attention">Attention</SeverityLegendPill>
+          <SeverityLegendPill severity="watch">Watch</SeverityLegendPill>
         </div>
-
-        {visible.length === 0 ? (
-          <p className="text-center py-8 text-[13px]" style={{ color: "var(--ink-4)" }}>
-            No activity matches this filter.
-          </p>
-        ) : (
-          <div>
-            {visible.map((row, i) =>
-              row.kind === "login_rollup" ? (
-                <LoginRollup key={`r${i}`} rollup={row} />
-              ) : (
-                <ActivityRow key={row.entry.id} entry={row.entry} />
-              )
-            )}
-          </div>
-        )}
       </div>
+
+      {signals.length === 0 ? (
+        <div
+          className="rounded-xl bg-white text-center py-10"
+          style={{ border: "1px solid var(--line)" }}
+        >
+          <p className="text-[13px]" style={{ color: "var(--ink-4)" }}>
+            Nothing to act on right now. All clients look healthy.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col" style={{ gap: 10 }}>
+          {signals.map((s) => (
+            <SignalCard
+              key={s.id}
+              signal={s}
+              onOpen={() => {
+                if (s.cta === "Test prompt") {
+                  navigate("/superadmin/prompts");
+                } else if (s.client_id) {
+                  navigate(`/superadmin/clients/${s.client_id}`);
+                }
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ── 4. Activity table ─────────────────────────────────────── */}
+      <div className="flex items-baseline justify-between mt-4">
+        <SectionEyebrow>Recent activity</SectionEyebrow>
+        <div className="flex" style={{ gap: 6 }}>
+          {[
+            { key: "all", label: "All" },
+            { key: "round", label: "Rounds" },
+            { key: "prompt", label: "Prompts" },
+            { key: "session", label: "Sessions" },
+            { key: "impersonate", label: "Impersonations" },
+            { key: "system", label: "System" },
+          ].map((c) => (
+            <FilterChip key={c.key} active={filter === c.key} onClick={() => setFilter(c.key)}>
+              {c.label}
+            </FilterChip>
+          ))}
+        </div>
+      </div>
+
+      <div
+        className="rounded-xl bg-white overflow-hidden"
+        style={{ border: "1px solid var(--line)" }}
+      >
+        <table className="min-w-full text-[13px]">
+          <thead style={{ background: "var(--paper)" }}>
+            <tr style={{ borderBottom: "1px solid var(--line)" }}>
+              <Th width={90}>When</Th>
+              <Th>Event</Th>
+              <Th>Target</Th>
+              <Th>Actor</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {activity.length === 0 ? (
+              <tr>
+                <td
+                  colSpan="4"
+                  className="px-4 py-10 text-center text-[13px]"
+                  style={{ color: "var(--ink-4)" }}
+                >
+                  No activity matches this filter.
+                </td>
+              </tr>
+            ) : (
+              activity.map((entry) => (
+                <tr key={entry.id} style={{ borderBottom: "1px solid var(--line)" }}>
+                  <td
+                    className="px-4 py-2.5 font-mono text-[11.5px]"
+                    style={{ color: "var(--ink-4)" }}
+                  >
+                    {formatTime(entry.created_at)}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <EventPill kind={entry.kind} verb={entry.action} />
+                  </td>
+                  <td className="px-4 py-2.5" style={{ color: "var(--ink-2)" }}>
+                    {entry.company_name || "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-[12px]" style={{ color: "var(--ink-3)" }}>
+                    {entry.actor_email || "system"}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-center text-[11.5px]" style={{ color: "var(--ink-4)" }}>
+        Logins are excluded from this view by default.
+      </p>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Today-stack cards
+// Stat card (cleaner format — small right-edge tone dot, large number)
 // ─────────────────────────────────────────────────────────────────────
 
-function StackCard({ tone = "rules", title, value, sub, children }) {
-  // Tone tints aligned with the prompt-block tones for visual consistency
-  // across the SuperAdmin app: amber for caution, coral for risk, pulse
-  // for healthy, plum for prompt-related.
-  const tones = {
-    rules: { bg: "white", border: "var(--line)", value: "var(--ink)", label: "var(--ink-3)" },
-    pulse: {
-      bg: "var(--pulse-tint)",
-      border: "var(--pulse-soft)",
-      value: "var(--pulse-deep)",
-      label: "var(--pulse-deep)",
-    },
-    amber: {
-      bg: "var(--amber-tint)",
-      border: "var(--amber-soft)",
-      value: "#8C5E1F",
-      label: "#8C5E1F",
-    },
-    coral: {
-      bg: "var(--coral-tint)",
-      border: "var(--coral-soft)",
-      value: "var(--coral)",
-      label: "var(--coral)",
-    },
-    plum: {
-      bg: "var(--plum-tint)",
-      border: "var(--plum-soft)",
-      value: "var(--plum)",
-      label: "var(--plum)",
-    },
-  };
-  const t = tones[tone] || tones.rules;
+function StatCard({ label, value, sub, tone = "neutral" }) {
+  const toneColor = tone === "risk" ? "var(--coral)" : tone === "attention" ? "var(--amber)" : null;
   return (
     <div
-      className="rounded-xl"
+      className="rounded-xl bg-white"
       style={{
-        background: t.bg,
-        border: `1px solid ${t.border}`,
-        padding: 16,
+        border: "1px solid var(--line)",
+        padding: "14px 16px",
         boxShadow: "var(--shadow-sm)",
       }}
     >
-      <div
-        className="font-bold uppercase"
-        style={{
-          fontSize: 10.5,
-          letterSpacing: "0.12em",
-          color: t.label,
-          marginBottom: 6,
-        }}
-      >
-        {title}
+      <div className="flex items-center justify-between">
+        <div
+          className="font-bold uppercase"
+          style={{
+            fontSize: 10.5,
+            letterSpacing: "0.12em",
+            color: "var(--ink-4)",
+          }}
+        >
+          {label}
+        </div>
+        {toneColor && (
+          <span
+            className="rounded-full"
+            style={{ width: 6, height: 6, background: toneColor }}
+            aria-hidden="true"
+          />
+        )}
       </div>
       <div
-        className="font-semibold"
+        className="font-medium"
         style={{
           fontFamily: "var(--font-display)",
-          fontSize: 30,
+          fontSize: 34,
           letterSpacing: "-0.02em",
-          color: t.value,
-          lineHeight: 1.05,
+          marginTop: 4,
+          lineHeight: 1,
+          color: "var(--ink)",
         }}
       >
         {value}
       </div>
-      {sub && (
-        <div className="text-[12px] mt-1" style={{ color: "var(--ink-3)", lineHeight: 1.4 }}>
-          {sub}
-        </div>
-      )}
-      {children && <div style={{ marginTop: 10 }}>{children}</div>}
+      <div className="text-[12px] mt-1.5" style={{ color: "var(--ink-3)" }}>
+        {sub}
+      </div>
     </div>
   );
 }
 
-function ClosingCard({ data, navigate }) {
-  const tone = data.count > 0 ? "amber" : "rules";
-  return (
-    <StackCard
-      tone={tone}
-      title="Closing this week"
-      value={data.count}
-      sub={
-        data.count === 0
-          ? "No rounds close in the next 7 days."
-          : "Rounds whose response window closes within 7 days."
-      }
-    >
-      {data.sample?.length > 0 && (
-        <ul className="text-[12px]" style={{ color: "var(--ink-2)", lineHeight: 1.55 }}>
-          {data.sample.slice(0, 3).map((r) => (
-            <li key={r.id}>
-              <button
-                type="button"
-                onClick={() => navigate(`/superadmin/clients/${r.client_id}`)}
-                className="text-left underline"
-                style={{
-                  color: "var(--ink-2)",
-                  background: "transparent",
-                  border: "none",
-                  padding: 0,
-                  cursor: "pointer",
-                }}
-              >
-                {r.company_name} — Round {r.round_number} ({r.days_left}d)
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </StackCard>
-  );
-}
+// ─────────────────────────────────────────────────────────────────────
+// Signal card (colored left border by severity)
+// ─────────────────────────────────────────────────────────────────────
 
-function ActiveRoundsCard({ data }) {
-  // Delta annotation. Bare zero is paired with context per handoff:
-  // "Zero values must always be paired with context, never bare."
-  let sub;
-  if (data.count === 0 && data.last_week === 0) {
-    sub = "No rounds in flight this week or last.";
-  } else if (data.delta > 0) {
-    sub = `Up ${data.delta} from last week (${data.last_week} active 7 days ago).`;
-  } else if (data.delta < 0) {
-    sub = `Down ${Math.abs(data.delta)} from last week (${data.last_week} active 7 days ago).`;
-  } else {
-    sub = `Flat vs last week (${data.last_week} active 7 days ago).`;
-  }
+function SignalCard({ signal, onOpen }) {
+  const sev = signal.severity;
+  const borderColor =
+    sev === "risk" ? "var(--coral)" : sev === "attention" ? "var(--amber)" : "var(--ink-4)";
   return (
-    <StackCard
-      tone={data.count > 0 ? "pulse" : "rules"}
-      title="Active rounds"
-      value={data.count}
-      sub={sub}
-    />
-  );
-}
-
-function DormantCard({ data, navigate }) {
-  const tone = data.count > 0 ? "coral" : "rules";
-  return (
-    <StackCard
-      tone={tone}
-      title="Dormant with active rounds"
-      value={data.count}
-      sub={
-        data.count === 0
-          ? "No silent-churn risk detected."
-          : "Active rounds, but no admin login in 14+ days. Likely silent churn."
-      }
+    <div
+      className="rounded-xl bg-white flex overflow-hidden"
+      style={{ border: "1px solid var(--line)", boxShadow: "var(--shadow-sm)" }}
     >
-      {data.sample?.length > 0 && (
-        <ul className="text-[12px]" style={{ color: "var(--ink-2)", lineHeight: 1.55 }}>
-          {data.sample.slice(0, 3).map((c) => (
-            <li key={c.id}>
-              <button
-                type="button"
-                onClick={() => navigate(`/superadmin/clients/${c.id}`)}
-                className="text-left underline"
-                style={{
-                  color: "var(--ink-2)",
-                  background: "transparent",
-                  border: "none",
-                  padding: 0,
-                  cursor: "pointer",
-                }}
-              >
-                {c.company_name}{" "}
-                <span style={{ color: "var(--ink-4)" }}>
-                  (
-                  {c.last_login
-                    ? "dark since " + new Date(c.last_login).toLocaleDateString()
-                    : "never logged in"}
-                  )
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </StackCard>
-  );
-}
-
-function PromptsCard({ data, navigate }) {
-  return (
-    <StackCard
-      tone={data.count > 0 ? "plum" : "rules"}
-      title="Prompt versions (7d)"
-      value={data.count}
-      sub={
-        data.count === 0
-          ? "No prompt edits in the last 7 days."
-          : "Recent prompt versions — review with the Test Interview runner before they hit boards."
-      }
-    >
-      {data.count > 0 && (
+      <div style={{ width: 5, background: borderColor, flexShrink: 0 }} aria-hidden="true" />
+      <div className="flex items-center" style={{ flex: 1, padding: "14px 18px", gap: 14 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            className="font-semibold"
+            style={{ fontSize: 14.5, color: "var(--ink)", marginBottom: 4 }}
+          >
+            {signal.title}
+          </div>
+          <div className="text-[12.5px]" style={{ color: "var(--ink-3)", lineHeight: 1.55 }}>
+            {signal.detail}
+          </div>
+        </div>
         <button
           type="button"
-          onClick={() => navigate("/superadmin/prompts")}
-          className="text-[12px] font-semibold underline"
+          onClick={onOpen}
+          className="font-semibold text-[12px] flex items-center gap-1 transition flex-shrink-0"
           style={{
-            color: "var(--plum)",
-            background: "transparent",
-            border: "none",
-            padding: 0,
+            padding: "6px 12px",
+            borderRadius: 8,
+            background: "white",
+            color: "var(--ink-2)",
+            border: "1px solid var(--line-2)",
             cursor: "pointer",
+            whiteSpace: "nowrap",
           }}
         >
-          Open Prompts library →
+          {signal.cta} {ARROW}
         </button>
-      )}
-    </StackCard>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Activity rows
-// ─────────────────────────────────────────────────────────────────────
-
-const ACTION_LABELS = {
-  login: "logged in",
-  signup: "signed up",
-  launch_round: "launched a survey round",
-  start_interview: "started an onboarding interview",
-  complete_interview: "completed an onboarding interview",
-  abandon_interview: "skipped onboarding interview",
-};
-
-function formatTime(ts) {
-  if (!ts) return "";
-  const d = new Date(ts);
-  const now = new Date();
-  const diffMins = Math.floor((now - d) / 60000);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return d.toLocaleDateString();
-}
-
-function ActivityRow({ entry }) {
-  const dotColor = (() => {
-    if (entry.actor_type === "superadmin") return "var(--plum)";
-    if (entry.action === "launch_round") return "var(--pulse)";
-    if (entry.action?.includes("prompt")) return "var(--plum)";
-    if (entry.action?.includes("impersonat")) return "var(--coral)";
-    return "var(--ink-4)";
-  })();
-  return (
-    <div
-      className="flex items-start gap-3 px-4 py-2.5 text-[13px]"
-      style={{ borderBottom: "1px solid var(--line)" }}
-    >
-      <span
-        className="rounded-full flex-shrink-0"
-        style={{
-          width: 6,
-          height: 6,
-          background: dotColor,
-          marginTop: 7,
-        }}
-      />
-      <div className="flex-1 min-w-0">
-        <span className="font-medium" style={{ color: "var(--ink-2)" }}>
-          {entry.actor_email || "System"}
-        </span>{" "}
-        <span style={{ color: "var(--ink-3)" }}>{ACTION_LABELS[entry.action] || entry.action}</span>
-        {entry.company_name && (
-          <span style={{ color: "var(--ink-4)" }}> — {entry.company_name}</span>
-        )}
       </div>
-      <span className="text-[11.5px] font-mono flex-shrink-0" style={{ color: "var(--ink-4)" }}>
-        {formatTime(entry.created_at)}
-      </span>
     </div>
   );
 }
 
-function LoginRollup({ rollup }) {
+// ─────────────────────────────────────────────────────────────────────
+// Severity legend pill (top-right of "What needs your attention")
+// ─────────────────────────────────────────────────────────────────────
+
+function SeverityLegendPill({ severity, children }) {
+  const dotColor =
+    severity === "risk"
+      ? "var(--coral)"
+      : severity === "attention"
+        ? "var(--amber)"
+        : "var(--ink-4)";
   return (
-    <div
-      className="flex items-center justify-between px-4 py-2 text-[12px]"
+    <span
+      className="inline-flex items-center text-[10.5px] font-medium"
       style={{
-        background: "var(--paper)",
-        borderBottom: "1px solid var(--line)",
-        color: "var(--ink-4)",
-        fontStyle: "italic",
+        background: "var(--paper-2)",
+        color: "var(--ink-3)",
+        padding: "2px 8px",
+        borderRadius: 999,
+        gap: 5,
       }}
     >
-      <span>
-        + {rollup.count} login event{rollup.count === 1 ? "" : "s"}
-      </span>
-      <span className="font-mono">{formatTime(rollup.last)}</span>
-    </div>
+      <span
+        className="rounded-full"
+        style={{ width: 6, height: 6, background: dotColor }}
+        aria-hidden="true"
+      />
+      {children}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Activity table — event pill + filter chip
+// ─────────────────────────────────────────────────────────────────────
+
+function EventPill({ kind, verb }) {
+  // Color map matches the design handoff prototype's tones so the same
+  // event categories read consistently across SuperAdmin surfaces.
+  const styles = {
+    session: { bg: "var(--pulse-tint)", color: "var(--pulse-deep)" },
+    round: { bg: "var(--paper-3)", color: "var(--ink)" },
+    prompt: { bg: "var(--plum-tint)", color: "var(--plum)" },
+    insight: { bg: "var(--amber-tint)", color: "#8C5E1F" },
+    impersonate: { bg: "var(--coral-tint)", color: "var(--coral)" },
+    login: { bg: "var(--paper-2)", color: "var(--ink-4)" },
+    system: { bg: "var(--paper-2)", color: "var(--ink-3)" },
+  };
+  const s = styles[kind] || styles.system;
+  const label = (verb || "").replace(/_/g, " ");
+  return (
+    <span
+      className="inline-block font-semibold font-mono"
+      style={{
+        background: s.bg,
+        color: s.color,
+        padding: "3px 9px",
+        borderRadius: 6,
+        fontSize: 11.5,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function FilterChip({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="font-semibold transition"
+      style={{
+        padding: "4px 10px",
+        borderRadius: 999,
+        fontSize: 11.5,
+        background: active ? "var(--ink)" : "transparent",
+        color: active ? "white" : "var(--ink-3)",
+        border: active ? "1px solid var(--ink)" : "1px solid var(--line-2)",
+        cursor: "pointer",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Misc
+// ─────────────────────────────────────────────────────────────────────
+
+function Th({ children, width }) {
+  return (
+    <th
+      className="text-left px-4 py-2.5 font-bold uppercase"
+      style={{
+        width,
+        fontSize: 10.5,
+        letterSpacing: "0.12em",
+        color: "var(--ink-4)",
+      }}
+    >
+      {children}
+    </th>
   );
 }
 
@@ -508,4 +472,18 @@ function SectionEyebrow({ children }) {
       {children}
     </span>
   );
+}
+
+function formatTime(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  const now = new Date();
+  const diffMins = Math.floor((now - d) / 60000);
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return d.toLocaleDateString();
 }

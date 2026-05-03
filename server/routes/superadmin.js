@@ -148,7 +148,203 @@ router.get("/today-stack", async (req, res) => {
        WHERE created_at >= NOW() - INTERVAL '7 days'`
     );
 
+    // 5. No round scheduled — onboarded clients with no active round.
+    // Distinguishes "active tenant who needs a nudge" from "tenant who
+    // never finished onboarding."
+    const noRoundRows = await db.all(
+      `SELECT c.id, c.company_name, c.client_code,
+              MAX(ca.last_login_at) as last_login,
+              (SELECT MAX(launched_at) FROM survey_rounds sr
+                WHERE sr.client_id = c.id AND sr.is_test = FALSE) as last_round_launched_at
+       FROM clients c
+       LEFT JOIN client_admins ca ON ca.client_id = c.id
+       WHERE c.status = 'active'
+         AND NOT EXISTS (
+           SELECT 1 FROM survey_rounds sr2
+            WHERE sr2.client_id = c.id
+              AND sr2.status = 'in_progress'
+              AND sr2.is_test = FALSE
+         )
+       GROUP BY c.id, c.company_name, c.client_code
+       HAVING BOOL_OR(ca.onboarding_completed) = TRUE
+       ORDER BY MAX(ca.last_login_at) DESC NULLS LAST
+       LIMIT 5`
+    );
+
+    // Header totals — drives the hero subtitle.
+    const totalClients = await db.get(
+      `SELECT COUNT(*) as count FROM clients WHERE status = 'active'`
+    );
+    const payingClients = await db.get(
+      `SELECT COUNT(DISTINCT c.id) as count
+       FROM clients c
+       JOIN client_subscriptions cs ON cs.client_id = c.id
+       JOIN subscription_plans sp ON sp.id = cs.plan_id
+       WHERE c.status = 'active' AND sp.price_cents > 0`
+    );
+
+    // ── Signal cards (handoff §1 "What needs your attention") ────────
+    // Each card is a computed, human-phrased actionable. Severity drives
+    // the card's left-border tint (risk = coral, attention = amber,
+    // watch = neutral). The whole point of this list is to convert
+    // "look at the dashboard" into "here are the 5 things that matter."
+    const signals = [];
+
+    // Closing-soon rounds (one card per closing round, capped to 5
+    // total signals from this category). Severity escalates with how
+    // little time is left.
+    const closingForSignals = await db.all(
+      `SELECT sr.id, sr.round_number, sr.closes_at, c.id as client_id, c.company_name,
+              ROUND(EXTRACT(EPOCH FROM (sr.closes_at - NOW())) / 86400)::int as days_left,
+              (SELECT COUNT(*) FROM sessions s
+                 WHERE s.round_id = sr.id AND s.completed = TRUE
+                   AND s.is_mock IS NOT TRUE AND s.is_test = FALSE) as completed,
+              sr.members_invited as invited
+       FROM survey_rounds sr
+       JOIN clients c ON c.id = sr.client_id
+       WHERE sr.status = 'in_progress' AND sr.is_test = FALSE
+         AND sr.closes_at IS NOT NULL
+         AND sr.closes_at BETWEEN NOW() AND NOW() + INTERVAL '7 days'
+       ORDER BY sr.closes_at ASC
+       LIMIT 5`
+    );
+    for (const r of closingForSignals) {
+      const completed = Number(r.completed) || 0;
+      const invited = Number(r.invited) || 0;
+      const pct = invited > 0 ? Math.round((completed / invited) * 100) : null;
+      const tomorrow = r.days_left <= 1;
+      signals.push({
+        id: `closing-${r.id}`,
+        kind: "closing",
+        severity: tomorrow ? "attention" : "watch",
+        title: `${r.company_name} — round closes ${tomorrow ? "tomorrow" : `in ${r.days_left} days`}`,
+        detail:
+          invited > 0
+            ? `${completed} / ${invited} responses (${pct}%). Round ${r.round_number} active.`
+            : `Round ${r.round_number} active.`,
+        client_id: r.client_id,
+        cta: "Open client",
+      });
+    }
+
+    // Dormant + active round = highest-priority risk.
+    for (const c of dormantRows) {
+      const days = c.last_login
+        ? Math.floor((Date.now() - new Date(c.last_login).getTime()) / 86400000)
+        : null;
+      signals.push({
+        id: `dormant-${c.id}`,
+        kind: "dormant-active",
+        severity: "risk",
+        title: c.last_login
+          ? `${c.company_name} hasn't logged in for ${days} days`
+          : `${c.company_name} has never logged in`,
+        detail: `Active round in flight, but admin hasn't seen it. ${c.active_round_count} live round${c.active_round_count > 1 ? "s" : ""}.`,
+        client_id: c.id,
+        cta: "Open client",
+      });
+    }
+
+    // Paid + dormant 60+d = silent-churn risk on revenue accounts.
+    const churnRiskRows = await db.all(
+      `SELECT c.id, c.company_name, sp.display_name as plan_name,
+              MAX(ca.last_login_at) as last_login
+       FROM clients c
+       JOIN client_subscriptions cs ON cs.client_id = c.id
+       JOIN subscription_plans sp ON sp.id = cs.plan_id
+       LEFT JOIN client_admins ca ON ca.client_id = c.id
+       WHERE c.status = 'active' AND sp.price_cents > 0
+       GROUP BY c.id, c.company_name, sp.display_name
+       HAVING MAX(ca.last_login_at) IS NULL
+          OR MAX(ca.last_login_at) < NOW() - INTERVAL '60 days'
+       ORDER BY MAX(ca.last_login_at) ASC NULLS FIRST
+       LIMIT 3`
+    );
+    for (const c of churnRiskRows) {
+      const days = c.last_login
+        ? Math.floor((Date.now() - new Date(c.last_login).getTime()) / 86400000)
+        : null;
+      signals.push({
+        id: `churn-${c.id}`,
+        kind: "churn-risk",
+        severity: "risk",
+        title: `${c.company_name} — paid ${c.plan_name}, ${days ?? "?"}d dormant`,
+        detail:
+          "Revenue account has gone dark. No round in flight. Likely silent churn — reach out before renewal.",
+        client_id: c.id,
+        cta: "Open client",
+      });
+    }
+
+    // Recently edited prompt → "test-interview before next round."
+    const recentPromptRows = await db.all(
+      `SELECT pv.id, pv.prompt_key, pv.version_number, pv.created_at, pv.created_by
+       FROM prompt_versions pv
+       WHERE pv.created_at >= NOW() - INTERVAL '7 days'
+       ORDER BY pv.created_at DESC
+       LIMIT 2`
+    );
+    for (const pv of recentPromptRows) {
+      const labelMap = {
+        system_prompt: "Board interview",
+        interview_initial_prompt: "Client onboarding",
+        prompt_generation_instruction: "Supplement generator",
+        interview_re_prompt: "Re-interview",
+      };
+      signals.push({
+        id: `prompt-${pv.id}`,
+        kind: "prompt-pending",
+        severity: "attention",
+        title: `${labelMap[pv.prompt_key] || pv.prompt_key} prompt edited recently (v${pv.version_number ?? "?"})`,
+        detail: `Edited by ${pv.created_by || "unknown"}. Run the test interview before this hits a real board.`,
+        client_id: null,
+        cta: "Test prompt",
+      });
+    }
+
+    // "Watch" signals — onboarded but no round ever launched.
+    const neverRanRows = await db.all(
+      `SELECT c.id, c.company_name,
+              FLOOR(EXTRACT(EPOCH FROM (NOW() - c.created_at)) / 86400)::int as days_since_signup,
+              sp.display_name as plan_name
+       FROM clients c
+       LEFT JOIN client_subscriptions cs ON cs.client_id = c.id
+       LEFT JOIN subscription_plans sp ON sp.id = cs.plan_id
+       LEFT JOIN client_admins ca ON ca.client_id = c.id
+       WHERE c.status = 'active'
+         AND c.created_at < NOW() - INTERVAL '30 days'
+         AND NOT EXISTS (
+           SELECT 1 FROM survey_rounds sr WHERE sr.client_id = c.id AND sr.is_test = FALSE
+         )
+       GROUP BY c.id, c.company_name, c.created_at, sp.display_name
+       HAVING BOOL_OR(ca.onboarding_completed) = TRUE
+       ORDER BY c.created_at ASC
+       LIMIT 3`
+    );
+    for (const c of neverRanRows) {
+      signals.push({
+        id: `never-${c.id}`,
+        kind: "never-launched",
+        severity: "watch",
+        title: `${c.company_name} onboarded ${c.days_since_signup} days ago, never launched a round`,
+        detail: `${c.plan_name || "No plan"}. May need outreach or could be deprioritized.`,
+        client_id: c.id,
+        cta: "Open client",
+      });
+    }
+
+    // Sort risk → attention → watch so the cards stack with the urgent
+    // ones up top.
+    const SEVERITY_ORDER = { risk: 0, attention: 1, watch: 2 };
+    signals.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+
     res.json({
+      header: {
+        signals_count: signals.length,
+        clients_count: Number(totalClients?.count) || 0,
+        paying_count: Number(payingClients?.count) || 0,
+      },
+      signals,
       closing_this_week: {
         count: Number(closingCount?.count) || 0,
         sample: closingRows,
@@ -162,6 +358,10 @@ router.get("/today-stack", async (req, res) => {
         count: dormantRows.length,
         sample: dormantRows,
       },
+      no_round_scheduled: {
+        count: noRoundRows.length,
+        sample: noRoundRows,
+      },
       prompts_recent: {
         count: Number(recentPrompts?.count) || 0,
       },
@@ -172,26 +372,61 @@ router.get("/today-stack", async (req, res) => {
   }
 });
 
-// Activity log (paginated)
+// Categorize an activity_log row's `action` into one of the dashboard's
+// event-pill kinds. Pure mapping function — keeps the dashboard's color-
+// coding consistent and makes filter chips (Rounds / Prompts / etc) work
+// without any new columns.
+function categorizeActivity(action = "") {
+  if (action === "login") return "login";
+  if (action.includes("round")) return "round";
+  if (action.includes("prompt") || action.includes("supplement")) return "prompt";
+  if (action.includes("interview") || action.includes("session")) return "session";
+  if (action.includes("impersonat")) return "impersonate";
+  if (action.includes("insight")) return "insight";
+  return "system";
+}
+
+// Activity log (paginated). Per design handoff §1: logins are
+// de-emphasized and excluded by default — they live under System Log.
+// Pass ?include_logins=true to bring them back, or ?kind=<kind> to
+// filter to one event type (round / prompt / session / impersonate /
+// insight / system).
 router.get("/activity-log", async (req, res) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
     const offset = (page - 1) * limit;
+    const includeLogins = req.query.include_logins === "true";
+    const kindFilter = typeof req.query.kind === "string" ? req.query.kind : null;
 
+    const where = [];
+    const params = [];
+    if (!includeLogins && !kindFilter) {
+      where.push("al.action <> 'login'");
+    }
+    const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+
+    // Pull a wider window than `limit` so we can apply the kind filter
+    // post-fetch without paginating wrong (kind is computed in JS).
+    const fetchLimit = kindFilter ? Math.min(500, limit * 5) : limit;
     const entries = await db.all(
       `SELECT al.*, c.company_name
        FROM activity_log al
        LEFT JOIN clients c ON c.id = al.client_id
+       ${whereSql}
        ORDER BY al.created_at DESC
        LIMIT ? OFFSET ?`,
-      [limit, offset]
+      [...params, fetchLimit, offset]
     );
 
-    const total = await db.get("SELECT COUNT(*) as count FROM activity_log");
+    const enriched = entries.map((e) => ({ ...e, kind: categorizeActivity(e.action) }));
+    const filtered = kindFilter ? enriched.filter((e) => e.kind === kindFilter) : enriched;
+    const final = filtered.slice(0, limit);
+
+    const total = await db.get(`SELECT COUNT(*) as count FROM activity_log al ${whereSql}`, params);
 
     res.json({
-      entries,
+      entries: final,
       total: total?.count || 0,
       page,
       limit,
