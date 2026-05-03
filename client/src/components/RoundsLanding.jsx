@@ -654,7 +654,7 @@ export default function RoundsLanding() {
           mode="configure"
           nextRoundNumber={configuringRound.round_number}
           defaultDate={configuringRound.scheduled_date?.slice(0, 10) || ""}
-          defaultWindowDays={configuringRound.window_days || 21}
+          defaultWindowDays={configuringRound.window_days ?? 21}
           audience={preflight?.audience}
           onCancel={() => setConfiguringRound(null)}
           onSubmit={async (data) => {

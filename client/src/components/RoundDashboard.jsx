@@ -1584,7 +1584,7 @@ ${footer()}
                 style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
               >
                 By location
-                <InfoTip>
+                <InfoTip align="right">
                   NPS broken down by physical location (e.g., regional offices). A location with a
                   much lower NPS than the portfolio average usually signals staffing, operational,
                   or local-leadership issues at that specific site — not a company- wide problem.

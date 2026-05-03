@@ -45,9 +45,11 @@ export function Sparkline({
   const lastY = height - ((data[lastIdx] - min) / range) * height;
   return (
     <svg
-      width={width}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="xMidYMid meet"
+      width="100%"
       height={height}
-      style={{ display: "block", maxWidth: "100%" }}
+      style={{ display: "block", maxWidth: "100%", height: "auto" }}
       role="img"
       aria-label="Trend sparkline"
     >
@@ -109,8 +111,11 @@ export function NpsGauge({ value, prev, size = 200 }) {
 
   return (
     <svg
+      viewBox={`0 0 ${size} ${size * 0.78}`}
+      preserveAspectRatio="xMidYMid meet"
       width={size}
       height={size * 0.78}
+      style={{ maxWidth: "100%", height: "auto" }}
       role="img"
       aria-label={`NPS gauge showing ${value}${prev != null ? ` (was ${prev})` : ""}`}
     >

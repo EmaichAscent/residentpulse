@@ -141,6 +141,7 @@ export default function TrendsView() {
           title="↓ Communities declining most"
           color="var(--coral)"
           movers={biggestMovers(latest, prev, "desc")}
+          tooltipAlign="right"
           tooltip={
             <>
               Communities whose NPS dropped the most between the previous and latest concluded
@@ -399,7 +400,7 @@ function ResponseRateCard({ rounds, latest, prev }) {
           style={{ color: "var(--ink)", letterSpacing: "-0.005em" }}
         >
           Response rate
-          <InfoTip>
+          <InfoTip align="right">
             Percentage of invited board members who completed the survey, round by round. The higher
             the response rate, the more representative your NPS — anything above 60% is strong for
             board surveys. The +/−pp pill shows the change vs the previous round.
@@ -692,12 +693,12 @@ function TopicColumn({ label, color, tint, topics }) {
   );
 }
 
-function BiggestMoversCard({ title, color, movers, tooltip }) {
+function BiggestMoversCard({ title, color, movers, tooltip, tooltipAlign = "left" }) {
   return (
     <Card padding={22}>
       <h3 className="font-semibold text-[15px] mb-3.5 inline-flex items-center" style={{ color }}>
         {title}
-        {tooltip && <InfoTip>{tooltip}</InfoTip>}
+        {tooltip && <InfoTip align={tooltipAlign}>{tooltip}</InfoTip>}
       </h3>
       {movers.length === 0 ? (
         <p className="text-[12.5px]" style={{ color: "var(--ink-4)" }}>
