@@ -196,7 +196,12 @@ export default function RoundsLanding() {
   // ────────────────────────────────────────────────────────────────────
 
   const handleCadenceChange = async (newCadence) => {
-    if (cadenceUpdating || newCadence === account?.survey_cadence) return;
+    // Cadence + plan limit live under account.subscription, not at the
+    // top level of the /api/admin/account payload. Earlier code read
+    // them from the top level (always undefined) which short-circuited
+    // the equality check on first render and locked the toggle.
+    const currentCadence = account?.subscription?.survey_cadence;
+    if (cadenceUpdating || newCadence === currentCadence) return;
     setCadenceUpdating(true);
     try {
       const res = await fetch("/api/admin/account/cadence", {
@@ -395,8 +400,8 @@ export default function RoundsLanding() {
         </div>
         <div className="flex items-center gap-2">
           <CadenceToggle
-            value={account?.survey_cadence || 2}
-            maxAllowed={account?.max_survey_cadence || 2}
+            value={account?.subscription?.survey_cadence || 2}
+            maxAllowed={account?.subscription?.survey_rounds_per_year || 2}
             onChange={handleCadenceChange}
             disabled={cadenceUpdating}
           />
@@ -643,7 +648,7 @@ export default function RoundsLanding() {
         <ScheduleRoundModal
           mode="create"
           nextRoundNumber={maxRoundNumber(rounds) + 1}
-          defaultDate={defaultNextDate(rounds, account?.survey_cadence || 2)}
+          defaultDate={defaultNextDate(rounds, account?.subscription?.survey_cadence || 2)}
           defaultWindowDays={21}
           audience={preflight?.audience}
           onCancel={() => setScheduleOpen(false)}

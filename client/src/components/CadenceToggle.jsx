@@ -4,35 +4,23 @@
  * board-survey cadence appears so the same control reads identically
  * across the app.
  *
- * Previously there were three implementations with slightly different
- * styling (AccountSettings.jsx had separate "2× / year" buttons,
- * RoundsLanding.jsx had a white-active segmented pill, Home.jsx had
- * an ink-active segmented pill). This unifies them on the ink-active
- * compact style.
+ * One canonical size, on purpose. Earlier versions exposed a `size`
+ * prop with sm/md/lg variants — that re-introduced the visual drift
+ * the component was meant to eliminate. If a context needs more or
+ * less prominence, give the surrounding label/spacing the difference,
+ * not the toggle itself.
  *
  * Props:
  *   value         current cadence (2 or 4)
  *   maxAllowed    cap from the subscription plan; >maxAllowed options
- *                 render disabled with a "requires plan upgrade" tooltip
+ *                 render disabled with a "requires plan upgrade"
+ *                 tooltip — UNLESS that option is the currently active
+ *                 one (we don't lock you out of your own setting if
+ *                 your plan was downgraded after the fact).
  *   onChange      called with the new value when an option is clicked
  *   disabled      forces all options disabled (e.g. while saving)
- *   size          "sm" | "md" | "lg" — controls padding + text size.
- *                 Default "md" matches the Survey-rounds card. Use
- *                 "lg" inside Settings panels.
  */
-export default function CadenceToggle({
-  value,
-  maxAllowed = 4,
-  onChange,
-  disabled = false,
-  size = "md",
-}) {
-  const sizeStyles = {
-    sm: { padding: "3px 9px", fontSize: 11 },
-    md: { padding: "5px 11px", fontSize: 12 },
-    lg: { padding: "7px 14px", fontSize: 12.5 },
-  };
-  const s = sizeStyles[size] || sizeStyles.md;
+export default function CadenceToggle({ value, maxAllowed = 4, onChange, disabled = false }) {
   const options = [
     { v: 2, label: "2×/yr" },
     { v: 4, label: "4×/yr" },
@@ -49,7 +37,10 @@ export default function CadenceToggle({
     >
       {options.map((o) => {
         const active = value === o.v;
-        const isDisabled = disabled || o.v > maxAllowed;
+        // Never disable the currently-active option, even if it now
+        // exceeds maxAllowed (plan downgrade case). Disabling it would
+        // hide the user's actual setting and look broken.
+        const isDisabled = disabled || (!active && o.v > maxAllowed);
         return (
           <button
             key={o.v}
@@ -58,15 +49,15 @@ export default function CadenceToggle({
             disabled={isDisabled}
             className="font-semibold rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              padding: s.padding,
-              fontSize: s.fontSize,
+              padding: "5px 12px",
+              fontSize: 12,
               backgroundColor: active ? "var(--ink)" : "transparent",
               color: active ? "white" : "var(--ink-3)",
               border: "none",
               cursor: isDisabled ? "not-allowed" : active ? "default" : "pointer",
             }}
             title={
-              o.v > maxAllowed
+              o.v > maxAllowed && !active
                 ? `${o.label} requires plan upgrade`
                 : `Set survey cadence to ${o.label}`
             }
