@@ -86,7 +86,20 @@ export default function SuperAdminPage() {
     }
   };
 
-  const activeLabel = NAV_OPERATIONS.find((n) => n.path === activeTab)?.label || "Dashboard";
+  const activeNav = NAV_OPERATIONS.find((n) => n.path === activeTab);
+  const activeLabel = activeNav?.label || "Dashboard";
+
+  // Detail pages (e.g. /superadmin/clients/:id) push a third
+  // breadcrumb segment via Outlet context. The setter is provided here
+  // and lifted by the child page on mount; cleared on unmount so the
+  // crumb doesn't bleed into sibling routes.
+  const [subBreadcrumb, setSubBreadcrumb] = useState(null);
+
+  // Reset sub-breadcrumb whenever the active section changes — guards
+  // against a stale crumb if a child forgets its cleanup.
+  useEffect(() => {
+    setSubBreadcrumb(null);
+  }, [activeTab]);
 
   return (
     <div
@@ -253,18 +266,31 @@ export default function SuperAdminPage() {
             gap: 8,
           }}
         >
-          <span className="font-semibold text-[13px]" style={{ color: "var(--ink)" }}>
+          <Crumb onClick={() => navigate("/superadmin/dashboard")} bold>
             SuperAdmin
-          </span>
-          <span style={{ color: "var(--ink-4)" }}>/</span>
-          <span className="text-[13px]" style={{ color: "var(--ink-3)" }}>
-            {activeLabel}
-          </span>
+          </Crumb>
+          <Sep />
+          {/*
+            Middle crumb is a link when there's a sub-breadcrumb (because
+            it's no longer the leaf), otherwise plain text since it's
+            already the active page.
+          */}
+          {subBreadcrumb ? (
+            <Crumb onClick={() => navigate(`/superadmin/${activeTab}`)}>{activeLabel}</Crumb>
+          ) : (
+            <Crumb>{activeLabel}</Crumb>
+          )}
+          {subBreadcrumb && (
+            <>
+              <Sep />
+              <Crumb>{subBreadcrumb}</Crumb>
+            </>
+          )}
         </div>
 
         {/* Page content */}
         <div style={{ flex: 1, padding: "28px 32px 64px" }}>
-          <Outlet />
+          <Outlet context={{ setSubBreadcrumb }} />
         </div>
       </main>
     </div>
@@ -274,6 +300,46 @@ export default function SuperAdminPage() {
 // ─────────────────────────────────────────────────────────────────────
 // Subcomponents
 // ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Single breadcrumb segment. If onClick is provided it renders as a
+ * clickable link; otherwise it's plain text (used for the leaf crumb).
+ * `bold` is for the leftmost "SuperAdmin" label which the design
+ * shows in heavier weight than the section name.
+ */
+function Crumb({ children, onClick, bold }) {
+  const baseStyle = {
+    fontSize: 13,
+    color: bold ? "var(--ink)" : "var(--ink-3)",
+    fontWeight: bold ? 600 : 500,
+    background: "transparent",
+    border: "none",
+    padding: 0,
+  };
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="transition"
+        style={{
+          ...baseStyle,
+          cursor: "pointer",
+          textDecoration: "none",
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--pulse-deep)")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = baseStyle.color)}
+      >
+        {children}
+      </button>
+    );
+  }
+  return <span style={baseStyle}>{children}</span>;
+}
+
+function Sep() {
+  return <span style={{ color: "var(--ink-4)", fontSize: 13 }}>/</span>;
+}
 
 function SidebarSection({ label }) {
   return (

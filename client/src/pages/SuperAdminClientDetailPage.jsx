@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useOutletContext } from "react-router-dom";
 import ChatBubble from "../components/ChatBubble";
 import ConfirmModal from "../components/ConfirmModal";
 import TypedConfirmModal from "../components/TypedConfirmModal";
@@ -8,6 +8,12 @@ import MockSurveyModal from "../components/MockSurveyModal";
 export default function SuperAdminClientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  // Outlet context lets us push a third breadcrumb segment ("Southern
+  // States Management Group, Inc.") into the SuperAdminPage shell.
+  // Optional chaining covers the case where this page is somehow
+  // rendered outside the shell (legacy bookmarks, tests, etc).
+  const outletCtx = useOutletContext?.() || {};
+  const setSubBreadcrumb = outletCtx.setSubBreadcrumb;
   const [detail, setDetail] = useState(null);
   const [interviews, setInterviews] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -236,19 +242,28 @@ export default function SuperAdminClientDetailPage() {
   const formatDate = (d) => (d ? new Date(d).toLocaleDateString() : "—");
   const formatDateTime = (d) => (d ? new Date(d).toLocaleString() : "Never");
 
+  // Push the client name into the shell breadcrumb whenever it loads
+  // (or changes). Cleanup on unmount so navigating away clears it.
+  useEffect(() => {
+    if (!setSubBreadcrumb) return undefined;
+    const name = detail?.client?.company_name;
+    if (name) setSubBreadcrumb(name);
+    return () => setSubBreadcrumb(null);
+  }, [detail?.client?.company_name, setSubBreadcrumb]);
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-500">Loading...</p>
-      </div>
+      <p className="text-center py-10" style={{ color: "var(--ink-4)" }}>
+        Loading…
+      </p>
     );
   }
 
   if (!detail) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-500">Client not found</p>
-      </div>
+      <p className="text-center py-10" style={{ color: "var(--ink-4)" }}>
+        Client not found.
+      </p>
     );
   }
 
@@ -265,50 +280,87 @@ export default function SuperAdminClientDetailPage() {
   } = detail;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="shadow-sm" style={{ backgroundColor: "var(--cam-blue)" }}>
-        <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div>
-            <button
-              onClick={() => navigate("/superadmin/clients")}
-              className="text-sm text-white/70 hover:text-white mb-1 block"
-            >
-              &larr; Back to Clients
-            </button>
-            <h1 className="text-xl font-bold text-white">{client.company_name}</h1>
-            <p className="text-sm text-white/60">{client.client_code}</p>
-          </div>
-          {/* Safe actions only — destructive (Reset / Deactivate / Delete) live
-              in the Danger Zone at the bottom of this page. */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowMockModal(true)}
-              disabled={client.status !== "active"}
-              className="px-4 py-2 text-sm font-semibold text-white rounded-lg shadow-sm transition disabled:opacity-40"
-              style={{ backgroundColor: "var(--pulse)" }}
-            >
-              Test Survey
-            </button>
-            <button
-              onClick={() => setConfirmAction({ type: "impersonate" })}
-              disabled={client.status !== "active"}
-              className="px-4 py-2 text-sm font-semibold rounded-lg transition disabled:opacity-40 border border-white/40 text-white hover:bg-white/10"
-            >
-              Impersonate
-            </button>
-            {client.status === "inactive" && (
-              <button
-                onClick={() => setConfirmAction({ type: "activate" })}
-                className="px-4 py-2 text-sm font-semibold text-emerald-800 bg-emerald-200 rounded-lg hover:bg-emerald-300 shadow-sm transition"
-              >
-                Activate
-              </button>
-            )}
+    <div style={{ fontFamily: "var(--font-sans)" }}>
+      {/* Page title row — replaces the old blue header. Lives inside
+          the SuperAdminPage shell so the sidebar + breadcrumb stay
+          visible. Safe actions on the right; destructive lives in the
+          Danger Zone at the bottom of the Overview tab. */}
+      <div className="flex items-start justify-between gap-4 mb-5">
+        <div>
+          <h1
+            className="font-semibold"
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 28,
+              letterSpacing: "-0.02em",
+              color: "var(--ink)",
+              lineHeight: 1.1,
+            }}
+          >
+            {client.company_name}
+          </h1>
+          <div className="font-mono text-[12px] mt-1.5" style={{ color: "var(--ink-4)" }}>
+            {client.client_code}
           </div>
         </div>
-      </header>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowMockModal(true)}
+            disabled={client.status !== "active"}
+            className="font-semibold transition disabled:opacity-40"
+            style={{
+              padding: "8px 14px",
+              fontSize: 13,
+              borderRadius: 8,
+              background: "var(--pulse)",
+              color: "white",
+              border: "1px solid var(--pulse)",
+              boxShadow: "var(--shadow-sm)",
+              cursor: client.status === "active" ? "pointer" : "not-allowed",
+            }}
+          >
+            Test survey
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmAction({ type: "impersonate" })}
+            disabled={client.status !== "active"}
+            className="font-semibold transition disabled:opacity-40"
+            style={{
+              padding: "8px 14px",
+              fontSize: 13,
+              borderRadius: 8,
+              background: "white",
+              color: "var(--ink-2)",
+              border: "1px solid var(--line-2)",
+              cursor: client.status === "active" ? "pointer" : "not-allowed",
+            }}
+          >
+            Impersonate
+          </button>
+          {client.status === "inactive" && (
+            <button
+              type="button"
+              onClick={() => setConfirmAction({ type: "activate" })}
+              className="font-semibold transition"
+              style={{
+                padding: "8px 14px",
+                fontSize: 13,
+                borderRadius: 8,
+                background: "var(--pulse-soft)",
+                color: "var(--pulse-deep)",
+                border: "1px solid var(--pulse-soft)",
+                cursor: "pointer",
+              }}
+            >
+              Activate
+            </button>
+          )}
+        </div>
+      </div>
 
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      <div className="space-y-6">
         {/* Engagement Warning — page-level, surfaces on every tab so
             operators see the inactivity signal regardless of where they
             navigate within this client's detail. */}
