@@ -114,9 +114,79 @@ async function main() {
   );
   console.log(`  closing snippet: ${previewFingerprint(V2_SYSTEM_PROMPT)}`);
 
-  // Re-run protection
+  // Re-run protection — but check whether a prompt_versions row
+  // ACTUALLY records the live value as V2.7. If settings.value matches
+  // V2.7 but no version row exists, the SuperAdmin Prompts library
+  // header reads "Live (untracked version)" and the Recent Versions
+  // panel doesn't surface V2.7 as Current. Recover by inserting the
+  // missing version row (no auto-save needed — settings is already V2.7).
   if (bytesEqual(liveText, V2_SYSTEM_PROMPT)) {
-    console.log(`\n✓ Live value is ALREADY V2.7 — nothing to do.`);
+    const matchingRow = await client.query(
+      `SELECT id, version_number, label
+       FROM prompt_versions
+       WHERE prompt_key = $1 AND prompt_text = $2
+       ORDER BY id DESC LIMIT 1`,
+      [PROMPT_KEY, liveText]
+    );
+
+    if (matchingRow.rowCount > 0) {
+      const r = matchingRow.rows[0];
+      console.log(
+        `\n✓ Live value is ALREADY V2.7 (matches prompt_versions.id=${r.id} v${r.version_number} "${r.label}") — nothing to do.`
+      );
+      await client.end();
+      return;
+    }
+
+    // Live value matches V2.7 but no prompt_versions row records it.
+    // Possible causes:
+    //   • A previous --apply created the row but it was later deleted
+    //     via the SuperAdmin UI's delete-version button
+    //   • settings.value was edited via direct SQL (not through the
+    //     SuperAdmin UI's auto-save flow) — leaves no version row
+    //   • A previous push-prompt-v27.js --apply crashed mid-transaction
+    //     before the V2.7 INSERT (rollback should have prevented this,
+    //     but sometimes COMMIT/ROLLBACK timing is racy)
+    //
+    // Recovery: insert just the V2.7 row, no settings UPDATE, no
+    // auto-save (settings is already V2.7).
+    console.log(`\n⚠ Live value IS V2.7 but no prompt_versions row records it.`);
+    console.log(`  Recovery mode: will insert a V2.7 row to make the SuperAdmin UI`);
+    console.log(`  recognize the live value. No settings UPDATE, no auto-save.`);
+
+    if (!APPLY) {
+      console.log(`\n✓ DRY-RUN complete — would insert a single V2.7 row. Re-run with --apply.`);
+      await client.end();
+      return;
+    }
+
+    await client.query("BEGIN");
+    try {
+      const versionNumber = await nextVersionNumber();
+      await client.query(
+        `INSERT INTO prompt_versions
+           (prompt_key, prompt_text, blocks_jsonb, label, note, version_number, created_by)
+         VALUES ($1, $2, NULL, $3, $4, $5, $6)`,
+        [
+          PROMPT_KEY,
+          V2_SYSTEM_PROMPT,
+          "V2.7",
+          "Backfill — settings.value was already V2.7 but no version row recorded it. Inserted by push-prompt-v27.js recovery path.",
+          versionNumber,
+          "push-prompt-v27.js",
+        ]
+      );
+      console.log(
+        `  [APPLY] inserted v${versionNumber} "V2.7" to record the live value (${V2_SYSTEM_PROMPT.length} chars)`
+      );
+      await client.query("COMMIT");
+      console.log(`\n✓ COMMITTED — V2.7 row backfilled. Refresh the SuperAdmin Prompts page.`);
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("\n✗ Recovery failed, rolled back. Cause:");
+      console.error(err);
+      process.exitCode = 1;
+    }
     await client.end();
     return;
   }
