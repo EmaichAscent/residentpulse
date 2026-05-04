@@ -16,6 +16,7 @@ import {
   V2_SYSTEM_PROMPT_V26,
   V2_SYSTEM_PROMPT_V261,
   V2_SYSTEM_PROMPT_V27,
+  V2_SYSTEM_PROMPT_V28,
   V2_SYSTEM_PROMPT,
   V2_5_CLOSING_BLOCK,
   V2_5_NEVER_TAIL,
@@ -200,7 +201,19 @@ describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3/V2.4 frozen for migration mat
     expect(V2_SYSTEM_PROMPT_V27).not.toMatch(/NOTE on sentence count/);
   });
 
-  it("all nine frozen versions are distinct", () => {
+  it("V2_SYSTEM_PROMPT_V28 is preserved (V2.8: closed-topic lockout + terminal probe + closing exemption)", () => {
+    expect(V2_SYSTEM_PROMPT_V28.length).toBeGreaterThan(15000);
+    // V2.8 fingerprints — these were the surgical additions on top of V2.7:
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/CLOSED TOPICS STAY CLOSED/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/forward-looking probe is TERMINAL/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/NOTE on sentence count/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/Re-open a topic the resident already closed/);
+    // V2.8 still had the bulky V2.x worked examples that V3.0 strips.
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/Common failure mode/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/Worked example: detractor done right/);
+  });
+
+  it("all ten frozen versions are distinct", () => {
     const all = [
       V2_SYSTEM_PROMPT_V20,
       V2_SYSTEM_PROMPT_V21,
@@ -211,11 +224,12 @@ describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3/V2.4 frozen for migration mat
       V2_SYSTEM_PROMPT_V26,
       V2_SYSTEM_PROMPT_V261,
       V2_SYSTEM_PROMPT_V27,
+      V2_SYSTEM_PROMPT_V28,
     ];
     expect(new Set(all).size).toBe(all.length);
   });
 
-  it("current V2_SYSTEM_PROMPT (V2.8) differs from all frozen versions", () => {
+  it("current V2_SYSTEM_PROMPT (V3.0) differs from all frozen versions", () => {
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V20);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V21);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V22);
@@ -225,6 +239,72 @@ describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3/V2.4 frozen for migration mat
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V26);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V261);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V27);
+    expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V28);
+  });
+});
+
+describe("V3.0 — clean rewrite (no examples, ~5× shorter than V2.8)", () => {
+  it("is dramatically shorter than V2.8 (the V2.x cruft is gone)", () => {
+    expect(V2_SYSTEM_PROMPT.length).toBeLessThan(V2_SYSTEM_PROMPT_V28.length / 2);
+    // V3.0 should land somewhere around 4-6k chars (vs V2.8's 18k+).
+    expect(V2_SYSTEM_PROMPT.length).toBeLessThan(8000);
+    expect(V2_SYSTEM_PROMPT.length).toBeGreaterThan(2000);
+  });
+
+  it("contains the essential V2.x rules that V3.0 carried forward", () => {
+    // Hard rules
+    expect(V2_SYSTEM_PROMPT).toMatch(/5.7 questions total/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/2 follow-ups MAX/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/CLOSED TOPICS STAY CLOSED/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/≤ 2 sentences per reply/);
+    // Coverage areas — all six themes from V2.7 production data
+    expect(V2_SYSTEM_PROMPT).toMatch(/Manager \/ staff responsiveness/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Communication systems/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Vendor & maintenance coordination/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Board advisory support/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Training & education/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Financial accuracy/);
+    // Forward-looking probe is TERMINAL
+    expect(V2_SYSTEM_PROMPT).toMatch(/forward-looking probe.*TERMINAL/i);
+    // Critical signals (dissolution)
+    expect(V2_SYSTEM_PROMPT).toMatch(/DISSOLUTION of the association/);
+    // Closing wrap-up structure
+    expect(V2_SYSTEM_PROMPT).toMatch(/Step 1.*Decide to close/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Step 2.*Playback/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Step 3.*Final close/);
+    expect(V2_SYSTEM_PROMPT).toMatch(
+      /Anything missing from that, or anything else I should pass along/
+    );
+    expect(V2_SYSTEM_PROMPT).toMatch(/Thank you for your time, I'm concluding this chat/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/\[CHAT:END\]/);
+  });
+
+  it("contains the score-specific opener templates", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/9.10.*Promoter/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/7.8.*Passive/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/0.6.*Detractor/);
+  });
+
+  it("explicitly bans the worst V2.x failure phrases", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Thanks for/);
+    expect(V2_SYSTEM_PROMPT).toMatch(
+      /That's \[great\/excellent\/critical\/good\/helpful\/frustrating/
+    );
+    expect(V2_SYSTEM_PROMPT).toMatch(/multiple-choice questions/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/templated transitions.*Switching gears.*Different topic/);
+    // No advice
+    expect(V2_SYSTEM_PROMPT).toMatch(/Have you tried/);
+  });
+
+  it("strips ALL V2.x worked examples (none should remain)", () => {
+    // V3.0 hypothesis: worked examples were giving the model bad
+    // patterns to copy. Verify they're completely gone.
+    expect(V2_SYSTEM_PROMPT).not.toMatch(/Common failure mode/);
+    expect(V2_SYSTEM_PROMPT).not.toMatch(/Worked example: detractor done right/);
+    expect(V2_SYSTEM_PROMPT).not.toMatch(/CHECKLIST: incident=sprinklers/);
+    expect(V2_SYSTEM_PROMPT).not.toMatch(/THREAD COMPLETE: incident=dropped budget items/);
+    // No literal pivot phrasings as templates
+    expect(V2_SYSTEM_PROMPT).not.toMatch(/board notices and meeting prep coming through/);
   });
 });
 
@@ -244,45 +324,45 @@ describe("V2 system prompt — V2.8 derivation from V2.7", () => {
   });
 
   it("V2.8 adds closed-topic lockout + closing wrap-up exemption to hard constraints", () => {
-    expect(V2_SYSTEM_PROMPT).toContain(V2_8_HARD_CONSTRAINTS_BLOCK);
-    expect(V2_SYSTEM_PROMPT).toMatch(/CLOSED TOPICS STAY CLOSED/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Re-opening a closed topic is a violation/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/EXCEPTION.*structured closing wrap-up/);
+    expect(V2_SYSTEM_PROMPT_V28).toContain(V2_8_HARD_CONSTRAINTS_BLOCK);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/CLOSED TOPICS STAY CLOSED/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/Re-opening a closed topic is a violation/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/EXCEPTION.*structured closing wrap-up/);
     // The V2.7 hard-constraints block must be GONE (replaced).
-    expect(V2_SYSTEM_PROMPT).not.toContain(V2_7_HARD_CONSTRAINTS_BLOCK);
+    expect(V2_SYSTEM_PROMPT_V28).not.toContain(V2_7_HARD_CONSTRAINTS_BLOCK);
   });
 
   it("V2.8 marks forward-looking probe as TERMINAL (no drilling into the ask)", () => {
-    expect(V2_SYSTEM_PROMPT).toContain(V2_8_FORWARD_LOOKING_TAIL);
-    expect(V2_SYSTEM_PROMPT).toMatch(/forward-looking probe is TERMINAL/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/WRONG \(drilling INTO the ask/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Make the reports accurate/);
+    expect(V2_SYSTEM_PROMPT_V28).toContain(V2_8_FORWARD_LOOKING_TAIL);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/forward-looking probe is TERMINAL/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/WRONG \(drilling INTO the ask/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/Make the reports accurate/);
   });
 
   it("V2.8 prepends sentence-count NOTE to the closing block", () => {
-    expect(V2_SYSTEM_PROMPT).toContain(V2_8_CLOSING_BLOCK_HEAD);
-    expect(V2_SYSTEM_PROMPT).toMatch(/NOTE on sentence count.*V2\.8/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/ONE exception to the.*≤ 2 sentences/);
+    expect(V2_SYSTEM_PROMPT_V28).toContain(V2_8_CLOSING_BLOCK_HEAD);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/NOTE on sentence count.*V2\.8/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/ONE exception to the.*≤ 2 sentences/);
   });
 
   it("V2.8 expands the Never list with V2.7-failure patterns", () => {
-    expect(V2_SYSTEM_PROMPT).toContain(V2_8_NEVER_TAIL);
+    expect(V2_SYSTEM_PROMPT_V28).toContain(V2_8_NEVER_TAIL);
     // Specific phrases the V2.7 model emitted in production:
-    expect(V2_SYSTEM_PROMPT).toMatch(/That's excellent/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/That's critical/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/That \[adjective\] approach makes a difference/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Thanks for that/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/That's excellent/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/That's critical/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/That \[adjective\] approach makes a difference/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/Thanks for that/);
     // New-rule entries:
-    expect(V2_SYSTEM_PROMPT).toMatch(/Re-open a topic the resident already closed/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Drill into a forward-looking ask/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/Re-open a topic the resident already closed/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/Drill into a forward-looking ask/);
   });
 
   it("V2.8 keeps everything V2.7 added (no regression on pivot structure / coverage)", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Pivot structure — generate fresh/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Board advisory support/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Training & education/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Financial accuracy/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/DISSOLUTION of the association/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/Pivot structure — generate fresh/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/Board advisory support/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/Training & education/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/Financial accuracy/);
+    expect(V2_SYSTEM_PROMPT_V28).toMatch(/DISSOLUTION of the association/);
   });
 });
 
@@ -302,26 +382,26 @@ describe("V2 system prompt — V2.7 derivation from V2.6.1", () => {
 
   // ── V2.7: pivot structure replaces stock-phrasing menu ───────────
   it("V2.7 replaces the pivot-phrasing menu with structural rules + banned stock phrases", () => {
-    expect(V2_SYSTEM_PROMPT).toContain(V2_7_PIVOT_INSTRUCTIONS);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Pivot structure — generate fresh/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/stock transition phrases are BANNED/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/"Switching gears"/);
+    expect(V2_SYSTEM_PROMPT_V27).toContain(V2_7_PIVOT_INSTRUCTIONS);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/Pivot structure — generate fresh/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/stock transition phrases are BANNED/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/"Switching gears"/);
   });
 
   it("V2.7 strips literal pivot strings from worked examples (replaced with [PIVOT: ...] placeholders)", () => {
-    expect(V2_SYSTEM_PROMPT).toContain(V2_7_FRUSTRATION_PIVOT);
-    expect(V2_SYSTEM_PROMPT).toContain(V2_7_FAILURE_MODE_PIVOT);
-    expect(V2_SYSTEM_PROMPT).toContain(V2_7_DETRACTOR_PIVOT);
+    expect(V2_SYSTEM_PROMPT_V27).toContain(V2_7_FRUSTRATION_PIVOT);
+    expect(V2_SYSTEM_PROMPT_V27).toContain(V2_7_FAILURE_MODE_PIVOT);
+    expect(V2_SYSTEM_PROMPT_V27).toContain(V2_7_DETRACTOR_PIVOT);
     // Worked-example pivot phrasings from V2.6/V2.6.1 must be GONE.
-    expect(V2_SYSTEM_PROMPT).not.toContain(
+    expect(V2_SYSTEM_PROMPT_V27).not.toContain(
       "Switching gears — how are board notices and meeting prep coming through these days?"
     );
-    expect(V2_SYSTEM_PROMPT).not.toContain(
+    expect(V2_SYSTEM_PROMPT_V27).not.toContain(
       "OK. Different topic — anything specific on maintenance"
     );
     // The placeholder pattern should appear at least 3 times (once per
     // worked-example pivot).
-    const placeholderCount = (V2_SYSTEM_PROMPT.match(/\[PIVOT: acknowledge in one word/g) || [])
+    const placeholderCount = (V2_SYSTEM_PROMPT_V27.match(/\[PIVOT: acknowledge in one word/g) || [])
       .length;
     expect(placeholderCount).toBeGreaterThanOrEqual(3);
   });
@@ -330,34 +410,34 @@ describe("V2 system prompt — V2.7 derivation from V2.6.1", () => {
     // V2.8 modifies the forward-looking-probes tail INSIDE V2.7's
     // coverage block (extending it with the TERMINAL probe rule), so
     // V2_7_COVERAGE_BLOCK no longer appears as a verbatim substring of
-    // V2_SYSTEM_PROMPT. Assert on intent: the new themes are present,
+    // V2_SYSTEM_PROMPT_V27. Assert on intent: the new themes are present,
     // the old narrow list is gone, dissolution is flagged.
-    expect(V2_SYSTEM_PROMPT).toMatch(/Board advisory support/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Training & education/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Financial accuracy/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Communication systems & meeting follow-up/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Vendor & maintenance coordination/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/Board advisory support/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/Training & education/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/Financial accuracy/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/Communication systems & meeting follow-up/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/Vendor & maintenance coordination/);
     // Critical-flag handling for dissolution interest.
-    expect(V2_SYSTEM_PROMPT).toMatch(/DISSOLUTION of the association/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/DISSOLUTION of the association/);
     // Old narrow 3-bullet list should be gone.
-    expect(V2_SYSTEM_PROMPT).not.toContain(V2_6_1_COVERAGE_BLOCK);
+    expect(V2_SYSTEM_PROMPT_V27).not.toContain(V2_6_1_COVERAGE_BLOCK);
   });
 
   it("V2.7 adds forward-looking probes (boards have asks, not just complaints)", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Forward-looking probes/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/What would good look like for you/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/managers should carry fewer accounts/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/Forward-looking probes/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/What would good look like for you/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/managers should carry fewer accounts/);
   });
 
   it("V2.7 keeps everything V2.6 added (closing block + ban sycophantic flattery — V2.8 expanded both)", () => {
     // V2.8 prepends a NOTE to the closing block and expands the
     // sycophancy ban — so V2_6_CLOSING_BLOCK isn't verbatim anymore.
     // Assert on the V2.6 SEMANTIC features that V2.8 preserved.
-    expect(V2_SYSTEM_PROMPT).toMatch(/playback before close/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Step 2 — Playback/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Absolutely fair point/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/\[CHAT:END\]/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Thank you for your time, I'm concluding this chat/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/playback before close/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/Step 2 — Playback/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/Absolutely fair point/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/\[CHAT:END\]/);
+    expect(V2_SYSTEM_PROMPT_V27).toMatch(/Thank you for your time, I'm concluding this chat/);
   });
 });
 
@@ -421,44 +501,44 @@ describe("V2 system prompt — V2.6 derivation from V2.5", () => {
   it("V2.6 contains the new playback-before-close block (V2.8 prepends a NOTE but the rest is intact)", () => {
     // V2.8 prepended a sentence-count NOTE to the closing block head
     // (V2_8_CLOSING_BLOCK_HEAD), so V2_6_CLOSING_BLOCK no longer
-    // appears verbatim in V2_SYSTEM_PROMPT. The 3-step playback
+    // appears verbatim in V2_SYSTEM_PROMPT_V26. The 3-step playback
     // structure itself is unchanged — assert on intent, not the
     // exact head string.
-    expect(V2_SYSTEM_PROMPT).toMatch(/V2\.6.*playback before close/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Step 1.*Decide it's time to close/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Step 2.*Playback.*REQUIRED/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Step 3.*Final close/);
-    expect(V2_SYSTEM_PROMPT).toMatch(
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/V2\.6.*playback before close/);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/Step 1.*Decide it's time to close/);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/Step 2.*Playback.*REQUIRED/);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/Step 3.*Final close/);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(
       /Anything missing from that, or anything else I should pass along/
     );
-    expect(V2_SYSTEM_PROMPT).toMatch(/faster channel than a quarterly survey/);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/faster channel than a quarterly survey/);
   });
 
   it("V2.6 bans sycophantic flattery (V2.8 expands the list, V2_6_NEVER_TAIL is no longer verbatim)", () => {
     // V2.8 replaced V2_6_NEVER_TAIL with V2_8_NEVER_TAIL which adds
     // more entries. V2_6_NEVER_TAIL is intentionally GONE from
-    // V2_SYSTEM_PROMPT (its original 4-bullet form). Check that the
+    // V2_SYSTEM_PROMPT_V26 (its original 4-bullet form). Check that the
     // sycophancy ban is still present in some form.
-    expect(V2_SYSTEM_PROMPT).toMatch(/sycophantic flattery/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Absolutely fair point/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Skip the playback step at close/);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/sycophantic flattery/);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/Absolutely fair point/);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/Skip the playback step at close/);
   });
 
   it("V2.6 keeps the [CHAT:END] mechanism + 'Thank you for your time' closing line", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/\[CHAT:END\]/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Thank you for your time, I'm concluding this chat/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/auto-closes the session 3 seconds later/);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/\[CHAT:END\]/);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/Thank you for your time, I'm concluding this chat/);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/auto-closes the session 3 seconds later/);
   });
 
   it("V2.6 does NOT contain the old V2.5 closing block (regression guard)", () => {
     // The closing block is fully replaced — its V2.5 form must be gone.
-    expect(V2_SYSTEM_PROMPT).not.toContain(V2_5_CLOSING_BLOCK);
+    expect(V2_SYSTEM_PROMPT_V26).not.toContain(V2_5_CLOSING_BLOCK);
     // The Never tail is APPENDED to (not replaced wholesale), so the
     // V2.5 [CHAT:END] reminders remain inside V2_6_NEVER_TAIL by
     // design. We verify intent by checking the new entries land
     // BEFORE the [CHAT:END] reminders in the final string.
-    const sycophancyIdx = V2_SYSTEM_PROMPT.indexOf("sycophantic flattery");
-    const chatEndForgetIdx = V2_SYSTEM_PROMPT.indexOf("Forget to include [CHAT:END]");
+    const sycophancyIdx = V2_SYSTEM_PROMPT_V26.indexOf("sycophantic flattery");
+    const chatEndForgetIdx = V2_SYSTEM_PROMPT_V26.indexOf("Forget to include [CHAT:END]");
     expect(sycophancyIdx).toBeGreaterThan(-1);
     expect(chatEndForgetIdx).toBeGreaterThan(sycophancyIdx);
   });
@@ -466,22 +546,22 @@ describe("V2 system prompt — V2.6 derivation from V2.5", () => {
 
 describe("V2 system prompt — V2.5 current (thread = root topic, no advice, no meta-narration)", () => {
   it("targets [CLIENT_NAME] and frames the role minimally", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/\[CLIENT_NAME\]/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/interviewing a board member/i);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/\[CLIENT_NAME\]/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/interviewing a board member/i);
   });
 
   it("retains the 5-7 question total + close-on-fine pivot rules", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Hard constraints/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Total session.*5.7 questions/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Stop at 7/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/topic is "fine".*ACCEPT IT, pivot/i);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Hard constraints/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Total session.*5.7 questions/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Stop at 7/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/topic is "fine".*ACCEPT IT, pivot/i);
   });
 
   it("retains the [CHAT:END] auto-close protocol from V2.4", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Closing the chat/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/\[CHAT:END\]/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Thank you for your time, I'm concluding this chat/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/auto-closes the session 3 seconds later/i);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Closing the chat/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/\[CHAT:END\]/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Thank you for your time, I'm concluding this chat/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/auto-closes the session 3 seconds later/i);
   });
 
   it("retains reserves-follow-only and forbidden first-sentence openers", () => {
@@ -490,53 +570,53 @@ describe("V2 system prompt — V2.5 current (thread = root topic, no advice, no 
     // happened" — same intent, slightly different copy. Match the
     // intent (reserves are deprioritized) rather than the exact
     // earlier wording.
-    expect(V2_SYSTEM_PROMPT).toMatch(/Reserves.*top-of-mind/i);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Lead with reserves, statements, or special assessments/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Forbidden first-sentence openers/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Reserves.*top-of-mind/i);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Lead with reserves, statements, or special assessments/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Forbidden first-sentence openers/);
   });
 
   // ── V2.5 — three new behaviors ────────────────────────────────────
 
   it("V2.5: redefines 'thread' as ROOT TOPIC (not per-question)", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Per ROOT topic.*2 follow-ups MAX/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/SAME root issue is the SAME thread/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/What counts as a "root topic"/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Per ROOT topic.*2 follow-ups MAX/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/SAME root issue is the SAME thread/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/What counts as a "root topic"/);
     // The Never list spells out that causes/sub-causes are one thread.
-    expect(V2_SYSTEM_PROMPT).toMatch(
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(
       /SAME ROOT TOPIC past 3 questions.*including causes, sub-causes, examples, and implications/
     );
   });
 
   it("V2.5: Common failure mode worked example is included verbatim", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Common failure mode \(DO NOT REPEAT\)/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/They keep changing my manager/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Common failure mode \(DO NOT REPEAT\)/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/They keep changing my manager/);
     // The "Have you tried documenting" line is the failure example.
-    expect(V2_SYSTEM_PROMPT).toMatch(/Have you tried documenting these projects in writing/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/THREE QUESTIONS MAX, then pivot/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Have you tried documenting these projects in writing/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/THREE QUESTIONS MAX, then pivot/);
   });
 
   it("V2.5: forbids advice / consulting language", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Suggest solutions or advise/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Have you tried…\?/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/You're collecting feedback, not consulting/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Suggest solutions or advise/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Have you tried…\?/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/You're collecting feedback, not consulting/);
   });
 
   it("V2.5: forbids 'It sounds like…' and validation talk ANYWHERE in a reply", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Forbidden ANYWHERE in a reply/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/"It sounds like…"/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/"So it sounds like…"/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Validation talk wastes turns/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Forbidden ANYWHERE in a reply/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/"It sounds like…"/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/"So it sounds like…"/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Validation talk wastes turns/);
   });
 
   it("retains the post-NPS gold-standard opener and detractor worked example", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/A 6 — honest answer/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Worked example: detractor done right/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/sprinklers/i);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/A 6 — honest answer/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Worked example: detractor done right/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/sprinklers/i);
   });
 
   it("is differentiated from V1 (no 'data scientist' framing)", () => {
-    expect(V2_SYSTEM_PROMPT).not.toEqual(V1_SYSTEM_PROMPT);
-    expect(V2_SYSTEM_PROMPT).not.toMatch(/professional data scientist/i);
+    expect(V2_SYSTEM_PROMPT_V25).not.toEqual(V1_SYSTEM_PROMPT);
+    expect(V2_SYSTEM_PROMPT_V25).not.toMatch(/professional data scientist/i);
   });
 });
 

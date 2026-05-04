@@ -165,15 +165,18 @@ describe("Round-trip stability — current V2 prompts", () => {
 });
 
 describe("Derived block exports — shape + content", () => {
-  it("V2_SYSTEM_PROMPT_BLOCKS has the expected sections", () => {
-    expect(V2_SYSTEM_PROMPT_BLOCKS.length).toBeGreaterThan(8);
+  it("V2_SYSTEM_PROMPT_BLOCKS has the V3.0 sections", () => {
+    // V3.0 nuked the V2.x worked-example blocks (Common failure mode,
+    // Worked example: detractor done right, etc.). The remaining
+    // structure is leaner — assert on what V3.0 actually has.
+    expect(V2_SYSTEM_PROMPT_BLOCKS.length).toBeGreaterThanOrEqual(7);
     const headings = V2_SYSTEM_PROMPT_BLOCKS.map((b) => b.heading);
-    // Spot-check known V2.5 sections
     expect(headings).toContain("Role");
-    expect(headings).toContain("Hard constraints (non-negotiable)");
-    expect(headings.some((h) => /Forbidden first-sentence openers/.test(h))).toBe(true);
-    expect(headings.some((h) => /Common failure mode/.test(h))).toBe(true);
-    expect(headings.some((h) => /Closing the chat/.test(h))).toBe(true);
+    expect(headings.some((h) => /Hard rules/.test(h))).toBe(true);
+    expect(headings.some((h) => /Forbidden phrases/.test(h))).toBe(true);
+    expect(headings.some((h) => /Coverage areas/.test(h))).toBe(true);
+    expect(headings.some((h) => /Forward-looking probe/.test(h))).toBe(true);
+    expect(headings.some((h) => /Closing wrap-up/.test(h))).toBe(true);
   });
 
   it("V2_SYSTEM_PROMPT_BLOCKS classifies the Role block as persona", () => {
@@ -182,8 +185,8 @@ describe("Derived block exports — shape + content", () => {
     expect(role.kind).toBe(BLOCK_KIND.PERSONA);
   });
 
-  it("V2_SYSTEM_PROMPT_BLOCKS classifies Hard constraints as critical", () => {
-    const hc = V2_SYSTEM_PROMPT_BLOCKS.find((b) => /Hard constraints/.test(b.heading));
+  it("V2_SYSTEM_PROMPT_BLOCKS classifies Hard rules as critical", () => {
+    const hc = V2_SYSTEM_PROMPT_BLOCKS.find((b) => /Hard rules/.test(b.heading));
     expect(hc).toBeDefined();
     expect(hc.kind).toBe(BLOCK_KIND.CRITICAL);
   });
