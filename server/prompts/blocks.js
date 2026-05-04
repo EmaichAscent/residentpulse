@@ -80,7 +80,9 @@ export function classifyBlockKind(heading) {
     /\bdepth budget\b/.test(h) ||
     /\bquality bar\b/.test(h) ||
     /\bcommon failure mode\b/.test(h) ||
-    /\bhard constraints\b/.test(h)
+    /\bhard constraints\b/.test(h) ||
+    /\bhard rules\b/.test(h) ||
+    /\babsolute\b/.test(h)
   ) {
     return BLOCK_KIND.CRITICAL;
   }

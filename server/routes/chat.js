@@ -162,8 +162,17 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
   }
 
   try {
+    // V3.0 ship — switched from claude-haiku-4-5-20251001 to Sonnet 4.5
+    // for the main board-interview reply. Haiku consistently failed to
+    // follow the V2.x prompt's long Never list (sycophantic openers,
+    // re-opening closed topics, drilling past 3 questions). Sonnet
+    // tracks long instruction lists better. Cost delta is small now
+    // that V3.0 is ~5× shorter than V2.8.
+    //
+    // The async critical-alert detector below stays on Haiku — it's a
+    // simple classification call, doesn't need Sonnet's reasoning.
     const response = await createMessage({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 300,
       system: systemPrompt,
       messages: history.map((m) => ({ role: m.role, content: m.content })),
