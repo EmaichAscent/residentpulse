@@ -1403,10 +1403,84 @@ export const V2_6_NEVER_TAIL = `  • Use sycophantic flattery: "Absolutely fair
   • Forget to include [CHAT:END] on your final wrap reply.
   • Include [CHAT:END] in any reply that isn't the final wrap.`;
 
-export const V2_SYSTEM_PROMPT = V2_SYSTEM_PROMPT_V25.replace(
+/**
+ * V2.6 — frozen for migration matching. Derived from V2.5 via two
+ * surgical replacements (closing block + Never list tail). Frozen as
+ * of the V2.6.1 ship — do NOT edit. New work goes into V2_SYSTEM_PROMPT
+ * (currently V2.6.1) below.
+ */
+export const V2_SYSTEM_PROMPT_V26 = V2_SYSTEM_PROMPT_V25.replace(
   V2_5_CLOSING_BLOCK,
   V2_6_CLOSING_BLOCK
 ).replace(V2_5_NEVER_TAIL, V2_6_NEVER_TAIL);
+
+/**
+ * V2.6.1 — Board Member Interview prompt (current).
+ *
+ * Bug Mike caught: across two test conversations, the AI used the
+ * IDENTICAL pivot string verbatim — "Switching gears — how are board
+ * notices and meeting prep coming through these days?" — even though
+ * the conversations were different and the user had said different
+ * things. The model was treating the worked-example pivot phrases in
+ * V2.6 as memorized stock templates rather than illustrative copy.
+ *
+ * Three places in V2.6 use that exact phrase as a worked-example
+ * pivot. The V2.6.1 fix:
+ *
+ *   1. Rewrite the "Pivot phrasing" guidance block to explicitly tell
+ *      the model that the example phrases are illustrative templates
+ *      to VARY, not stock strings to copy. Add more example phrasings
+ *      so the model has options.
+ *
+ *   2. Vary the three worked-example pivots — each now uses different
+ *      wording AND/OR a different topic, so the model sees pivot
+ *      variety in its few-shot examples.
+ *
+ * Implementation: V2.6.1 = V2.6 with four surgical .replace() calls.
+ * Block constants exported so tests can guard against drift.
+ */
+
+export const V2_6_PIVOT_INSTRUCTIONS = `Pivot phrasing:
+  • "Got it. Switching gears — how are [different area]?"
+  • "Understood. Different topic: [question]"`;
+
+export const V2_6_1_PIVOT_INSTRUCTIONS = `Pivot phrasing — vary the topic AND the wording each time. The phrasings below are illustrative templates only. Pick a topic from the Coverage areas the resident hasn't covered yet, and phrase the pivot conversationally and freshly each time. Cycle through different openers across the interview:
+  • "Got it. Switching gears — how are [different area]?"
+  • "Understood. Different topic: [question]"
+  • "OK. Anything specific on [different area]?"
+  • "Different angle — [question about different area]?"
+  • "Let me ask about something else: [question]"
+
+Do not copy these example phrasings verbatim. The point is the structure (acknowledge + pivot to a fresh topic), not the exact words.`;
+
+export const V2_6_FRUSTRATION_PIVOT = `  YOU:  "You're right, sorry. Switching gears — how are board notices and meeting prep coming through?"`;
+export const V2_6_1_FRUSTRATION_PIVOT = `  YOU:  "You're right, sorry. Different angle — how is maintenance and vendor coordination going for you these days?"`;
+
+// Worked example: "Common failure mode (DO NOT REPEAT)" — pivot AFTER
+// the manager-turnover thread. Includes 2 lines of preceding context
+// so the .replace() target is unique within V2.6 (the indented form
+// of this pivot also appears as a substring of the un-indented form
+// at the worked-example-detractor location below).
+export const V2_6_FAILURE_MODE_PIVOT = `  [THREAD COMPLETE: incident=dropped budget items, who=managers, when=last year, missed=continuity on approved projects]
+  YOU:  "Got it. Switching gears — how are board notices and meeting prep coming through these days?"`;
+export const V2_6_1_FAILURE_MODE_PIVOT = `  [THREAD COMPLETE: incident=dropped budget items, who=managers, when=last year, missed=continuity on approved projects]
+  YOU:  "Got it. Let me ask about something else — how is communication coming through? Notices, board updates, meeting prep, that kind of thing?"`;
+
+// Worked example: "detractor done right" — pivot AFTER the
+// sprinkler-callback thread. Anchored on the CHECKLIST line preceding
+// it so it's unique.
+export const V2_6_DETRACTOR_PIVOT = `[CHECKLIST: incident=sprinklers ✓, who=Michelle ✓, when=last week ✓, missed=callback ✓ — COMPLETE]
+YOU:  "Got it. Switching gears — how are board notices and meeting prep coming through these days?"`;
+export const V2_6_1_DETRACTOR_PIVOT = `[CHECKLIST: incident=sprinklers ✓, who=Michelle ✓, when=last week ✓, missed=callback ✓ — COMPLETE]
+YOU:  "OK. Different topic — anything specific on maintenance or vendor coordination on your end?"`;
+
+export const V2_SYSTEM_PROMPT = V2_SYSTEM_PROMPT_V26.replace(
+  V2_6_PIVOT_INSTRUCTIONS,
+  V2_6_1_PIVOT_INSTRUCTIONS
+)
+  .replace(V2_6_FRUSTRATION_PIVOT, V2_6_1_FRUSTRATION_PIVOT)
+  .replace(V2_6_FAILURE_MODE_PIVOT, V2_6_1_FAILURE_MODE_PIVOT)
+  .replace(V2_6_DETRACTOR_PIVOT, V2_6_1_DETRACTOR_PIVOT);
 
 /**
  * V2.0 — Client Onboarding Interview (frozen for migration matching).
