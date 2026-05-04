@@ -1075,49 +1075,68 @@ function DiffColumn({ title, subtitle, tone, rows }) {
           }}
         >
           <tbody>
-            {rows.map((row, i) => (
-              <tr
-                key={i}
-                style={{
-                  background:
-                    row.kind === "added"
-                      ? "var(--pulse-tint)"
-                      : row.kind === "removed"
-                        ? "var(--coral-tint)"
-                        : "transparent",
-                }}
-              >
-                <td
+            {rows.map((row, i) => {
+              const isPadding = row.kind === "" && row.text === "";
+              return (
+                <tr
+                  key={i}
                   style={{
-                    width: 36,
-                    textAlign: "right",
-                    padding: "1px 8px",
-                    color: "var(--ink-5)",
-                    fontSize: 10.5,
-                    userSelect: "none",
-                    borderRight: "1px solid var(--line)",
-                  }}
-                >
-                  {row.text === "" && row.kind === "" ? "" : i + 1}
-                </td>
-                <td
-                  style={{
-                    padding: "1px 10px",
-                    color:
+                    background:
                       row.kind === "added"
-                        ? "var(--pulse-deep)"
+                        ? "var(--pulse-tint)"
                         : row.kind === "removed"
-                          ? "var(--coral)"
-                          : "var(--ink-2)",
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
+                          ? "var(--coral-tint)"
+                          : isPadding
+                            ? // Padding row marker — "no content on this side at this
+                              // position." Striped tint keeps the row visible so a
+                              // wildly mismatched diff (24 vs 268 lines) doesn't
+                              // render as an empty column.
+                              "repeating-linear-gradient(135deg, var(--paper-2) 0 6px, var(--paper) 6px 12px)"
+                            : "transparent",
                   }}
                 >
-                  {row.kind === "added" ? "+ " : row.kind === "removed" ? "− " : "  "}
-                  {row.text || " "}
-                </td>
-              </tr>
-            ))}
+                  <td
+                    style={{
+                      width: 36,
+                      textAlign: "right",
+                      padding: "1px 8px",
+                      color: "var(--ink-5)",
+                      fontSize: 10.5,
+                      userSelect: "none",
+                      borderRight: "1px solid var(--line)",
+                    }}
+                  >
+                    {isPadding ? "" : i + 1}
+                  </td>
+                  <td
+                    style={{
+                      padding: "1px 10px",
+                      color:
+                        row.kind === "added"
+                          ? "var(--pulse-deep)"
+                          : row.kind === "removed"
+                            ? "var(--coral)"
+                            : isPadding
+                              ? "var(--ink-5)"
+                              : "var(--ink-2)",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      fontStyle: isPadding ? "italic" : "normal",
+                      opacity: isPadding ? 0.6 : 1,
+                    }}
+                  >
+                    {row.kind === "added"
+                      ? "+ "
+                      : row.kind === "removed"
+                        ? "− "
+                        : isPadding
+                          ? "·  "
+                          : "  "}
+                    {isPadding ? "(no line on this side)" : row.text || " "}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
