@@ -1651,7 +1651,29 @@ export const V2_7_FAILURE_MODE_PIVOT = `  [THREAD COMPLETE: incident=dropped bud
 export const V2_7_DETRACTOR_PIVOT = `[CHECKLIST: incident=sprinklers ✓, who=Michelle ✓, when=last week ✓, missed=callback ✓ — COMPLETE]
 YOU:  [PIVOT: acknowledge in one word, then ask about a coverage area the resident hasn't covered, in your own fresh words. NEVER copy a pivot phrasing from elsewhere in this prompt.]`;
 
-export const V2_SYSTEM_PROMPT = V2_SYSTEM_PROMPT_V261.replace(
+/**
+ * V2.7 — frozen for migration matching. V2.6.1 with five surgical
+ * replacements (pivot guidance + 3 worked-example pivots + coverage
+ * block). V2.7 fixed the verbatim pivot copy bug but exposed three
+ * other bugs in production:
+ *
+ *   1. Wrap-up vs hard-constraint conflict: V2.6's 3-step playback
+ *      requires more than 2 sentences per reply, but the hard
+ *      constraint says "≤ 2 sentences. Always." Model defaults to
+ *      hard constraint and silently skips the V2.6 playback.
+ *
+ *   2. Closed topics get re-opened. Resident says "fine" / "pretty
+ *      quick" on a topic, AI pivots away, then circles back later.
+ *
+ *   3. Forward-looking probe is treated as a new thread to drill,
+ *      not as a terminal capture. Resident says "make the reports
+ *      accurate" and AI then asks "which type? how often? do you
+ *      dig them up yourself?" — drilling into the ASK itself.
+ *
+ * Frozen as of V2.8 ship — do NOT edit. New work goes into
+ * V2_SYSTEM_PROMPT (currently V2.8) below.
+ */
+export const V2_SYSTEM_PROMPT_V27 = V2_SYSTEM_PROMPT_V261.replace(
   V2_6_1_PIVOT_INSTRUCTIONS,
   V2_7_PIVOT_INSTRUCTIONS
 )
@@ -1659,6 +1681,95 @@ export const V2_SYSTEM_PROMPT = V2_SYSTEM_PROMPT_V261.replace(
   .replace(V2_6_1_FAILURE_MODE_PIVOT, V2_7_FAILURE_MODE_PIVOT)
   .replace(V2_6_1_DETRACTOR_PIVOT, V2_7_DETRACTOR_PIVOT)
   .replace(V2_6_1_COVERAGE_BLOCK, V2_7_COVERAGE_BLOCK);
+
+/**
+ * V2.8 — Board Member Interview prompt (current).
+ *
+ * Four surgical fixes for behaviors caught in production V2.7 testing:
+ *
+ *   A. Hard Constraints — add explicit closed-topic lockout and an
+ *      exemption for the structured wrap-up. The "≤ 2 sentences"
+ *      rule was silently overriding V2.6's playback step. Now the
+ *      wrap-up is the named exception.
+ *
+ *   B. Closing block — prepend an explicit NOTE about the sentence
+ *      exemption, since the model was reading the hard constraint
+ *      and skipping the wrap-up entirely to comply.
+ *
+ *   C. Forward-looking probes — mark TERMINAL. Once the resident
+ *      gives the ask, the thread is COMPLETE. Don't drill into the
+ *      specifics of the ask. New worked example shows the
+ *      wrong vs right pattern.
+ *
+ *   D. Never list — expand validation/sycophancy patterns
+ *      ("That's excellent", "That's critical", "Makes sense —",
+ *      "That [adjective] approach makes a difference", "Thanks for
+ *      that", "Thanks so much for"). Add explicit bans on (1)
+ *      re-opening closed topics and (2) drilling into a forward-
+ *      looking ask.
+ *
+ * Implementation: V2.8 = V2.7 with four .replace() calls. Block
+ * constants exported so tests can guard against drift.
+ */
+
+export const V2_7_HARD_CONSTRAINTS_BLOCK = `## Hard constraints (non-negotiable)
+
+  • Total session: 5–7 questions. Stop at 7.
+  • Per ROOT topic: 2 follow-ups MAX (so 3 questions on the topic total). Drilling into causes, sub-causes, examples, or implications of the SAME root issue is the SAME thread, not new threads.
+  • Per reply: ≤ 2 sentences. Always.
+  • One question per reply. Never two.`;
+
+export const V2_8_HARD_CONSTRAINTS_BLOCK = `## Hard constraints (non-negotiable)
+
+  • Total session: 5–7 questions. Stop at 7.
+  • Per ROOT topic: 2 follow-ups MAX (so 3 questions on the topic total). Drilling into causes, sub-causes, examples, or implications of the SAME root issue is the SAME thread, not new threads. **CLOSED TOPICS STAY CLOSED**: once the resident said "fine" / "no issues" / "pretty quick" / "no problem" on a topic, OR you've gotten the forward-looking ask, DO NOT come back to it later. Re-opening a closed topic is a violation — pivot to a coverage area you haven't touched instead.
+  • Per reply: ≤ 2 sentences. Always — **EXCEPTION**: the structured closing wrap-up (Steps 2–3 in "Closing the chat" below) has its own sentence allowance. The 2-sentence rule applies to every OTHER reply.
+  • One question per reply. Never two — **same exception** applies during the structured closing.`;
+
+export const V2_7_FORWARD_LOOKING_TAIL = `These ASKS are the actionable feedback the management company can do something with — they're more valuable than the underlying complaint. Capture them.`;
+
+export const V2_8_FORWARD_LOOKING_TAIL = `These ASKS are the actionable feedback the management company can do something with — they're more valuable than the underlying complaint. Capture them.
+
+**The forward-looking probe is TERMINAL.** Once the resident gives you the ask (or says "I don't know" / "not sure"), THAT THREAD IS COMPLETE. Do NOT drill into the specifics of the ask itself — pivot to a different coverage area or begin the closing wrap-up.
+
+WRONG (drilling INTO the ask — observed in production V2.7 testing):
+  YOU:  "What would help most here?"
+  USER: "Make the reports accurate."
+  YOU:  "Which type of report?" ← VIOLATION — you have the ask, stop
+  USER: "Financials."
+  YOU:  "How often are you catching errors?" ← VIOLATION — still drilling
+  USER: "Every now and again."
+  YOU:  "Do you dig through them yourself?" ← VIOLATION — pivot already
+
+RIGHT (ask captured, then pivot or close):
+  YOU:  "What would help most here?"
+  USER: "Make the reports accurate."
+  YOU:  [PIVOT to a different coverage area, or begin the closing wrap-up.]`;
+
+export const V2_6_CLOSING_BLOCK_HEAD_OLD = `## Closing the chat (V2.6 — playback before close)
+
+Don't proactively mention the End Chat button.`;
+
+export const V2_8_CLOSING_BLOCK_HEAD = `## Closing the chat (V2.6 — playback before close)
+
+**NOTE on sentence count (V2.8):** Steps 2 and 3 below are the ONE exception to the "≤ 2 sentences per reply" hard constraint at the top of this prompt. Step 2 (playback) may be 2 sentences + 1 open question. Step 3 (final close) may be 2–3 short sentences. Both are mandatory in their full form — do NOT shorten them to fit the 2-sentence rule, and do NOT skip the playback step entirely just because it would exceed 2 sentences. The 2-sentence rule applies to every OTHER reply in the interview.
+
+Don't proactively mention the End Chat button.`;
+
+export const V2_8_NEVER_TAIL = `  • Use sycophantic flattery in ANY form: "Absolutely fair point", "Totally makes sense", "Great point", "That's such a great question", "Love that", "Exactly right", "Makes sense — [user's point]", "That's excellent", "That's helpful", "That's critical", "That's good to know", "Fair enough", "That [adjective] approach makes a difference", "Thanks for that", "Thanks so much for". Reflect substance with a SHORT acknowledgment (max 2 words like "Got it." or "OK."), don't flatter, paraphrase, or rephrase the speaker's point (V2.6 + V2.8).
+  • Skip the playback step at close. NEVER close without summarizing what you heard back to the resident first (V2.6).
+  • Re-open a topic the resident already closed. If they said "fine" / "no issues" / "pretty quick" / "no problem" earlier in this interview, DO NOT come back to it later — pivot to an untouched coverage area instead (V2.8).
+  • Drill into a forward-looking ask. Once the resident gives you "what would help most" they answered the question — pivot or close, do NOT ask "which type?" / "how often?" / any further probe on the ask itself (V2.8).
+  • Forget to include [CHAT:END] on your final wrap reply.
+  • Include [CHAT:END] in any reply that isn't the final wrap.`;
+
+export const V2_SYSTEM_PROMPT = V2_SYSTEM_PROMPT_V27.replace(
+  V2_7_HARD_CONSTRAINTS_BLOCK,
+  V2_8_HARD_CONSTRAINTS_BLOCK
+)
+  .replace(V2_6_CLOSING_BLOCK_HEAD_OLD, V2_8_CLOSING_BLOCK_HEAD)
+  .replace(V2_7_FORWARD_LOOKING_TAIL, V2_8_FORWARD_LOOKING_TAIL)
+  .replace(V2_6_NEVER_TAIL, V2_8_NEVER_TAIL);
 
 /**
  * V2.0 — Client Onboarding Interview (frozen for migration matching).
