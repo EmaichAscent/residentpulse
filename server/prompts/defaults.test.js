@@ -13,11 +13,20 @@ import {
   V2_SYSTEM_PROMPT_V23,
   V2_SYSTEM_PROMPT_V24,
   V2_SYSTEM_PROMPT_V25,
+  V2_SYSTEM_PROMPT_V26,
   V2_SYSTEM_PROMPT,
   V2_5_CLOSING_BLOCK,
   V2_6_CLOSING_BLOCK,
   V2_5_NEVER_TAIL,
   V2_6_NEVER_TAIL,
+  V2_6_PIVOT_INSTRUCTIONS,
+  V2_6_1_PIVOT_INSTRUCTIONS,
+  V2_6_FRUSTRATION_PIVOT,
+  V2_6_1_FRUSTRATION_PIVOT,
+  V2_6_FAILURE_MODE_PIVOT,
+  V2_6_1_FAILURE_MODE_PIVOT,
+  V2_6_DETRACTOR_PIVOT,
+  V2_6_1_DETRACTOR_PIVOT,
   V2_INTERVIEW_INITIAL_V20,
   V2_INTERVIEW_INITIAL_V21,
   V2_INTERVIEW_INITIAL,
@@ -130,7 +139,21 @@ describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3/V2.4 frozen for migration mat
     expect(V2_SYSTEM_PROMPT_V25).not.toMatch(/Absolutely fair point/);
   });
 
-  it("all six frozen versions are distinct", () => {
+  it("V2_SYSTEM_PROMPT_V26 is preserved (V2.6: structured wrap-up + ban sycophantic flattery)", () => {
+    // V26 has the V2.6 closing block + the ban-sycophantic-flattery
+    // never-list entries — both inherited from V2.5's frozen text via
+    // the .replace() chain. V2.6.1 then layers pivot-phrasing fixes
+    // on top, so V26 must NOT have the V2.6.1 pivot copy.
+    expect(V2_SYSTEM_PROMPT_V26.length).toBeGreaterThan(3000);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/V2\.6.*playback before close/);
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/Absolutely fair point/);
+    // V2.6 still had the OLD bare-bones pivot phrasing block.
+    expect(V2_SYSTEM_PROMPT_V26).toMatch(/Pivot phrasing:\n {2}• "Got it/);
+    expect(V2_SYSTEM_PROMPT_V26).not.toMatch(/illustrative templates only/);
+    expect(V2_SYSTEM_PROMPT_V26).not.toMatch(/Let me ask about something else/);
+  });
+
+  it("all seven frozen versions are distinct", () => {
     const all = [
       V2_SYSTEM_PROMPT_V20,
       V2_SYSTEM_PROMPT_V21,
@@ -138,17 +161,70 @@ describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3/V2.4 frozen for migration mat
       V2_SYSTEM_PROMPT_V23,
       V2_SYSTEM_PROMPT_V24,
       V2_SYSTEM_PROMPT_V25,
+      V2_SYSTEM_PROMPT_V26,
     ];
     expect(new Set(all).size).toBe(all.length);
   });
 
-  it("current V2_SYSTEM_PROMPT (V2.6) differs from all frozen versions", () => {
+  it("current V2_SYSTEM_PROMPT (V2.6.1) differs from all frozen versions", () => {
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V20);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V21);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V22);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V23);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V24);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V25);
+    expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V26);
+  });
+});
+
+describe("V2 system prompt — V2.6.1 derivation from V2.6", () => {
+  it("V2_6_PIVOT_INSTRUCTIONS appears verbatim in V26 (anchor)", () => {
+    expect(V2_SYSTEM_PROMPT_V26).toContain(V2_6_PIVOT_INSTRUCTIONS);
+  });
+  it("V2_6_FRUSTRATION_PIVOT appears verbatim in V26 (anchor)", () => {
+    expect(V2_SYSTEM_PROMPT_V26).toContain(V2_6_FRUSTRATION_PIVOT);
+  });
+  it("V2_6_FAILURE_MODE_PIVOT appears verbatim in V26 (anchor)", () => {
+    expect(V2_SYSTEM_PROMPT_V26).toContain(V2_6_FAILURE_MODE_PIVOT);
+  });
+  it("V2_6_DETRACTOR_PIVOT appears verbatim in V26 (anchor)", () => {
+    expect(V2_SYSTEM_PROMPT_V26).toContain(V2_6_DETRACTOR_PIVOT);
+  });
+
+  it("V2.6.1 contains the new vary-it pivot guidance", () => {
+    expect(V2_SYSTEM_PROMPT).toContain(V2_6_1_PIVOT_INSTRUCTIONS);
+    expect(V2_SYSTEM_PROMPT).toMatch(/illustrative templates only/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Do not copy these example phrasings verbatim/);
+  });
+
+  it("V2.6.1 has varied worked-example pivot phrases (no longer all 'board notices and meeting prep')", () => {
+    expect(V2_SYSTEM_PROMPT).toContain(V2_6_1_FRUSTRATION_PIVOT);
+    expect(V2_SYSTEM_PROMPT).toContain(V2_6_1_FAILURE_MODE_PIVOT);
+    expect(V2_SYSTEM_PROMPT).toContain(V2_6_1_DETRACTOR_PIVOT);
+    // The exact verbatim phrase that the model was overusing must be
+    // gone from the live prompt's worked examples (still allowed in
+    // the V2.5/V2.6 frozen exports above for migration matching).
+    const phrase = "how are board notices and meeting prep coming through these days?";
+    expect(V2_SYSTEM_PROMPT).not.toContain(phrase);
+  });
+
+  it("V2.6.1 has at least 4 distinct example pivot openers (variety > template)", () => {
+    const openers = [
+      "Switching gears",
+      "Different topic",
+      "Anything specific",
+      "Different angle",
+      "Let me ask about something else",
+    ];
+    const present = openers.filter((o) => V2_SYSTEM_PROMPT.includes(o));
+    expect(present.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("V2.6.1 keeps everything V2.6 added (no regression on closing block / never list)", () => {
+    expect(V2_SYSTEM_PROMPT).toContain(V2_6_CLOSING_BLOCK);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Absolutely fair point/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/\[CHAT:END\]/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Thank you for your time, I'm concluding this chat/);
   });
 });
 
