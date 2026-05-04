@@ -59,17 +59,10 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<SuperAdminDashboard />} />
             <Route path="clients" element={<SuperAdminClients />} />
+            <Route path="clients/:id" element={<SuperAdminClientDetailPage />} />
             <Route path="prompts" element={<SuperAdminPromptsLibrary />} />
             <Route path="settings" element={<SuperAdminSettings />} />
           </Route>
-          <Route
-            path="/superadmin/clients/:id"
-            element={
-              <ProtectedRoute requiredRole="superadmin">
-                <SuperAdminClientDetailPage />
-              </ProtectedRoute>
-            }
-          />
 
           {/* Client Admin routes */}
           <Route path="/admin/login" element={<ClientAdminLoginPage />} />
