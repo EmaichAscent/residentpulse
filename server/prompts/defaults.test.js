@@ -12,7 +12,12 @@ import {
   V2_SYSTEM_PROMPT_V22,
   V2_SYSTEM_PROMPT_V23,
   V2_SYSTEM_PROMPT_V24,
+  V2_SYSTEM_PROMPT_V25,
   V2_SYSTEM_PROMPT,
+  V2_5_CLOSING_BLOCK,
+  V2_6_CLOSING_BLOCK,
+  V2_5_NEVER_TAIL,
+  V2_6_NEVER_TAIL,
   V2_INTERVIEW_INITIAL_V20,
   V2_INTERVIEW_INITIAL_V21,
   V2_INTERVIEW_INITIAL,
@@ -112,23 +117,89 @@ describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3/V2.4 frozen for migration mat
     expect(V2_SYSTEM_PROMPT_V24).not.toMatch(/Have you tried/);
   });
 
-  it("all five frozen versions are distinct", () => {
+  it("V2_SYSTEM_PROMPT_V25 is preserved byte-perfect (V2.5: thread = root topic, no advice)", () => {
+    expect(V2_SYSTEM_PROMPT_V25.length).toBeGreaterThan(3000);
+    // Distinguishing fingerprints from V2.4:
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Common failure mode/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/Have you tried/);
+    expect(V2_SYSTEM_PROMPT_V25).toMatch(/ROOT TOPIC/);
+    // V2.5 had the OLD single-step closing — no playback step.
+    expect(V2_SYSTEM_PROMPT_V25).not.toMatch(/Step 1.*Decide it's time to close/);
+    expect(V2_SYSTEM_PROMPT_V25).not.toMatch(/playback before close/i);
+    // V2.5 did NOT yet ban sycophantic flattery.
+    expect(V2_SYSTEM_PROMPT_V25).not.toMatch(/Absolutely fair point/);
+  });
+
+  it("all six frozen versions are distinct", () => {
     const all = [
       V2_SYSTEM_PROMPT_V20,
       V2_SYSTEM_PROMPT_V21,
       V2_SYSTEM_PROMPT_V22,
       V2_SYSTEM_PROMPT_V23,
       V2_SYSTEM_PROMPT_V24,
+      V2_SYSTEM_PROMPT_V25,
     ];
     expect(new Set(all).size).toBe(all.length);
   });
 
-  it("current V2_SYSTEM_PROMPT (V2.5) differs from all frozen versions", () => {
+  it("current V2_SYSTEM_PROMPT (V2.6) differs from all frozen versions", () => {
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V20);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V21);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V22);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V23);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V24);
+    expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V25);
+  });
+});
+
+describe("V2 system prompt — V2.6 derivation from V2.5", () => {
+  it("V2_5_CLOSING_BLOCK appears verbatim in V25 (anchor for the .replace())", () => {
+    // If this fails, the V2.5 closing copy drifted and the .replace()
+    // would silently fall through, leaving V2.6 == V2.5. That's why
+    // this is a guard test, not a vanity assertion.
+    expect(V2_SYSTEM_PROMPT_V25).toContain(V2_5_CLOSING_BLOCK);
+  });
+
+  it("V2_5_NEVER_TAIL appears verbatim in V25 (anchor for the .replace())", () => {
+    expect(V2_SYSTEM_PROMPT_V25).toContain(V2_5_NEVER_TAIL);
+  });
+
+  it("V2.6 contains the new playback-before-close block", () => {
+    expect(V2_SYSTEM_PROMPT).toContain(V2_6_CLOSING_BLOCK);
+    expect(V2_SYSTEM_PROMPT).toMatch(/V2\.6.*playback before close/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Step 1.*Decide it's time to close/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Step 2.*Playback.*REQUIRED/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Step 3.*Final close/);
+    expect(V2_SYSTEM_PROMPT).toMatch(
+      /Anything missing from that, or anything else I should pass along/
+    );
+    expect(V2_SYSTEM_PROMPT).toMatch(/faster channel than a quarterly survey/);
+  });
+
+  it("V2.6 bans sycophantic flattery", () => {
+    expect(V2_SYSTEM_PROMPT).toContain(V2_6_NEVER_TAIL);
+    expect(V2_SYSTEM_PROMPT).toMatch(/sycophantic flattery/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Absolutely fair point/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Skip the playback step at close/);
+  });
+
+  it("V2.6 keeps the [CHAT:END] mechanism + 'Thank you for your time' closing line", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/\[CHAT:END\]/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Thank you for your time, I'm concluding this chat/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/auto-closes the session 3 seconds later/);
+  });
+
+  it("V2.6 does NOT contain the old V2.5 closing block (regression guard)", () => {
+    // The closing block is fully replaced — its V2.5 form must be gone.
+    expect(V2_SYSTEM_PROMPT).not.toContain(V2_5_CLOSING_BLOCK);
+    // The Never tail is APPENDED to (not replaced wholesale), so the
+    // V2.5 [CHAT:END] reminders remain inside V2_6_NEVER_TAIL by
+    // design. We verify intent by checking the new entries land
+    // BEFORE the [CHAT:END] reminders in the final string.
+    const sycophancyIdx = V2_SYSTEM_PROMPT.indexOf("sycophantic flattery");
+    const chatEndForgetIdx = V2_SYSTEM_PROMPT.indexOf("Forget to include [CHAT:END]");
+    expect(sycophancyIdx).toBeGreaterThan(-1);
+    expect(chatEndForgetIdx).toBeGreaterThan(sycophancyIdx);
   });
 });
 
