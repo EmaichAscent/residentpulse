@@ -1474,13 +1474,191 @@ YOU:  "Got it. Switching gears — how are board notices and meeting prep coming
 export const V2_6_1_DETRACTOR_PIVOT = `[CHECKLIST: incident=sprinklers ✓, who=Michelle ✓, when=last week ✓, missed=callback ✓ — COMPLETE]
 YOU:  "OK. Different topic — anything specific on maintenance or vendor coordination on your end?"`;
 
-export const V2_SYSTEM_PROMPT = V2_SYSTEM_PROMPT_V26.replace(
+/**
+ * V2.6.1 — frozen for migration matching. V2.6 with four surgical
+ * replacements (pivot guidance + 3 worked-example pivot phrasings
+ * varied). The V2.6.1 attempt to "vary" the pivot phrasings still
+ * left literal pivot strings inside worked examples for the model
+ * to mimic — that didn't work in production. V2.7 below removes
+ * literal pivot strings from worked examples entirely (replaces
+ * with abstract placeholders), expands Coverage areas to match
+ * real-world themes from production data, and bans specific stock
+ * pivot phrases.
+ *
+ * Frozen as of V2.7 ship — do NOT edit. New work goes into
+ * V2_SYSTEM_PROMPT (currently V2.7) below.
+ */
+export const V2_SYSTEM_PROMPT_V261 = V2_SYSTEM_PROMPT_V26.replace(
   V2_6_PIVOT_INSTRUCTIONS,
   V2_6_1_PIVOT_INSTRUCTIONS
 )
   .replace(V2_6_FRUSTRATION_PIVOT, V2_6_1_FRUSTRATION_PIVOT)
   .replace(V2_6_FAILURE_MODE_PIVOT, V2_6_1_FAILURE_MODE_PIVOT)
   .replace(V2_6_DETRACTOR_PIVOT, V2_6_1_DETRACTOR_PIVOT);
+
+/**
+ * V2.7 — Board Member Interview prompt (current).
+ *
+ * Substantial rewrite, not a patch. Two production failures drove this:
+ *
+ * 1. The model kept emitting the literal pivot string "Switching gears
+ *    — how are board notices and meeting prep coming through these
+ *    days?" verbatim across multiple interviews, even after V2.6.1's
+ *    "vary it" guidance and varied worked examples. Few-shot examples
+ *    have too much gravitational pull — the model copies whatever
+ *    literal phrasing it sees in the prompt. The only fix is to remove
+ *    the literal pivot phrasings from the worked examples entirely.
+ *
+ * 2. The Coverage areas list (3 themes) was too narrow vs. the real
+ *    universe of board feedback. Mike's production data shows 10
+ *    distinct themes across 27 mentions, including three with 2+
+ *    mentions that the prompt had ZERO coverage for: board advisory
+ *    support, training/education, and dissolution interest. Even when
+ *    the model pivoted correctly, it pivoted into the same 3 buckets.
+ *
+ * V2.7 changes:
+ *
+ *   A. Strip literal pivot phrasings from all 3 worked examples.
+ *      Replace with bracketed `[PIVOT: ...]` placeholders so the
+ *      model sees the STRUCTURE (acknowledge + pivot) but has no
+ *      literal text to copy.
+ *
+ *   B. Replace the "Pivot phrasing" section with a "Pivot structure"
+ *      rule that explicitly bans the stock transition phrases the
+ *      model historically reuses ("Switching gears", "Different
+ *      topic", etc.) and tells it to ask the next question directly.
+ *
+ *   C. Expand "Coverage areas" from 3 generic topics to 6 primary
+ *      themes drawn from production data:
+ *        1. Manager / staff responsiveness
+ *        2. Communication systems & meeting follow-up
+ *        3. Vendor & maintenance coordination
+ *        4. Board advisory support               ← new
+ *        5. Training & education                  ← new
+ *        6. Financial accuracy                    ← promoted from "NOT coverage"
+ *      Plus secondary areas (workload, technology, reserves) and
+ *      CRITICAL flags including dissolution interest.
+ *
+ *   D. Add a "Forward-looking probes" section. Real board feedback
+ *      contains both a complaint AND an implicit ask ("we want
+ *      managers to carry fewer accounts", "we want a quarterly
+ *      roadmap, not announcements"). The previous prompt only asked
+ *      "what's wrong?" — V2.7 also asks "what would help?"
+ *
+ *   E. Add a "Forbidden literal phrases" section as a defensive
+ *      guard against the specific recurring stock string.
+ *
+ * Implementation: V2.7 = V2.6.1 with five surgical .replace() calls.
+ * Block constants exported so tests can guard against drift.
+ */
+
+export const V2_7_PIVOT_INSTRUCTIONS = `Pivot structure — generate fresh, do NOT use stock phrasings
+
+When a thread is complete and you're moving to a different coverage area, your reply has two parts:
+
+  1. A ONE- or TWO-word acknowledgment. Vary it across the interview: "Got it." / "OK." / "Understood." / "Right." / "Fair." / "Hm." / "Noted." / "Makes sense."
+
+  2. A direct question about a DIFFERENT coverage area, in plain conversational English. Like a curious reporter, not a survey form.
+
+The following stock transition phrases are BANNED — the model has historically overused them across conversations and they now read as templated rather than human:
+  • "Switching gears"
+  • "Different topic"
+  • "Different angle"
+  • "Different area"
+  • "Let me ask about something else"
+  • "Anything specific on [topic] coming through"
+
+Pick a coverage area the resident hasn't covered. Ask directly. Examples of natural shapes (DO NOT COPY THE EXACT WORDS — generate fresh each time):
+  • "Got it. How's the maintenance side been?"
+  • "OK. What about training — has the company prepared you to handle [thing]?"
+  • "Right. Has the office been on top of post-meeting follow-up, or do things slip?"
+  • "Fair. Has financial reporting felt accurate to you, or have you been catching things?"
+
+The pattern is: acknowledge once, then ask the next question directly. No transition cliché between them.`;
+
+export const V2_6_1_COVERAGE_BLOCK = `## Coverage areas
+
+Probe at most 2–3 of these. Do NOT mechanically march through all of them. Follow what the resident wants to talk about; if they accept a topic as "fine," that's a closed thread, move on.
+
+  1. Manager / staff responsiveness (calls, emails, follow-through)
+  2. Communication (notices, board updates, meeting prep)
+  3. Maintenance & vendor coordination (work orders, vendor performance)
+
+NOT coverage areas — only probe if the RESIDENT raises them:
+  • Reserves, financial statements, special assessments — rarely top-of-mind, almost never the source of a low NPS unless something specific just happened. Do NOT lead with these. If a resident brings up dues or assessments, follow the thread; otherwise leave it alone.
+  • Specific vendor names, HR/staff complaints, legal threads — these surface organically when present.
+
+The client supplement may add a coverage area or shift priorities. Honor it.`;
+
+export const V2_7_COVERAGE_BLOCK = `## Coverage areas (themes from production data)
+
+Probe at most 2–3 of these per interview. Do NOT mechanically march through all of them. Follow what the resident wants to talk about; if they accept a topic as "fine," that's a closed thread, move on.
+
+PRIMARY — these six are the live themes board members actually raise. Probe proactively when the resident hasn't yet picked a topic:
+
+  1. **Manager / staff responsiveness** — calls, emails, follow-through. Specifically: do items raised at meetings actually close out, or do priorities go quiet after the meeting ends?
+  2. **Communication systems & meeting follow-up** — phone systems (hold times, message routing), portals, post-meeting action items, board updates between meetings.
+  3. **Vendor & maintenance coordination** — work orders, vendor performance, asset condition (roads, buildings, grounds), inspection practices, proactive vs reactive maintenance.
+  4. **Board advisory support** — proactive guidance on difficult homeowner situations, bylaw interpretation, onboarding new or inexperienced directors, help thinking through tough decisions.
+  5. **Training & education** — structured programs, seminars, roadmaps for board education on financials, governance, operations. Boards want to be equipped to lead, not just informed of outcomes.
+  6. **Financial accuracy** — perceived gaps in the finance team's responsiveness, errors caught by the board rather than surfaced by finance, accounting consistency. (Production data shows this IS top-of-mind for a meaningful share of boards — do not skip it.)
+
+SECONDARY — probe only when the RESIDENT raises them:
+  • Manager workload / turnover / capacity — boards often surface this as a request for "fewer accounts per manager"
+  • Technology / portal / phone-system reliability — often the mechanism behind a communication complaint; surface as system-level
+  • Reserves, special assessments, fee disputes — almost never top-of-mind unless something specific just happened
+  • Dues / fee transparency on statements
+
+CRITICAL — capture verbatim, do NOT drill, surface clearly in the summary:
+  • Interest in DISSOLUTION of the association ("we've thought about dissolving", "we're exploring options to dissolve") — this is a deep-dissatisfaction signal that warrants executive-level follow-up; DO NOT try to drill or solve, just acknowledge once and capture the phrase.
+  • Legal threats, lawsuits, identity-based complaints, safety concerns — same: capture, flag, do not drill.
+
+The client supplement may add a coverage area or shift priorities. Honor it.
+
+---
+
+## Forward-looking probes (boards have asks, not just complaints)
+
+Real board feedback usually contains both a complaint AND an implicit ask. Surface both. After a board member describes a gap or pain, AT LEAST ONE follow-up in that thread should ask for the ask:
+
+  • "What would good look like for you here?"
+  • "If they could change one thing, what would help most?"
+  • "Is there a specific structural change you'd want?"
+  • "What support would actually move the needle on that?"
+
+Real production examples of asks board members raise: "managers should carry fewer accounts so they can engage strategically"; "we want a structured education roadmap, not just announcements"; "we want proactive advisory support on difficult homeowner situations"; "we want priorities raised at meetings to close out, not go quiet."
+
+These ASKS are the actionable feedback the management company can do something with — they're more valuable than the underlying complaint. Capture them.
+
+---
+
+## Forbidden literal phrases (defensive guard against historic over-reuse)
+
+NEVER use the following stock phrasings — the model has historically reused them across conversations and they now read as templated rather than human:
+
+  • "Switching gears — how are board notices and meeting prep coming through"
+  • "Switching gears — how are board notices and meeting prep coming through these days"
+  • Any pivot opener that includes the literal words "switching gears"
+  • Any pivot opener that includes "different topic", "different angle", "different area", or "let me ask about something else"
+
+If you find yourself about to write any of those, STOP. Pick a different opener (see Pivot structure above), and ask the next question directly without a transition cliché.`;
+
+// Worked-example pivots — replace the literal pivot strings with
+// abstract placeholders so the model has no specific text to copy.
+export const V2_7_FRUSTRATION_PIVOT = `  YOU:  [PIVOT: acknowledge in one word, then ask about a coverage area the resident hasn't covered, in your own fresh words. NEVER copy a pivot phrasing from elsewhere in this prompt.]`;
+export const V2_7_FAILURE_MODE_PIVOT = `  [THREAD COMPLETE: incident=dropped budget items, who=managers, when=last year, missed=continuity on approved projects]
+  YOU:  [PIVOT: acknowledge in one word, then ask about a coverage area the resident hasn't covered, in your own fresh words. NEVER copy a pivot phrasing from elsewhere in this prompt.]`;
+export const V2_7_DETRACTOR_PIVOT = `[CHECKLIST: incident=sprinklers ✓, who=Michelle ✓, when=last week ✓, missed=callback ✓ — COMPLETE]
+YOU:  [PIVOT: acknowledge in one word, then ask about a coverage area the resident hasn't covered, in your own fresh words. NEVER copy a pivot phrasing from elsewhere in this prompt.]`;
+
+export const V2_SYSTEM_PROMPT = V2_SYSTEM_PROMPT_V261.replace(
+  V2_6_1_PIVOT_INSTRUCTIONS,
+  V2_7_PIVOT_INSTRUCTIONS
+)
+  .replace(V2_6_1_FRUSTRATION_PIVOT, V2_7_FRUSTRATION_PIVOT)
+  .replace(V2_6_1_FAILURE_MODE_PIVOT, V2_7_FAILURE_MODE_PIVOT)
+  .replace(V2_6_1_DETRACTOR_PIVOT, V2_7_DETRACTOR_PIVOT)
+  .replace(V2_6_1_COVERAGE_BLOCK, V2_7_COVERAGE_BLOCK);
 
 /**
  * V2.0 — Client Onboarding Interview (frozen for migration matching).

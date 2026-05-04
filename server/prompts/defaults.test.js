@@ -14,6 +14,7 @@ import {
   V2_SYSTEM_PROMPT_V24,
   V2_SYSTEM_PROMPT_V25,
   V2_SYSTEM_PROMPT_V26,
+  V2_SYSTEM_PROMPT_V261,
   V2_SYSTEM_PROMPT,
   V2_5_CLOSING_BLOCK,
   V2_6_CLOSING_BLOCK,
@@ -21,12 +22,18 @@ import {
   V2_6_NEVER_TAIL,
   V2_6_PIVOT_INSTRUCTIONS,
   V2_6_1_PIVOT_INSTRUCTIONS,
+  V2_7_PIVOT_INSTRUCTIONS,
   V2_6_FRUSTRATION_PIVOT,
   V2_6_1_FRUSTRATION_PIVOT,
+  V2_7_FRUSTRATION_PIVOT,
   V2_6_FAILURE_MODE_PIVOT,
   V2_6_1_FAILURE_MODE_PIVOT,
+  V2_7_FAILURE_MODE_PIVOT,
   V2_6_DETRACTOR_PIVOT,
   V2_6_1_DETRACTOR_PIVOT,
+  V2_7_DETRACTOR_PIVOT,
+  V2_6_1_COVERAGE_BLOCK,
+  V2_7_COVERAGE_BLOCK,
   V2_INTERVIEW_INITIAL_V20,
   V2_INTERVIEW_INITIAL_V21,
   V2_INTERVIEW_INITIAL,
@@ -153,7 +160,23 @@ describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3/V2.4 frozen for migration mat
     expect(V2_SYSTEM_PROMPT_V26).not.toMatch(/Let me ask about something else/);
   });
 
-  it("all seven frozen versions are distinct", () => {
+  it("V2_SYSTEM_PROMPT_V261 is preserved (V2.6.1: varied pivot worked-example phrasing)", () => {
+    expect(V2_SYSTEM_PROMPT_V261.length).toBeGreaterThan(3000);
+    // V2.6.1 still had the "Pivot phrasing" block with literal example
+    // phrasings — V2.7 strips those.
+    expect(V2_SYSTEM_PROMPT_V261).toContain(V2_6_1_PIVOT_INSTRUCTIONS);
+    expect(V2_SYSTEM_PROMPT_V261).toMatch(/illustrative templates only/);
+    // V2.6.1 still had the OLD 3-area Coverage block.
+    expect(V2_SYSTEM_PROMPT_V261).toContain(V2_6_1_COVERAGE_BLOCK);
+    // V2.6.1 did NOT yet have the V2.7 pivot-structure rewrite.
+    expect(V2_SYSTEM_PROMPT_V261).not.toMatch(/Pivot structure — generate fresh/);
+    // V2.6.1 did NOT yet ban specific stock pivot phrases.
+    expect(V2_SYSTEM_PROMPT_V261).not.toMatch(/Forbidden literal phrases/);
+    // V2.6.1 did NOT yet have the new themes (board advisory, training, etc.)
+    expect(V2_SYSTEM_PROMPT_V261).not.toMatch(/Board advisory support/);
+  });
+
+  it("all eight frozen versions are distinct", () => {
     const all = [
       V2_SYSTEM_PROMPT_V20,
       V2_SYSTEM_PROMPT_V21,
@@ -162,11 +185,12 @@ describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3/V2.4 frozen for migration mat
       V2_SYSTEM_PROMPT_V24,
       V2_SYSTEM_PROMPT_V25,
       V2_SYSTEM_PROMPT_V26,
+      V2_SYSTEM_PROMPT_V261,
     ];
     expect(new Set(all).size).toBe(all.length);
   });
 
-  it("current V2_SYSTEM_PROMPT (V2.6.1) differs from all frozen versions", () => {
+  it("current V2_SYSTEM_PROMPT (V2.7) differs from all frozen versions", () => {
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V20);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V21);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V22);
@@ -174,6 +198,74 @@ describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3/V2.4 frozen for migration mat
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V24);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V25);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V26);
+    expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V261);
+  });
+});
+
+describe("V2 system prompt — V2.7 derivation from V2.6.1", () => {
+  // ── Anchor guards ────────────────────────────────────────────────
+  it("V2_6_1_PIVOT_INSTRUCTIONS appears verbatim in V261 (replace anchor)", () => {
+    expect(V2_SYSTEM_PROMPT_V261).toContain(V2_6_1_PIVOT_INSTRUCTIONS);
+  });
+  it("V2_6_1_COVERAGE_BLOCK appears verbatim in V261 (replace anchor)", () => {
+    expect(V2_SYSTEM_PROMPT_V261).toContain(V2_6_1_COVERAGE_BLOCK);
+  });
+  it("V2_6_1_*_PIVOT worked-example anchors appear verbatim in V261", () => {
+    expect(V2_SYSTEM_PROMPT_V261).toContain(V2_6_1_FRUSTRATION_PIVOT);
+    expect(V2_SYSTEM_PROMPT_V261).toContain(V2_6_1_FAILURE_MODE_PIVOT);
+    expect(V2_SYSTEM_PROMPT_V261).toContain(V2_6_1_DETRACTOR_PIVOT);
+  });
+
+  // ── V2.7: pivot structure replaces stock-phrasing menu ───────────
+  it("V2.7 replaces the pivot-phrasing menu with structural rules + banned stock phrases", () => {
+    expect(V2_SYSTEM_PROMPT).toContain(V2_7_PIVOT_INSTRUCTIONS);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Pivot structure — generate fresh/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/stock transition phrases are BANNED/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/"Switching gears"/);
+  });
+
+  it("V2.7 strips literal pivot strings from worked examples (replaced with [PIVOT: ...] placeholders)", () => {
+    expect(V2_SYSTEM_PROMPT).toContain(V2_7_FRUSTRATION_PIVOT);
+    expect(V2_SYSTEM_PROMPT).toContain(V2_7_FAILURE_MODE_PIVOT);
+    expect(V2_SYSTEM_PROMPT).toContain(V2_7_DETRACTOR_PIVOT);
+    // Worked-example pivot phrasings from V2.6/V2.6.1 must be GONE.
+    expect(V2_SYSTEM_PROMPT).not.toContain(
+      "Switching gears — how are board notices and meeting prep coming through these days?"
+    );
+    expect(V2_SYSTEM_PROMPT).not.toContain(
+      "OK. Different topic — anything specific on maintenance"
+    );
+    // The placeholder pattern should appear at least 3 times (once per
+    // worked-example pivot).
+    const placeholderCount = (V2_SYSTEM_PROMPT.match(/\[PIVOT: acknowledge in one word/g) || [])
+      .length;
+    expect(placeholderCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it("V2.7 expands Coverage areas to include the real-world themes from production data", () => {
+    expect(V2_SYSTEM_PROMPT).toContain(V2_7_COVERAGE_BLOCK);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Board advisory support/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Training & education/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Financial accuracy/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Communication systems & meeting follow-up/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Vendor & maintenance coordination/);
+    // Critical-flag handling for dissolution interest.
+    expect(V2_SYSTEM_PROMPT).toMatch(/DISSOLUTION of the association/);
+    // Old narrow 3-bullet list should be gone.
+    expect(V2_SYSTEM_PROMPT).not.toContain(V2_6_1_COVERAGE_BLOCK);
+  });
+
+  it("V2.7 adds forward-looking probes (boards have asks, not just complaints)", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/Forward-looking probes/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/What would good look like for you/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/managers should carry fewer accounts/);
+  });
+
+  it("V2.7 keeps everything V2.6 added (closing block + ban sycophantic flattery)", () => {
+    expect(V2_SYSTEM_PROMPT).toContain(V2_6_CLOSING_BLOCK);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Absolutely fair point/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/\[CHAT:END\]/);
+    expect(V2_SYSTEM_PROMPT).toMatch(/Thank you for your time, I'm concluding this chat/);
   });
 });
 
@@ -191,24 +283,25 @@ describe("V2 system prompt — V2.6.1 derivation from V2.6", () => {
     expect(V2_SYSTEM_PROMPT_V26).toContain(V2_6_DETRACTOR_PIVOT);
   });
 
-  it("V2.6.1 contains the new vary-it pivot guidance", () => {
-    expect(V2_SYSTEM_PROMPT).toContain(V2_6_1_PIVOT_INSTRUCTIONS);
-    expect(V2_SYSTEM_PROMPT).toMatch(/illustrative templates only/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Do not copy these example phrasings verbatim/);
+  it("V2.6.1 frozen export contains the vary-it pivot guidance", () => {
+    expect(V2_SYSTEM_PROMPT_V261).toContain(V2_6_1_PIVOT_INSTRUCTIONS);
+    expect(V2_SYSTEM_PROMPT_V261).toMatch(/illustrative templates only/);
+    expect(V2_SYSTEM_PROMPT_V261).toMatch(/Do not copy these example phrasings verbatim/);
   });
 
-  it("V2.6.1 has varied worked-example pivot phrases (no longer all 'board notices and meeting prep')", () => {
-    expect(V2_SYSTEM_PROMPT).toContain(V2_6_1_FRUSTRATION_PIVOT);
-    expect(V2_SYSTEM_PROMPT).toContain(V2_6_1_FAILURE_MODE_PIVOT);
-    expect(V2_SYSTEM_PROMPT).toContain(V2_6_1_DETRACTOR_PIVOT);
-    // The exact verbatim phrase that the model was overusing must be
-    // gone from the live prompt's worked examples (still allowed in
-    // the V2.5/V2.6 frozen exports above for migration matching).
+  it("V2.6.1 frozen export has varied worked-example pivot phrases", () => {
+    expect(V2_SYSTEM_PROMPT_V261).toContain(V2_6_1_FRUSTRATION_PIVOT);
+    expect(V2_SYSTEM_PROMPT_V261).toContain(V2_6_1_FAILURE_MODE_PIVOT);
+    expect(V2_SYSTEM_PROMPT_V261).toContain(V2_6_1_DETRACTOR_PIVOT);
+    // The exact verbatim phrase the model was overusing must NOT appear
+    // in V2.6.1 (it WAS the bug we tried to fix at this stage —
+    // unsuccessfully, which is why V2.7 strips literal pivot strings
+    // from worked examples entirely).
     const phrase = "how are board notices and meeting prep coming through these days?";
-    expect(V2_SYSTEM_PROMPT).not.toContain(phrase);
+    expect(V2_SYSTEM_PROMPT_V261).not.toContain(phrase);
   });
 
-  it("V2.6.1 has at least 4 distinct example pivot openers (variety > template)", () => {
+  it("V2.6.1 frozen export has at least 4 distinct example pivot openers", () => {
     const openers = [
       "Switching gears",
       "Different topic",
@@ -216,15 +309,8 @@ describe("V2 system prompt — V2.6.1 derivation from V2.6", () => {
       "Different angle",
       "Let me ask about something else",
     ];
-    const present = openers.filter((o) => V2_SYSTEM_PROMPT.includes(o));
+    const present = openers.filter((o) => V2_SYSTEM_PROMPT_V261.includes(o));
     expect(present.length).toBeGreaterThanOrEqual(4);
-  });
-
-  it("V2.6.1 keeps everything V2.6 added (no regression on closing block / never list)", () => {
-    expect(V2_SYSTEM_PROMPT).toContain(V2_6_CLOSING_BLOCK);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Absolutely fair point/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/\[CHAT:END\]/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/Thank you for your time, I'm concluding this chat/);
   });
 });
 
@@ -300,7 +386,12 @@ describe("V2 system prompt — V2.5 current (thread = root topic, no advice, no 
   });
 
   it("retains reserves-follow-only and forbidden first-sentence openers", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/Reserves.*rarely top-of-mind/i);
+    // V2.7 reworded the reserves rule from "rarely top-of-mind" to
+    // "almost never top-of-mind unless something specific just
+    // happened" — same intent, slightly different copy. Match the
+    // intent (reserves are deprioritized) rather than the exact
+    // earlier wording.
+    expect(V2_SYSTEM_PROMPT).toMatch(/Reserves.*top-of-mind/i);
     expect(V2_SYSTEM_PROMPT).toMatch(/Lead with reserves, statements, or special assessments/);
     expect(V2_SYSTEM_PROMPT).toMatch(/Forbidden first-sentence openers/);
   });
