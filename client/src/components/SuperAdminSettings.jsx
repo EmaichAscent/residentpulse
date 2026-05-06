@@ -64,6 +64,20 @@ export default function SuperAdminSettings() {
   // ── Test Interview modal ──
   const [showTestInterview, setShowTestInterview] = useState(false);
 
+  // ── AI provider toggle (Anthropic vs xAI) ──
+  // Drives every board-chat reply, every round-insights call, every
+  // session summary. Operator flips this to A/B test Grok against
+  // Claude on the same prompts. The xaiKeyConfigured flag comes from
+  // the server (true iff XAI_API_KEY is set in the environment); we
+  // disable the xAI radio when it's missing so the operator can't put
+  // the system into a state where every chat 500s.
+  const [aiProvider, setAiProvider] = useState("anthropic");
+  const [aiProviderLoading, setAiProviderLoading] = useState(true);
+  const [aiProviderSaving, setAiProviderSaving] = useState(false);
+  const [aiProviderError, setAiProviderError] = useState(null);
+  const [aiProviderSavedAt, setAiProviderSavedAt] = useState(null);
+  const [xaiKeyConfigured, setXaiKeyConfigured] = useState(false);
+
   // ── Plans state ──
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
@@ -79,7 +93,48 @@ export default function SuperAdminSettings() {
     loadVersions();
     loadInterviewPrompts();
     loadPlans();
+    loadAiProvider();
   }, []);
+
+  // ── AI provider API ──
+  const loadAiProvider = async () => {
+    try {
+      const res = await fetch("/api/superadmin/ai-provider", { credentials: "include" });
+      const ct = res.headers.get("content-type") || "";
+      if (!res.ok || !ct.includes("application/json")) {
+        throw new Error(`ai-provider returned ${res.status}`);
+      }
+      const data = await res.json();
+      setAiProvider(data.provider || "anthropic");
+      setXaiKeyConfigured(Boolean(data.xai_key_configured));
+    } catch (err) {
+      setAiProviderError(err.message);
+    } finally {
+      setAiProviderLoading(false);
+    }
+  };
+
+  const saveAiProvider = async (newProvider) => {
+    if (newProvider === aiProvider) return;
+    setAiProviderSaving(true);
+    setAiProviderError(null);
+    try {
+      const res = await fetch("/api/superadmin/ai-provider", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ provider: newProvider }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Save failed (${res.status})`);
+      setAiProvider(data.provider);
+      setAiProviderSavedAt(Date.now());
+    } catch (err) {
+      setAiProviderError(err.message);
+    } finally {
+      setAiProviderSaving(false);
+    }
+  };
 
   // ── Prompt API ──
   const loadPrompt = async () => {
@@ -347,6 +402,99 @@ export default function SuperAdminSettings() {
 
   return (
     <div className="space-y-8">
+      {/* ━━━━ AI PROVIDER TOGGLE ━━━━ */}
+      <div className="bg-white rounded-xl border p-6">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">AI provider</h2>
+            <p className="text-sm text-gray-500">
+              Routes every board-chat reply, round-insights call, and session summary. Switch
+              providers to A/B test them on the same prompts. Critical-alert detection stays on
+              Anthropic Haiku regardless.
+            </p>
+          </div>
+          {aiProviderSavedAt && Date.now() - aiProviderSavedAt < 4000 && (
+            <span
+              className="text-[10.5px] font-bold uppercase flex-shrink-0"
+              style={{
+                backgroundColor: "var(--pulse-soft)",
+                color: "var(--pulse-deep)",
+                padding: "2px 8px",
+                borderRadius: 999,
+                letterSpacing: "0.08em",
+              }}
+            >
+              Saved ✓
+            </span>
+          )}
+        </div>
+
+        {aiProviderLoading ? (
+          <p className="text-sm text-gray-400">Loading…</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border hover:bg-gray-50">
+              <input
+                type="radio"
+                name="ai-provider"
+                value="anthropic"
+                checked={aiProvider === "anthropic"}
+                disabled={aiProviderSaving}
+                onChange={() => saveAiProvider("anthropic")}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="font-semibold text-sm text-gray-900">Anthropic Claude</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  Sonnet 4.5 for chat &amp; insights · Haiku 4.5 for critical-alert classifier.
+                  Default. Always available.
+                </div>
+              </div>
+            </label>
+
+            <label
+              className={`flex items-start gap-3 p-3 rounded-lg border ${
+                xaiKeyConfigured
+                  ? "cursor-pointer hover:bg-gray-50"
+                  : "cursor-not-allowed opacity-60"
+              }`}
+              title={
+                xaiKeyConfigured
+                  ? "Switch to xAI Grok"
+                  : "XAI_API_KEY is not set in the server environment"
+              }
+            >
+              <input
+                type="radio"
+                name="ai-provider"
+                value="xai"
+                checked={aiProvider === "xai"}
+                disabled={aiProviderSaving || !xaiKeyConfigured}
+                onChange={() => saveAiProvider("xai")}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="font-semibold text-sm text-gray-900">
+                  xAI Grok
+                  {!xaiKeyConfigured && (
+                    <span className="ml-2 text-[10.5px] font-bold uppercase text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+                      XAI_API_KEY missing
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  grok-4-latest for chat &amp; insights · grok-3-mini-fast for any haiku-class call.
+                  Requires XAI_API_KEY in the server environment.
+                </div>
+              </div>
+            </label>
+
+            {aiProviderError && <p className="text-sm text-red-600 mt-1">{aiProviderError}</p>}
+            {aiProviderSaving && <p className="text-xs text-gray-400 mt-1">Saving…</p>}
+          </div>
+        )}
+      </div>
+
       {/* ━━━━ SYSTEM PROMPT CARD ━━━━ */}
       <div className="bg-white rounded-xl border p-6">
         <div className="mb-4 flex items-start justify-between gap-4">

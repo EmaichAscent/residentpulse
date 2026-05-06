@@ -2,7 +2,12 @@ import { Router } from "express";
 import db from "../db.js";
 import { notifyCriticalAlert } from "../utils/emailService.js";
 import logger from "../utils/logger.js";
-import { createMessage } from "../utils/anthropicClient.js";
+// `createMessage` is the AI provider router — dispatches to Anthropic
+// or xAI based on the global `ai_provider` setting. The critical-alert
+// detector below stays on `anthropicCreateMessage` directly because
+// it's a fast classifier; we don't want to swap that for testing.
+import { createMessage } from "../utils/aiRouter.js";
+import { createMessage as anthropicCreateMessage } from "../utils/anthropicClient.js";
 
 const router = Router();
 
@@ -242,7 +247,10 @@ async function detectCriticalAlert(userMessage, session, messageId) {
   // Skip short messages unlikely to contain actionable concerns
   if (userMessage.length < 30) return;
 
-  const result = await createMessage({
+  // Note: this classifier intentionally bypasses the AI provider
+  // router — it's a background safety check, always on Haiku for
+  // cost/latency, never part of the Anthropic-vs-xAI comparison.
+  const result = await anthropicCreateMessage({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 200,
     system: `You are a critical alert detector for a property management NPS survey platform. Analyze the board member's message for URGENT, TIME-SENSITIVE concerns that require immediate management company attention.
