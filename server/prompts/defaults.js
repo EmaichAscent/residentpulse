@@ -1983,18 +1983,84 @@ export const V3_0_CRITICAL_SIGNALS_HEADER = `## Critical signals (capture verbat
 
 export const V3_1_CAPTURE_ONLY_HEADER = `## Capture-only signals (do NOT drill — different from "Drill before pivoting" above)`;
 
+// V3.2 also retitles the section above ("Drill before pivoting" →
+// "Drill on specifics, don't broaden"), so the cross-reference in the
+// Capture-only header needs updating to match.
+export const V3_2_CAPTURE_ONLY_HEADER = `## Capture-only signals (do NOT drill — different from "Drill on specifics" above)`;
+
 /**
- * V3.1 — current live prompt. Surgical patch off V3.0:
+ * V3.1 — frozen for V3.2 derivation. Surgical patch off V3.0:
  *   A. inserts the "Drill before pivoting" section before Coverage areas
  *   B. updates the "2 follow-ups MAX" hard rule to acknowledge the override
  *   C. renames "Critical signals" → "Capture-only signals" for disambiguation
  */
-export const V2_SYSTEM_PROMPT = V3_0_SYSTEM_PROMPT.replace(
+export const V3_1_SYSTEM_PROMPT = V3_0_SYSTEM_PROMPT.replace(
   V3_0_HARD_RULE_FOLLOWUPS,
   V3_1_HARD_RULE_FOLLOWUPS
 )
   .replace("---\n\n## Coverage areas", `---\n\n${V3_1_DRILL_SECTION}## Coverage areas`)
   .replace(V3_0_CRITICAL_SIGNALS_HEADER, V3_1_CAPTURE_ONLY_HEADER);
+
+// ── V3.2: simplify the drill section ─────────────────────────────────
+//
+// V3.1 production transcript: model heard "Manager had a come apart"
+// and pivoted to responsiveness. Failure mode: the V3.1 trigger
+// keyword list ("meltdown", "blew up", "yelled", "lost their cool",
+// "stormed out", ...) was treated as exhaustive. "Come apart" wasn't
+// listed, so the model didn't recognize it as a drill trigger.
+//
+// Even after the resident pushed back twice and the model finally
+// drilled ("What exactly happened?"), the next turn jumped to "Has
+// the manager's behavior affected your trust in board communications
+// overall?" — re-broadening to abstract themes mid-drill.
+//
+// V3.2 strips the V3.1 drill section back to a single principle:
+//   "When the resident names a specific event, behavior, or named
+//    person — your next 2-4 follow-ups are about THAT specific
+//    thing. Don't broaden to abstract themes while a specific is
+//    still on the table."
+//
+// Plus the four useful drill questions (kept) and a NEW explicit
+// rule: "Re-broadening to abstract themes IS a pivot — do NOT pivot
+// during a drill." That last sentence directly targets the abstract-
+// trust-question failure mode in the transcript.
+//
+// Net change: V3.1 drill section ≈ 1500 chars / 240 words →
+// V3.2 drill section ≈ 800 chars / 130 words. SHORTER, not longer.
+// The bet: one principle the model can apply universally beats five
+// keyword categories the model has to pattern-match against.
+
+export const V3_2_DRILL_SECTION = `## Drill on specifics, don't broaden
+
+When the resident names a specific event, behavior, or named person — your next 2–4 follow-ups are about THAT specific thing. Don't broaden to abstract themes ("trust", "communication overall", "responsiveness", "company culture") while a specific is still on the table.
+
+Drill questions on any specific incident:
+  • What happened? (when, where, who else was there)
+  • Has it been raised with the company since? What did they say?
+  • One-off, or part of a pattern?
+  • What would resolve it?
+
+Re-broadening to abstract themes IS a pivot — do NOT pivot during a drill. Wait until the resident has nothing new on the specific ("don't know", "that's about it", "not sure"), THEN pivot.
+
+This OVERRIDES the "2 follow-ups MAX" rule for specific-incident drills — take 3–4 follow-ups when the signal warrants.
+
+---
+
+`;
+
+/**
+ * V3.2 — current live prompt. Surgical patches off V3.1:
+ *   1. Replace the entire drill section with a simpler, principle-
+ *      based version.
+ *   2. Update the Capture-only header's cross-reference to match the
+ *      new drill section title.
+ * All other V3.1 changes (hard rule override, etc.) carry through
+ * unchanged.
+ */
+export const V2_SYSTEM_PROMPT = V3_1_SYSTEM_PROMPT.replace(
+  V3_1_DRILL_SECTION,
+  V3_2_DRILL_SECTION
+).replace(V3_1_CAPTURE_ONLY_HEADER, V3_2_CAPTURE_ONLY_HEADER);
 
 /**
  * V2.0 — Client Onboarding Interview (frozen for migration matching).
