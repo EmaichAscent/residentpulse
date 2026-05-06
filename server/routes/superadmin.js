@@ -4,8 +4,11 @@ import { requireSuperAdmin } from "../middleware/auth.js";
 import { hashPassword, generatePassword } from "../utils/password.js";
 import { generateClientCode } from "../utils/clientCode.js";
 import logger from "../utils/logger.js";
-import { createMessage } from "../utils/anthropicClient.js";
-import { invalidateProviderCache } from "../utils/aiRouter.js";
+// SuperAdmin AI assistant (the "Propose diff" prompt-editor helper)
+// goes through the AI provider router so the "AI provider" toggle
+// covers it alongside board chat. invalidateProviderCache lets the
+// PUT /ai-provider endpoint bust the cache on toggle.
+import { createMessage, invalidateProviderCache } from "../utils/aiRouter.js";
 import { getCurrentBlocks, saveNewVersion, getVersionById } from "../utils/promptVersions.js";
 import { blocksToPrompt, normalizeBlock } from "../prompts/blocks.js";
 
