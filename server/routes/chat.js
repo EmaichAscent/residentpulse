@@ -8,6 +8,20 @@ import logger from "../utils/logger.js";
 // it's a fast classifier; we don't want to swap that for testing.
 import { createMessage } from "../utils/aiRouter.js";
 import { createMessage as anthropicCreateMessage } from "../utils/anthropicClient.js";
+// Programmatic close flow — server-side state machine that takes the
+// closing wrap-up out of the model's hands. V3.0 prompt engineering
+// plateaued (both Grok and Claude consistently violate the closing
+// rules) so the server now (a) decides when to close, (b) emits a
+// scoped-LLM playback message, then (c) emits a templated final
+// close with [CHAT:END] — no model involvement on the final step.
+import {
+  CLOSE_PHASE,
+  shouldFirePlayback,
+  generatePlayback,
+  generateFinalClose,
+  stripChatEndTag,
+  logPhaseTransition,
+} from "../utils/closeFlow.js";
 
 const router = Router();
 
@@ -65,6 +79,122 @@ router.post("/", async (req, res) => {
     "SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at",
     [Number(session_id)]
   );
+
+  // ── Programmatic close-flow gate ────────────────────────────────
+  // Runs BEFORE the normal system-prompt build + AI call so the model
+  // never gets a chance to mangle the close. Three branches:
+  //
+  //   close_phase = 'awaiting_playback_response':
+  //     The user just answered the playback question. Emit the
+  //     templated final close (no model call), flip to 'done',
+  //     return with chat_end=true.
+  //
+  //   close_phase = 'interview' AND shouldFirePlayback():
+  //     Server has decided it's time to wrap up. Generate the
+  //     scoped-LLM playback, save it as the assistant message, flip
+  //     to 'awaiting_playback_response', return.
+  //
+  //   close_phase = 'interview' AND not yet time to close:
+  //     Fall through to normal interview-question generation below.
+  //
+  //   close_phase = 'done':
+  //     Session has already closed. Refuse the request — frontend
+  //     should have auto-closed the chat after [CHAT:END] fired.
+  if (session.close_phase === CLOSE_PHASE.DONE) {
+    return res.status(409).json({ error: "This chat has already been closed." });
+  }
+
+  if (session.close_phase === CLOSE_PHASE.AWAITING_PLAYBACK_RESPONSE) {
+    try {
+      const clientRow = await db.get("SELECT company_name FROM clients WHERE id = ?", [
+        session.client_id,
+      ]);
+      const clientName = clientRow?.company_name || "your management company";
+      const conversationText = history.map((m) => m.content || "").join(" ");
+
+      const finalCloseMessage = generateFinalClose({ clientName, conversationText });
+
+      await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'assistant', ?)", [
+        Number(session_id),
+        finalCloseMessage,
+      ]);
+      await db.run("UPDATE sessions SET close_phase = ? WHERE id = ?", [
+        CLOSE_PHASE.DONE,
+        Number(session_id),
+      ]);
+      logPhaseTransition({
+        sessionId: Number(session_id),
+        from: CLOSE_PHASE.AWAITING_PLAYBACK_RESPONSE,
+        to: CLOSE_PHASE.DONE,
+        reason: "user responded to playback",
+      });
+
+      // Frontend strips [CHAT:END] from the visible message and uses
+      // chat_end=true to auto-close the session 3 seconds later.
+      const display = stripChatEndTag(finalCloseMessage);
+      const savedMsg = await db.get(
+        "SELECT created_at FROM messages WHERE session_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1",
+        [Number(session_id)]
+      );
+      return res.json({ message: display, timestamp: savedMsg?.created_at, chat_end: true });
+    } catch (err) {
+      logger.error("Programmatic final close failed: %s", err.message);
+      return res.status(500).json({ error: "Failed to close chat" });
+    }
+  }
+
+  // Phase = 'interview'. Decide whether this turn is a normal question
+  // or whether the server should now fire the playback.
+  const aiMessageCount = history.filter((m) => m.role === "assistant").length;
+  if (shouldFirePlayback({ aiMessageCount, userMessage: message })) {
+    try {
+      const clientRow = await db.get("SELECT company_name FROM clients WHERE id = ?", [
+        session.client_id,
+      ]);
+      const clientName = clientRow?.company_name || "your management company";
+
+      const playback = await generatePlayback({ clientName, history });
+
+      await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'assistant', ?)", [
+        Number(session_id),
+        playback,
+      ]);
+      await db.run("UPDATE sessions SET close_phase = ? WHERE id = ?", [
+        CLOSE_PHASE.AWAITING_PLAYBACK_RESPONSE,
+        Number(session_id),
+      ]);
+      logPhaseTransition({
+        sessionId: Number(session_id),
+        from: CLOSE_PHASE.INTERVIEW,
+        to: CLOSE_PHASE.AWAITING_PLAYBACK_RESPONSE,
+        reason: `aiMessageCount=${aiMessageCount}`,
+      });
+
+      const savedMsg = await db.get(
+        "SELECT created_at FROM messages WHERE session_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1",
+        [Number(session_id)]
+      );
+
+      // Fire critical alert detection on the user message that
+      // triggered the playback (skip for mock sessions).
+      if (!session.is_mock) {
+        const userMsgRow = await db.get(
+          "SELECT id FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at DESC LIMIT 1",
+          [Number(session_id)]
+        );
+        detectCriticalAlert(message, session, userMsgRow?.id).catch((err) =>
+          logger.error("Critical alert detection error: %s", err.message)
+        );
+      }
+
+      return res.json({ message: playback, timestamp: savedMsg?.created_at, chat_end: false });
+    } catch (err) {
+      logger.error("Programmatic playback generation failed: %s", err.message);
+      // Fall through — if the playback call breaks, let the regular
+      // interview path try a normal AI reply rather than 500 the
+      // resident's chat.
+    }
+  }
 
   // Get system prompt (prefer client-specific, fall back to global)
   const clientSetting = await db.get(
@@ -196,15 +326,30 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
       ]);
     }
 
-    // [CHAT:END] — model signals it has wrapped the conversation. The
-    // tag is stripped before display; the boolean is returned to the
-    // frontend, which renders the closing message and auto-closes the
-    // session 3 seconds later. Used by both the standard wrap path
-    // and the promoter fast-path's final reply.
+    // [CHAT:END] handling. The Google review fast-path is the ONLY
+    // remaining model-driven close — when a promoter scored at/above
+    // threshold and the review prompt fires, the model can legitimately
+    // emit [CHAT:END] on its final reply. For all other interviews,
+    // the close is now server-driven (closeFlow.js + the gate above
+    // this block), so any model-emitted [CHAT:END] in normal interview
+    // turns is a bug and must be stripped silently.
     let chatEnd = false;
     if (/\[CHAT:\s*END\s*\]/i.test(assistantMessage)) {
       assistantMessage = assistantMessage.replace(/\s*\[CHAT:\s*END\s*\]\s*/gi, "").trim();
-      chatEnd = true;
+      // Honor the [CHAT:END] only when this is a promoter-fast-path
+      // close. We detect that by the [REVIEW:YES|NO] tag appearing in
+      // the same turn (already handled and stripped above) — if a
+      // review tag fired, we know this is the fast-path's final wrap.
+      // Otherwise we strip silently and treat the turn as a normal
+      // ongoing interview reply.
+      if (reviewMatch) {
+        chatEnd = true;
+      } else {
+        logger.warn(
+          { session_id: Number(session_id) },
+          "Stripped stray model-emitted [CHAT:END] from interview turn"
+        );
+      }
     }
 
     // Save assistant message
