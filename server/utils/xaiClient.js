@@ -45,24 +45,32 @@ const DEFAULT_TIMEOUT_MS = 120_000; // match anthropicClient
 /**
  * Map an Anthropic model name to the matching xAI model.
  *
- * As of 2026-05-14 xAI's documented current flagship is `grok-4.3`,
- * with aliases `grok-4.3-latest` (latest 4.3-series patch) and
- * `grok-latest` (whatever the most recent flagship is, across
- * generations). We use `grok-4.3-latest` because it auto-upgrades
- * within 4.3 patches but won't silently jump to 4.4+ when that
- * ships — keeps behavior predictable while still picking up bug
- * fixes. Bump this manually when xAI releases a successor and we've
- * tested it.
+ * Default is `grok-4.20-non-reasoning` — xAI's explicit recommendation
+ * for "latency-sensitive use cases." Reasoning is disabled at the
+ * model level, so first-token latency is dramatically lower than the
+ * reasoning-on `grok-4.3` (which we previously used and which caused
+ * >15s replies in production NPS chats). For our workload — short
+ * conversational follow-ups in a board interview — extended reasoning
+ * adds latency without measurable quality benefit.
  *
- * Note: we previously had a Haiku-class mapping to `grok-3-mini-fast`,
- * but no routed call site currently uses a Haiku model (the critical-
- * alert detector calls anthropicClient directly, bypassing the
- * router). Plus xAI's grok-3 series may be deprecated. So all routed
- * calls land on grok-4.3-latest. If we need a cheaper xAI classifier
- * later, add it here with verified-current docs.
+ * Override via the `XAI_MODEL` env var on Railway when you want to
+ * trade latency for depth (e.g. `XAI_MODEL=grok-4.3` for the reasoning
+ * flagship, or any future model name xAI ships). No code change
+ * needed; just set the env var and restart.
+ *
+ * Retired May 15, 2026 — DO NOT use these names: grok-3,
+ * grok-4-fast-non-reasoning, grok-4-1-fast-non-reasoning,
+ * grok-4-fast-reasoning, grok-4-1-fast-reasoning, grok-4-0709,
+ * grok-code-fast-1.
+ *
+ * Currently supported (verified May 2026):
+ *   • grok-4.20-non-reasoning  ← default; fastest non-reasoning
+ *   • grok-4.20-reasoning
+ *   • grok-4.20-multi-agent    (deep research, supports reasoning.effort)
+ *   • grok-4.3 / grok-4.3-latest  (reasoning flagship)
  */
 export function defaultXaiModelFor(_anthropicModel = "") {
-  return "grok-4.3-latest";
+  return process.env.XAI_MODEL || "grok-4.20-non-reasoning";
 }
 
 /**
@@ -92,7 +100,7 @@ function toOpenAiRequest(anthropicParams) {
   }
 
   return {
-    model: anthropicParams.model || "grok-4.3-latest",
+    model: anthropicParams.model || defaultXaiModelFor(),
     max_tokens: anthropicParams.max_tokens,
     messages,
     // Pass through optional sampling params if the caller set them.

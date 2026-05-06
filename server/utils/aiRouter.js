@@ -82,10 +82,12 @@ export function invalidateProviderCache() {
  * createMessage — same signature as @anthropic-ai/sdk's
  * messages.create({}). Dispatches based on the active provider.
  *
- * When the active provider is "xai", we translate the Anthropic-named
- * model in `params.model` to a sensible Grok equivalent
- * (Sonnet → grok-4-latest, Haiku → grok-3-mini-fast). Callers don't
- * need to know which provider they're hitting.
+ * When the active provider is "xai", the Anthropic-named model in
+ * `params.model` is translated to a Grok model via
+ * `defaultXaiModelFor()`. That helper currently routes everything to
+ * `grok-4.20-non-reasoning` (xAI's latency-sensitive default), with
+ * an `XAI_MODEL` env-var override for ops to flip on Railway.
+ * Callers don't need to know which provider they're hitting.
  */
 export async function createMessage(params) {
   const provider = await getActiveProvider();
