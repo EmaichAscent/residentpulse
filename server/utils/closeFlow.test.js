@@ -210,11 +210,15 @@ describe("generatePlayback", () => {
     expect(params.system).toMatch(
       /Anything missing from that, or anything else I should pass along/
     );
-    expect(params.system).toMatch(/2-sentence playback/);
-    // The full conversation history must be passed to the model so it
-    // can summarize what was actually said.
-    expect(params.messages).toHaveLength(3);
-    expect(params.messages[0].content).toBe("My NPS is 6");
+    // Transcript is passed inline as a single user-role message — NOT
+    // replayed turn-by-turn. Replaying triggers "keep asking questions"
+    // pattern bias in Sonnet. (We saw this fail in production.)
+    expect(params.messages).toHaveLength(1);
+    expect(params.messages[0].role).toBe("user");
+    expect(params.messages[0].content).toMatch(/Board member: My NPS is 6/);
+    expect(params.messages[0].content).toMatch(/Interviewer: What's the biggest gap\?/);
+    expect(params.messages[0].content).toMatch(/Board member: responsiveness/);
+    expect(params.messages[0].content).toMatch(/Do NOT continue the interview/);
   });
 
   it("strips any [CHAT:END] tag from the playback (defense-in-depth)", async () => {
@@ -234,6 +238,46 @@ describe("generatePlayback", () => {
 
     expect(out).not.toMatch(/\[CHAT:END\]/);
     expect(out).toMatch(/Anything missing from that, or anything else I should pass along/);
+  });
+
+  it("appends the canonical closing question if the model dropped it", async () => {
+    // Production failure mode — Sonnet ignored the playback prompt and
+    // produced a fresh interview question instead. The fallback ensures
+    // the gate logic still has the canonical question to anchor on.
+    aiRouter.createMessage.mockResolvedValueOnce({
+      content: [
+        {
+          type: "text",
+          text: "Let me ask it this way — what kind of issues are you reaching out about?",
+        },
+      ],
+    });
+
+    const out = await closeFlow.generatePlayback({
+      clientName: "Southern States",
+      history: [{ role: "user", content: "x" }],
+    });
+
+    expect(out).toMatch(/Anything missing from that, or anything else I should pass along\?$/);
+  });
+
+  it("does NOT double-append the canonical question when already present", async () => {
+    aiRouter.createMessage.mockResolvedValueOnce({
+      content: [
+        {
+          type: "text",
+          text: "Reports good. Responsiveness slow. Anything missing from that, or anything else I should pass along?",
+        },
+      ],
+    });
+
+    const out = await closeFlow.generatePlayback({
+      clientName: "Southern States",
+      history: [{ role: "user", content: "x" }],
+    });
+
+    const matches = out.match(/Anything missing from that/g) || [];
+    expect(matches).toHaveLength(1);
   });
 });
 

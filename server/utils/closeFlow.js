@@ -97,53 +97,97 @@ export function shouldFirePlayback({ aiMessageCount, userMessage }) {
 // ── Step 2: Playback (scoped LLM call) ──────────────────────────────
 
 /**
+ * Canonical closing question — must end every playback verbatim.
+ */
+export const CANONICAL_PLAYBACK_QUESTION =
+  "Anything missing from that, or anything else I should pass along?";
+
+/**
  * Build the system prompt for the playback step. Single-purpose,
  * intentionally tight — the model has ONE job: summarize what was
  * heard in 2 sentences + the canonical open question. No room to
  * meander into the issues we kept seeing in V3.0 production tests.
  */
 function buildPlaybackSystemPrompt(clientName) {
-  return `You are generating ONE message for the end of a board-member NPS interview about ${clientName}. The full conversation transcript is in the message history.
+  return `You are generating ONE message — a closing summary playback — for a board-member NPS interview about ${clientName}.
 
-Your job: produce a 2-sentence playback that summarizes what the resident said, BOTH SIDES if both came up.
+The conversation transcript will be provided as data inside a single user message. You are NOT continuing the interview. You are NOT asking another follow-up question. The interview is OVER. Your job is to produce the wrap-up summary.
 
-  • Sentence 1 — what ${clientName} is doing well: cite specifics from THIS conversation, not generic praise. If the resident gave NO positive feedback, skip this sentence and write only sentence 2.
-  • Sentence 2 — what's pulling their score down: name the root issue.
+Output format (exactly, in this order, nothing else):
 
-End your message EXACTLY with this open question (verbatim, no rephrasing):
+  Sentence 1 — what ${clientName} is doing well based on THIS conversation. Cite specifics, not generic praise. If the board member gave NO positive feedback at all, skip this sentence entirely.
+  Sentence 2 — what's pulling their score down. Name the root issue in one sentence.
+  Then this exact closing question, verbatim, on the same paragraph:
 
-  Anything missing from that, or anything else I should pass along?
-
-CRITICAL — your output is exactly the playback sentence(s) followed by the canonical question. Nothing else.
+    ${CANONICAL_PLAYBACK_QUESTION}
 
 DO NOT include:
   • "Thanks", "I appreciate", "Got it", "That makes sense", or any sycophancy
-  • The closing line ("Thank you for your time…")
+  • The final closing line ("Thank you for your time…")
   • The hidden tag [CHAT:END]
-  • Bullet points, headers, or any meta-commentary
+  • Bullet points, headers, or meta-commentary
+  • Another follow-up question of your own — only the canonical closing question above is allowed
 
-Output exactly the message a board member would receive — plain prose, 1–2 sentences, then the verbatim open question.`;
+Output the message a board member would see — plain prose, 1–2 sentences, then the verbatim closing question.`;
+}
+
+/**
+ * Format a transcript as a single string. Going inline-as-data inside
+ * one user message is far more reliable than replaying the multi-turn
+ * history. When the assistant's prior turns are interleaved as their
+ * own message roles, models pattern-match into "keep asking questions"
+ * and produce a fresh interview question instead of the playback. We
+ * saw this fail in production with Sonnet 4.5 — it ignored the
+ * playback system prompt and asked another follow-up.
+ */
+function formatTranscript(history) {
+  return history
+    .map((m) => {
+      const speaker = m.role === "user" ? "Board member" : "Interviewer";
+      return `${speaker}: ${m.content}`;
+    })
+    .join("\n\n");
 }
 
 /**
  * Generate the playback reply by calling the active AI provider with
- * the scoped playback prompt + the conversation history. Returns the
- * playback text (no [CHAT:END] tag — that goes on the FINAL close,
+ * the scoped playback prompt + the conversation as inline data. Returns
+ * the playback text (no [CHAT:END] tag — that goes on the FINAL close,
  * one turn later).
+ *
+ * Two reliability tricks vs the naive history-replay approach:
+ *   1. The transcript is a single user-role message. Removes the
+ *      "you've been asking questions, ask another one" pattern bias.
+ *   2. If the returned text is missing the canonical closing question,
+ *      we append it — defense in depth. The full close pipeline must
+ *      ALWAYS end the playback with that exact question, otherwise the
+ *      next turn's templated final-close looks abrupt.
  */
 export async function generatePlayback({ clientName, history }) {
   const systemPrompt = buildPlaybackSystemPrompt(clientName);
+  const transcript = formatTranscript(history);
   const response = await createMessage({
     model: "claude-sonnet-4-5-20250929", // routed → Grok-4.3-latest if toggle is xAI
     max_tokens: 250,
     system: systemPrompt,
-    messages: history.map((m) => ({ role: m.role, content: m.content })),
+    messages: [
+      {
+        role: "user",
+        content: `Conversation transcript follows. Produce the closing playback as instructed.\n\n---\n\n${transcript}\n\n---\n\nNow produce the playback. Do NOT continue the interview.`,
+      },
+    ],
   });
   let text = response.content?.[0]?.text || "";
-  // Defense-in-depth: even if the scoped prompt is misunderstood and
-  // the model emits [CHAT:END], strip it. Only the final close gets
-  // the tag.
+  // Defense-in-depth: strip any [CHAT:END] the model might emit. Only
+  // the final close gets the tag.
   text = text.replace(/\s*\[CHAT:END\]\s*/gi, "").trim();
+  // Defense-in-depth: if the model dropped or rephrased the canonical
+  // closing question, append it. Without this question the resident
+  // doesn't know the chat is wrapping up, and our gate logic depends
+  // on the next user reply being a response to "anything missing?".
+  if (!text.toLowerCase().includes("anything missing from that")) {
+    text = `${text} ${CANONICAL_PLAYBACK_QUESTION}`.trim();
+  }
   return text;
 }
 
