@@ -21,8 +21,11 @@ import {
   V3_0_HARD_RULE_FOLLOWUPS,
   V3_1_HARD_RULE_FOLLOWUPS,
   V3_1_DRILL_SECTION,
+  V3_2_DRILL_SECTION,
   V3_0_CRITICAL_SIGNALS_HEADER,
   V3_1_CAPTURE_ONLY_HEADER,
+  V3_2_CAPTURE_ONLY_HEADER,
+  V3_1_SYSTEM_PROMPT,
   V2_SYSTEM_PROMPT,
   V2_5_CLOSING_BLOCK,
   V2_5_NEVER_TAIL,
@@ -235,7 +238,7 @@ describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3/V2.4 frozen for migration mat
     expect(new Set(all).size).toBe(all.length);
   });
 
-  it("current V2_SYSTEM_PROMPT (V3.1) differs from all frozen versions", () => {
+  it("current V2_SYSTEM_PROMPT (V3.2) differs from all frozen versions", () => {
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V20);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V21);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V22);
@@ -247,6 +250,7 @@ describe("V2 system prompt — V2.0/V2.1/V2.2/V2.3/V2.4 frozen for migration mat
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V27);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V2_SYSTEM_PROMPT_V28);
     expect(V2_SYSTEM_PROMPT).not.toEqual(V3_0_SYSTEM_PROMPT);
+    expect(V2_SYSTEM_PROMPT).not.toEqual(V3_1_SYSTEM_PROMPT);
   });
 });
 
@@ -264,56 +268,81 @@ describe("V3.0 — clean rewrite (frozen for V3.1 derivation)", () => {
   });
 });
 
-describe("V3.1 — surgical drill-before-pivoting patch off V3.0", () => {
-  it("is longer than V3.0 (added drill section) but still bounded", () => {
+describe("V3.1 — frozen for V3.2 derivation", () => {
+  it("V3.1 is longer than V3.0 (added drill section) but bounded", () => {
+    expect(V3_1_SYSTEM_PROMPT.length).toBeGreaterThan(V3_0_SYSTEM_PROMPT.length);
+    expect(V3_1_SYSTEM_PROMPT.length).toBeLessThan(10000);
+  });
+
+  it("V3.1 still contains its drill keyword list (V3.2 will replace)", () => {
+    expect(V3_1_SYSTEM_PROMPT).toContain("## Drill before pivoting");
+    expect(V3_1_SYSTEM_PROMPT).toMatch(/meltdown/);
+    expect(V3_1_SYSTEM_PROMPT).toMatch(/blew up/);
+    expect(V3_1_SYSTEM_PROMPT).toMatch(/lost their cool/);
+    expect(V3_1_SYSTEM_PROMPT).toContain(V3_1_DRILL_SECTION);
+  });
+});
+
+describe("V3.2 — simpler principle-based drill (replaces V3.1 keyword list)", () => {
+  it("is SHORTER than V3.1 (the principle is simpler than the keyword list)", () => {
+    expect(V2_SYSTEM_PROMPT.length).toBeLessThan(V3_1_SYSTEM_PROMPT.length);
+    // V3.2 ≈ 7.9k (V3.0 6.9k + simpler drill ~1k vs V3.1's ~1.5k drill)
     expect(V2_SYSTEM_PROMPT.length).toBeGreaterThan(V3_0_SYSTEM_PROMPT.length);
-    // V3.1 = V3.0 (~6.9k) + drill section (~1.5k) ≈ 8.5k. Cap at 10k
-    // to catch accidental bloat.
     expect(V2_SYSTEM_PROMPT.length).toBeLessThan(10000);
   });
 
-  it("inserts the Drill before pivoting section BEFORE Coverage areas", () => {
-    expect(V2_SYSTEM_PROMPT).toContain("## Drill before pivoting");
-    const drillIdx = V2_SYSTEM_PROMPT.indexOf("## Drill before pivoting");
+  it("V3.2 drill section uses the new principle-based header", () => {
+    expect(V2_SYSTEM_PROMPT).toContain("## Drill on specifics, don't broaden");
+    const drillIdx = V2_SYSTEM_PROMPT.indexOf("## Drill on specifics");
     const coverageIdx = V2_SYSTEM_PROMPT.indexOf("## Coverage areas");
     expect(drillIdx).toBeGreaterThan(0);
     expect(coverageIdx).toBeGreaterThan(drillIdx);
   });
 
-  it("Drill section names the specific behavioral-incident triggers", () => {
-    // These are the exact triggers from the production failure case
-    // ("Manager had a meltdown at the last board meeting"). Keep as
-    // anchored regex so a refactor can't silently drop them.
-    expect(V2_SYSTEM_PROMPT).toMatch(/meltdown/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/blew up/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/lost their cool/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/considering switching/);
-    expect(V2_SYSTEM_PROMPT).toMatch(/keeps happening/);
+  it("V3.2 STRIPS the V3.1 keyword-trigger list entirely", () => {
+    // The V3.1 keyword list was the source of the "come apart" miss.
+    // V3.2 replaces it with one principle, so these specific keywords
+    // shouldn't appear in the drill section anymore.
+    expect(V2_SYSTEM_PROMPT).not.toContain("## Drill before pivoting");
+    expect(V2_SYSTEM_PROMPT).not.toMatch(/Drill triggers — any of these/);
+    expect(V2_SYSTEM_PROMPT).not.toMatch(/"meltdown", "blew up"/);
+    // The V3.1 drill section as a verbatim block should be gone.
+    expect(V2_SYSTEM_PROMPT).not.toContain(V3_1_DRILL_SECTION);
   });
 
-  it("Drill section provides the four useful drill questions", () => {
-    expect(V2_SYSTEM_PROMPT).toMatch(/What exactly happened/);
+  it("V3.2 contains the principle: drill on specifics, don't broaden", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(
+      /When the resident names a specific event, behavior, or named person/
+    );
+    expect(V2_SYSTEM_PROMPT).toMatch(/Don't broaden to abstract themes/);
+    // The new explicit anti-pattern from the V3.1 production transcript
+    expect(V2_SYSTEM_PROMPT).toMatch(/Re-broadening to abstract themes IS a pivot/);
+  });
+
+  it("V3.2 keeps the four useful drill questions (carried over from V3.1)", () => {
+    expect(V2_SYSTEM_PROMPT).toMatch(/What happened\?/);
     expect(V2_SYSTEM_PROMPT).toMatch(/Has it been raised with the company/);
     expect(V2_SYSTEM_PROMPT).toMatch(/One-off, or part of a pattern/);
     expect(V2_SYSTEM_PROMPT).toMatch(/What would resolve it/);
   });
 
-  it("updates the Hard rule to reference the drill override (3-4 follow-ups)", () => {
+  it("V3.2 keeps the hard-rule override from V3.1", () => {
     expect(V2_SYSTEM_PROMPT).toContain(V3_1_HARD_RULE_FOLLOWUPS);
     expect(V2_SYSTEM_PROMPT).not.toContain(V3_0_HARD_RULE_FOLLOWUPS);
-    expect(V2_SYSTEM_PROMPT).toMatch(/3.4 follow-ups/);
   });
 
-  it("renames Critical signals → Capture-only signals (disambiguates from drill)", () => {
-    expect(V2_SYSTEM_PROMPT).toContain(V3_1_CAPTURE_ONLY_HEADER);
+  it("V3.2 updates the Capture-only header to reference the new drill section", () => {
+    expect(V2_SYSTEM_PROMPT).toContain(V3_2_CAPTURE_ONLY_HEADER);
+    expect(V2_SYSTEM_PROMPT).not.toContain(V3_1_CAPTURE_ONLY_HEADER);
     expect(V2_SYSTEM_PROMPT).not.toContain(V3_0_CRITICAL_SIGNALS_HEADER);
-    // The dissolution + legal threats content from V3.0 must still be
-    // there — only the header changed and a clarifying note added.
+  });
+
+  it("V3.2 still contains the dissolution / legal threats capture-only content", () => {
     expect(V2_SYSTEM_PROMPT).toMatch(/DISSOLUTION of the association/);
   });
 
-  it("V3_1_DRILL_SECTION export is present in V3.1 verbatim", () => {
-    expect(V2_SYSTEM_PROMPT).toContain(V3_1_DRILL_SECTION);
+  it("V3_2_DRILL_SECTION export is present in V3.2 verbatim", () => {
+    expect(V2_SYSTEM_PROMPT).toContain(V3_2_DRILL_SECTION);
   });
 
   it("contains the essential V2.x rules that V3.x carried forward", () => {
