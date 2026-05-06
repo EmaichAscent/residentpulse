@@ -1,5 +1,7 @@
 import db from "../db.js";
-import { createMessage } from "./anthropicClient.js";
+// Per-session summaries go through the AI router so the SuperAdmin
+// "AI provider" toggle covers them along with the chat itself.
+import { createMessage } from "./aiRouter.js";
 
 /**
  * Generate an AI summary for a session from its messages.

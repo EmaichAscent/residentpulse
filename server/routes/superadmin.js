@@ -5,6 +5,7 @@ import { hashPassword, generatePassword } from "../utils/password.js";
 import { generateClientCode } from "../utils/clientCode.js";
 import logger from "../utils/logger.js";
 import { createMessage } from "../utils/anthropicClient.js";
+import { invalidateProviderCache } from "../utils/aiRouter.js";
 import { getCurrentBlocks, saveNewVersion, getVersionById } from "../utils/promptVersions.js";
 import { blocksToPrompt, normalizeBlock } from "../prompts/blocks.js";
 
@@ -385,6 +386,57 @@ function categorizeActivity(action = "") {
   if (action.includes("insight")) return "insight";
   return "system";
 }
+
+// ── AI provider toggle (Anthropic vs xAI) ──────────────────────────
+// Reads/writes the global `ai_provider` setting that aiRouter.js
+// dispatches on. PUT invalidates the in-memory provider cache so the
+// switch is visible on the very next chat call.
+const AI_PROVIDERS = ["anthropic", "xai"];
+const AI_PROVIDER_KEY = "ai_provider";
+
+router.get("/ai-provider", async (_req, res) => {
+  try {
+    const row = await db.get("SELECT value FROM settings WHERE key = ? AND client_id IS NULL", [
+      AI_PROVIDER_KEY,
+    ]);
+    const provider = row?.value && AI_PROVIDERS.includes(row.value) ? row.value : "anthropic";
+    // Surface whether the operator has configured the xAI key yet — the
+    // SuperAdmin UI uses this to disable the "xai" radio button when
+    // the env var is missing, instead of letting the operator switch
+    // and then break every chat with "XAI_API_KEY not set" errors.
+    const xaiKeyConfigured = Boolean(process.env.XAI_API_KEY);
+    res.json({ provider, xai_key_configured: xaiKeyConfigured, options: AI_PROVIDERS });
+  } catch (err) {
+    logger.error({ err }, "Failed to read ai_provider setting");
+    res.status(500).json({ error: "Failed to read AI provider setting" });
+  }
+});
+
+router.put("/ai-provider", async (req, res) => {
+  const { provider } = req.body || {};
+  if (!AI_PROVIDERS.includes(provider)) {
+    return res.status(400).json({ error: `provider must be one of: ${AI_PROVIDERS.join(", ")}` });
+  }
+  if (provider === "xai" && !process.env.XAI_API_KEY) {
+    return res.status(400).json({
+      error:
+        "Cannot switch to xAI: XAI_API_KEY is not set in the server environment. " +
+        "Add it in Railway → Variables before flipping the toggle.",
+    });
+  }
+  try {
+    await db.run("UPDATE settings SET value = ? WHERE key = ? AND client_id IS NULL", [
+      provider,
+      AI_PROVIDER_KEY,
+    ]);
+    invalidateProviderCache();
+    logger.info({ provider, actor: req.session?.user?.email }, "ai_provider switched");
+    res.json({ ok: true, provider });
+  } catch (err) {
+    logger.error({ err }, "Failed to write ai_provider setting");
+    res.status(500).json({ error: "Failed to update AI provider setting" });
+  }
+});
 
 // Activity log (paginated). Per design handoff §1: logins are
 // de-emphasized and excluded by default — they live under System Log.

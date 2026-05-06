@@ -2,7 +2,9 @@ import { Router } from "express";
 import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
 import logger from "../utils/logger.js";
-import { createMessage } from "../utils/anthropicClient.js";
+// Insights go through the AI router so the SuperAdmin "AI provider"
+// toggle covers analysis as well as chat.
+import { createMessage } from "../utils/aiRouter.js";
 
 const router = Router();
 

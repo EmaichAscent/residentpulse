@@ -1,7 +1,10 @@
 import db from "../db.js";
 import { generateSummary } from "./summaryGenerator.js";
 import logger from "./logger.js";
-import { createMessage } from "./anthropicClient.js";
+// Insight generation goes through the AI router so the SuperAdmin
+// "AI provider" toggle covers analysis (round insights, themes,
+// trends) as well as chat.
+import { createMessage } from "./aiRouter.js";
 const MODEL = "claude-sonnet-4-5-20250929";
 
 /**

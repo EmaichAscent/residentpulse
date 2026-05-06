@@ -652,5 +652,14 @@ await run(
   ["prompt_generation_instruction", V2_PROMPT_GENERATION]
 );
 
+// AI provider toggle (Anthropic Claude vs xAI Grok). Defaults to
+// "anthropic" so existing installs behave exactly as before. Operators
+// flip this in SuperAdmin → Settings → AI provider when they want to
+// A/B test Grok against Claude on the same prompts.
+await run(
+  "INSERT INTO settings (key, value, client_id) VALUES (?, ?, NULL) ON CONFLICT (key, client_id) DO NOTHING",
+  ["ai_provider", "anthropic"]
+);
+
 export { run, get, all, pool };
 export default { run, get, all, pool };
