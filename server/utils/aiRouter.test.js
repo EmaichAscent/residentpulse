@@ -18,7 +18,7 @@ vi.mock("./anthropicClient.js", () => ({
 
 vi.mock("./xaiClient.js", () => ({
   createXaiMessage: vi.fn(),
-  defaultXaiModelFor: () => "grok-4.3-latest",
+  defaultXaiModelFor: () => "grok-4.20-non-reasoning",
 }));
 
 let aiRouter;
@@ -115,14 +115,16 @@ describe("aiRouter — createMessage dispatch", () => {
     });
     expect(xaiClient.createXaiMessage).toHaveBeenCalledTimes(1);
     expect(anthropicClient.createMessage).not.toHaveBeenCalled();
-    // Any routed Anthropic model → grok-4.3-latest (xAI flagship)
+    // Any routed Anthropic model → xAI's latency-optimized non-reasoning
+    // model. Reasoning was producing >15s replies; non-reasoning is the
+    // explicit xAI recommendation for chat workloads.
     expect(xaiClient.createXaiMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ model: "grok-4.3-latest" })
+      expect.objectContaining({ model: "grok-4.20-non-reasoning" })
     );
     expect(out.content[0].text).toBe("from-xai");
   });
 
-  it("haiku-class Anthropic model also routes to grok-4.3-latest (no separate cheap tier)", async () => {
+  it("haiku-class Anthropic model also routes to the same xAI default (no separate tier)", async () => {
     db.get.mockResolvedValue({ value: "xai" });
     await aiRouter.createMessage({
       model: "claude-haiku-4-5-20251001",
@@ -130,7 +132,7 @@ describe("aiRouter — createMessage dispatch", () => {
       messages: [{ role: "user", content: "hi" }],
     });
     expect(xaiClient.createXaiMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ model: "grok-4.3-latest" })
+      expect.objectContaining({ model: "grok-4.20-non-reasoning" })
     );
   });
 });

@@ -4,16 +4,35 @@ import { createXaiMessage, defaultXaiModelFor } from "./xaiClient.js";
 // xaiClient hits a real HTTPS endpoint. Mock global fetch for tests.
 
 describe("defaultXaiModelFor", () => {
-  // All routed calls go to grok-4.3-latest. Haiku-class mapping was
-  // dropped when we discovered (a) no routed site uses Haiku and
-  // (b) xAI's grok-3 series may be deprecated. If we ever need a
-  // cheaper xAI tier, add it here with verified-current docs.
-  it("returns grok-4.3-latest for any Anthropic model name", () => {
-    expect(defaultXaiModelFor("claude-sonnet-4-5-20250929")).toBe("grok-4.3-latest");
-    expect(defaultXaiModelFor("claude-opus-4")).toBe("grok-4.3-latest");
-    expect(defaultXaiModelFor("claude-haiku-4-5-20251001")).toBe("grok-4.3-latest");
-    expect(defaultXaiModelFor("")).toBe("grok-4.3-latest");
-    expect(defaultXaiModelFor(undefined)).toBe("grok-4.3-latest");
+  const originalModel = process.env.XAI_MODEL;
+  afterEach(() => {
+    if (originalModel === undefined) delete process.env.XAI_MODEL;
+    else process.env.XAI_MODEL = originalModel;
+  });
+
+  // grok-4.20-non-reasoning is xAI's explicit recommendation for
+  // latency-sensitive workloads. Reasoning is off at the model level,
+  // which is critical — reasoning-on grok-4.3 was producing >15s
+  // replies in production NPS chats.
+  it("returns grok-4.20-non-reasoning by default for any Anthropic model name", () => {
+    delete process.env.XAI_MODEL;
+    expect(defaultXaiModelFor("claude-sonnet-4-5-20250929")).toBe("grok-4.20-non-reasoning");
+    expect(defaultXaiModelFor("claude-opus-4")).toBe("grok-4.20-non-reasoning");
+    expect(defaultXaiModelFor("claude-haiku-4-5-20251001")).toBe("grok-4.20-non-reasoning");
+    expect(defaultXaiModelFor("")).toBe("grok-4.20-non-reasoning");
+    expect(defaultXaiModelFor(undefined)).toBe("grok-4.20-non-reasoning");
+  });
+
+  it("honors XAI_MODEL env override when set", () => {
+    process.env.XAI_MODEL = "grok-4.3";
+    expect(defaultXaiModelFor("claude-sonnet-4-5-20250929")).toBe("grok-4.3");
+    process.env.XAI_MODEL = "grok-4.20-reasoning";
+    expect(defaultXaiModelFor()).toBe("grok-4.20-reasoning");
+  });
+
+  it("falls back to default when XAI_MODEL is empty string", () => {
+    process.env.XAI_MODEL = "";
+    expect(defaultXaiModelFor()).toBe("grok-4.20-non-reasoning");
   });
 });
 
