@@ -18,7 +18,7 @@ vi.mock("./anthropicClient.js", () => ({
 
 vi.mock("./xaiClient.js", () => ({
   createXaiMessage: vi.fn(),
-  defaultXaiModelFor: (m) => (/haiku/i.test(m || "") ? "grok-3-mini-fast" : "grok-4-latest"),
+  defaultXaiModelFor: () => "grok-4.3-latest",
 }));
 
 let aiRouter;
@@ -115,14 +115,14 @@ describe("aiRouter — createMessage dispatch", () => {
     });
     expect(xaiClient.createXaiMessage).toHaveBeenCalledTimes(1);
     expect(anthropicClient.createMessage).not.toHaveBeenCalled();
-    // Sonnet → grok-4-latest
+    // Any routed Anthropic model → grok-4.3-latest (xAI flagship)
     expect(xaiClient.createXaiMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ model: "grok-4-latest" })
+      expect.objectContaining({ model: "grok-4.3-latest" })
     );
     expect(out.content[0].text).toBe("from-xai");
   });
 
-  it("haiku-class Anthropic model → grok-3-mini-fast on xAI side", async () => {
+  it("haiku-class Anthropic model also routes to grok-4.3-latest (no separate cheap tier)", async () => {
     db.get.mockResolvedValue({ value: "xai" });
     await aiRouter.createMessage({
       model: "claude-haiku-4-5-20251001",
@@ -130,7 +130,7 @@ describe("aiRouter — createMessage dispatch", () => {
       messages: [{ role: "user", content: "hi" }],
     });
     expect(xaiClient.createXaiMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ model: "grok-3-mini-fast" })
+      expect.objectContaining({ model: "grok-4.3-latest" })
     );
   });
 });

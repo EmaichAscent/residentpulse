@@ -4,15 +4,16 @@ import { createXaiMessage, defaultXaiModelFor } from "./xaiClient.js";
 // xaiClient hits a real HTTPS endpoint. Mock global fetch for tests.
 
 describe("defaultXaiModelFor", () => {
-  it("maps Haiku-class Anthropic models to grok-3-mini-fast", () => {
-    expect(defaultXaiModelFor("claude-haiku-4-5-20251001")).toBe("grok-3-mini-fast");
-    expect(defaultXaiModelFor("claude-3-5-haiku-20241022")).toBe("grok-3-mini-fast");
-  });
-  it("maps Sonnet/Opus/unknown to grok-4-latest", () => {
-    expect(defaultXaiModelFor("claude-sonnet-4-5-20250929")).toBe("grok-4-latest");
-    expect(defaultXaiModelFor("claude-opus-4")).toBe("grok-4-latest");
-    expect(defaultXaiModelFor("")).toBe("grok-4-latest");
-    expect(defaultXaiModelFor(undefined)).toBe("grok-4-latest");
+  // All routed calls go to grok-4.3-latest. Haiku-class mapping was
+  // dropped when we discovered (a) no routed site uses Haiku and
+  // (b) xAI's grok-3 series may be deprecated. If we ever need a
+  // cheaper xAI tier, add it here with verified-current docs.
+  it("returns grok-4.3-latest for any Anthropic model name", () => {
+    expect(defaultXaiModelFor("claude-sonnet-4-5-20250929")).toBe("grok-4.3-latest");
+    expect(defaultXaiModelFor("claude-opus-4")).toBe("grok-4.3-latest");
+    expect(defaultXaiModelFor("claude-haiku-4-5-20251001")).toBe("grok-4.3-latest");
+    expect(defaultXaiModelFor("")).toBe("grok-4.3-latest");
+    expect(defaultXaiModelFor(undefined)).toBe("grok-4.3-latest");
   });
 });
 
@@ -27,7 +28,7 @@ describe("createXaiMessage", () => {
   it("throws a clear error when XAI_API_KEY is not set", async () => {
     delete process.env.XAI_API_KEY;
     await expect(
-      createXaiMessage({ model: "grok-4-latest", max_tokens: 100, messages: [] })
+      createXaiMessage({ model: "grok-4.3-latest", max_tokens: 100, messages: [] })
     ).rejects.toThrow(/XAI_API_KEY is not set/);
   });
 
@@ -45,7 +46,7 @@ describe("createXaiMessage", () => {
           json: async () => ({
             id: "x1",
             choices: [{ message: { role: "assistant", content: "hi" }, finish_reason: "stop" }],
-            model: "grok-4-latest",
+            model: "grok-4.3-latest",
             usage: { prompt_tokens: 10, completion_tokens: 5 },
           }),
         };
@@ -53,13 +54,13 @@ describe("createXaiMessage", () => {
     );
 
     await createXaiMessage({
-      model: "grok-4-latest",
+      model: "grok-4.3-latest",
       max_tokens: 200,
       system: "You are a board interviewer.",
       messages: [{ role: "user", content: "My NPS is 7." }],
     });
 
-    expect(capturedBody.model).toBe("grok-4-latest");
+    expect(capturedBody.model).toBe("grok-4.3-latest");
     expect(capturedBody.max_tokens).toBe(200);
     expect(capturedBody.messages).toEqual([
       { role: "system", content: "You are a board interviewer." },
@@ -82,14 +83,14 @@ describe("createXaiMessage", () => {
               finish_reason: "stop",
             },
           ],
-          model: "grok-4-latest",
+          model: "grok-4.3-latest",
           usage: { prompt_tokens: 100, completion_tokens: 12 },
         }),
       }))
     );
 
     const out = await createXaiMessage({
-      model: "grok-4-latest",
+      model: "grok-4.3-latest",
       max_tokens: 200,
       messages: [{ role: "user", content: "7" }],
     });
@@ -99,7 +100,7 @@ describe("createXaiMessage", () => {
     expect(out.content).toEqual([{ type: "text", text: "A 7 — what's the biggest gap?" }]);
     expect(out.stop_reason).toBe("end_turn");
     expect(out.usage).toEqual({ input_tokens: 100, output_tokens: 12 });
-    expect(out.model).toBe("grok-4-latest");
+    expect(out.model).toBe("grok-4.3-latest");
   });
 
   it("maps OpenAI finish_reason='length' → Anthropic 'max_tokens'", async () => {
