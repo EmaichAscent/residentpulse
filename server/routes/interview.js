@@ -3,7 +3,9 @@ import db from "../db.js";
 import { requireClientAdmin } from "../middleware/auth.js";
 import { logActivity } from "../utils/activityLog.js";
 import logger from "../utils/logger.js";
-import { createMessage } from "../utils/anthropicClient.js";
+// Onboarding interview goes through the AI provider router so the
+// SuperAdmin "AI provider" toggle covers it alongside board chat.
+import { createMessage } from "../utils/aiRouter.js";
 
 const router = Router();
 
