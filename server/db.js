@@ -526,6 +526,16 @@ async function initializeSchema() {
       logger.info("Scalability indexes migration skipped (already applied or file not found)");
     }
 
+    // Run session close_phase migration (programmatic close-flow state)
+    try {
+      const closePhasePath = join(__dirname, "migrations", "add-session-close-phase.sql");
+      const closePhaseSQL = readFileSync(closePhasePath, "utf-8");
+      await client.query(closePhaseSQL);
+      logger.info("Session close_phase migration applied successfully");
+    } catch (_migrationErr) {
+      logger.info("Session close_phase migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     logger.info("Database schema initialized successfully");
   } catch (err) {
