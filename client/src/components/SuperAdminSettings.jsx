@@ -483,8 +483,8 @@ export default function SuperAdminSettings() {
                   )}
                 </div>
                 <div className="text-xs text-gray-500 mt-0.5">
-                  grok-4-latest for chat &amp; insights · grok-3-mini-fast for any haiku-class call.
-                  Requires XAI_API_KEY in the server environment.
+                  grok-4.3-latest (xAI&apos;s current flagship, 1M token context, $1.25/M in /
+                  $2.50/M out). Requires XAI_API_KEY in the server environment.
                 </div>
               </div>
             </label>

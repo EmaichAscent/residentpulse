@@ -43,15 +43,26 @@ const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
 const DEFAULT_TIMEOUT_MS = 120_000; // match anthropicClient
 
 /**
- * Map an Anthropic model name to a sensible xAI counterpart.
- * Used only when the caller passes its current Anthropic model literal.
- * The router can override this by passing `model` directly.
+ * Map an Anthropic model name to the matching xAI model.
+ *
+ * As of 2026-05-14 xAI's documented current flagship is `grok-4.3`,
+ * with aliases `grok-4.3-latest` (latest 4.3-series patch) and
+ * `grok-latest` (whatever the most recent flagship is, across
+ * generations). We use `grok-4.3-latest` because it auto-upgrades
+ * within 4.3 patches but won't silently jump to 4.4+ when that
+ * ships — keeps behavior predictable while still picking up bug
+ * fixes. Bump this manually when xAI releases a successor and we've
+ * tested it.
+ *
+ * Note: we previously had a Haiku-class mapping to `grok-3-mini-fast`,
+ * but no routed call site currently uses a Haiku model (the critical-
+ * alert detector calls anthropicClient directly, bypassing the
+ * router). Plus xAI's grok-3 series may be deprecated. So all routed
+ * calls land on grok-4.3-latest. If we need a cheaper xAI classifier
+ * later, add it here with verified-current docs.
  */
-export function defaultXaiModelFor(anthropicModel = "") {
-  // Haiku-class (fast classifiers, alert detection) → grok-3-mini-fast
-  if (/haiku/i.test(anthropicModel)) return "grok-3-mini-fast";
-  // Default everything else (Sonnet, Opus, unknown) → flagship grok-4
-  return "grok-4-latest";
+export function defaultXaiModelFor(_anthropicModel = "") {
+  return "grok-4.3-latest";
 }
 
 /**
@@ -81,7 +92,7 @@ function toOpenAiRequest(anthropicParams) {
   }
 
   return {
-    model: anthropicParams.model || "grok-4-latest",
+    model: anthropicParams.model || "grok-4.3-latest",
     max_tokens: anthropicParams.max_tokens,
     messages,
     // Pass through optional sampling params if the caller set them.
