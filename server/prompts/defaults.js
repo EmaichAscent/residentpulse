@@ -1784,7 +1784,7 @@ export const V2_SYSTEM_PROMPT_V28 = V2_SYSTEM_PROMPT_V27.replace(
   .replace(V2_6_NEVER_TAIL, V2_8_NEVER_TAIL);
 
 /**
- * V3.0 — Board Member Interview prompt (current). CLEAN REWRITE.
+ * V3.0 — Board Member Interview prompt. CLEAN REWRITE (frozen).
  *
  * Why nuke the V2.x lineage:
  *
@@ -1801,10 +1801,9 @@ export const V2_SYSTEM_PROMPT_V28 = V2_SYSTEM_PROMPT_V27.replace(
  * the examples and trusting the abstract rules should give the model
  * less ammunition to misuse.
  *
- * Plus: this PR also switches the board-interview model from Claude
- * Haiku 4.5 to Claude Sonnet 4.5 (in chat.js). Haiku was cheaper but
- * is known to follow long rule lists less reliably than Sonnet. With
- * V3.0's much shorter prompt the cost delta nearly disappears.
+ * V3.0 also switched the board-interview model from Claude Haiku 4.5
+ * to Claude Sonnet 4.5 (in chat.js). Haiku was cheaper but follows
+ * long rule lists less reliably than Sonnet.
  *
  * Design principles for V3.0:
  *   • No worked examples — abstract rules only
@@ -1815,11 +1814,11 @@ export const V2_SYSTEM_PROMPT_V28 = V2_SYSTEM_PROMPT_V27.replace(
  *   • Coverage areas list is the production-data themes from V2.7
  *     (the only V2.x change that empirically worked)
  *
- * Rollback: V2.8 lives on as V2_SYSTEM_PROMPT_V28. If V3.0 underperforms
- * V2.8 on real test transcripts, set settings.value back to V2.8 via
- * the SuperAdmin Prompts library "Roll back" button.
+ * V3.0 is frozen here byte-perfect so V3.1 can derive from it via
+ * `.replace()` and the migration script can detect "is this DB row
+ * already V3.0 or pre-V3.0?".
  */
-export const V2_SYSTEM_PROMPT = `## Role
+export const V3_0_SYSTEM_PROMPT = `## Role
 
 You are interviewing a board member of [CLIENT_NAME] about their experience with the management company. Collect specific, actionable feedback in 5–7 questions. They gave you 5 minutes — respect every second. Open with the score-specific opener below; never with thanks or praise.
 
@@ -1919,6 +1918,83 @@ If a different system block (e.g. the Google Review fast-path) already gave you 
 ## Prior context (returning residents)
 
 If the system injected prior session summaries, weave ONE prior thread invisibly into a question (e.g. "Last December you mentioned the landscaping vendor wasn't being held accountable — has that improved?"). Never list multiple prior threads. Never say "I see from your history" or "I notice…".`;
+
+// ── V3.1 surgical patches off V3.0 ───────────────────────────────────
+//
+// V3.0 production transcript showed a real failure mode: the model
+// heard "Manager had a meltdown at the last board meeting" and pivoted
+// to a generic communication question, accepted a soft answer, then
+// pivoted again to vendors. A human interviewer would have drilled —
+// what happened, has it been raised since, is this a pattern, what
+// would resolve it.
+//
+// Two structural reasons V3.0 produced this:
+//   1. The Hard rule "2 follow-ups MAX per topic" pushed the model
+//      to pivot before drilling deep on incidents.
+//   2. The "Critical signals (do NOT drill)" section trained the
+//      model to associate strong-signal answers with the don't-drill
+//      reflex — but THAT section was scoped to dissolution / legal
+//      threats / safety only. The model over-applied the rule.
+//
+// V3.1 fixes this with three surgical patches:
+//
+//   A. NEW SECTION "Drill before pivoting" — explicit triggers
+//      (behavioral incidents, alternatives talk, pattern signals,
+//      named-person actions, dollar amounts) plus the four useful
+//      drill questions. Inserted between Score-specific opener and
+//      Coverage areas so the model sees "drill first, then breadth".
+//
+//   B. UPDATED Hard rule — the "2 follow-ups MAX" cap now references
+//      the new drill section as an explicit override (3–4 follow-ups
+//      allowed for high-signal disclosures).
+//
+//   C. RENAMED "Critical signals" → "Capture-only signals" and made
+//      the contrast with the new Drill section explicit. Removes the
+//      misapplication risk that contributed to the V3.0 failure.
+
+export const V3_0_HARD_RULE_FOLLOWUPS = `  • Per topic: 2 follow-ups MAX (so 3 questions per topic). Causes, sub-causes, examples, and implications all count as the SAME topic. Then PIVOT to a different coverage area.`;
+
+export const V3_1_HARD_RULE_FOLLOWUPS = `  • Per topic: 2 follow-ups MAX (so 3 questions per topic) — UNLESS the resident drops a high-signal disclosure (see "Drill before pivoting" below). For high-signal disclosures take 3–4 follow-ups before pivoting. Causes, sub-causes, examples, and implications all count as the SAME topic. Then PIVOT to a different coverage area.`;
+
+export const V3_1_DRILL_SECTION = `## Drill before pivoting (high-signal disclosures)
+
+Some answers are too specific to leave after one follow-up. They reveal incidents or patterns the management company would want to know about in detail. When you hear one, drill 2–4 turns to get the story BEFORE pivoting to other coverage areas.
+
+Drill triggers — any of these in the resident's answer:
+  • Specific behavioral incidents — "meltdown", "blew up", "yelled", "lost their cool", "stormed out", a heated exchange.
+  • Strong negative emotion or alternatives talk — "fed up", "furious", "had it", "looking at other companies", "considering switching".
+  • Pattern signals — "third time", "keeps happening", "every meeting", "getting worse", "since [date]".
+  • A named person doing a named action ("the manager said X", "they did Y").
+  • Material money or accuracy concerns — a specific dollar amount, "wrong by", "found errors", "didn't catch".
+
+When triggered, your follow-ups must be about the disclosed incident SPECIFICALLY, not abstractly about the broader theme. Useful drill questions:
+  • What exactly happened? (when, where, who else was there)
+  • Has it been raised with the company since? What did they say?
+  • One-off, or part of a pattern?
+  • What would resolve it?
+
+This OVERRIDES the "2 follow-ups MAX" rule for high-signal disclosures only — take 3–4 follow-ups when the signal warrants. Once the resident has nothing new ("I don't know", "that's about it", "not sure"), pivot — don't keep pushing.
+
+---
+
+`;
+
+export const V3_0_CRITICAL_SIGNALS_HEADER = `## Critical signals (capture verbatim, do NOT drill, surface in summary)`;
+
+export const V3_1_CAPTURE_ONLY_HEADER = `## Capture-only signals (do NOT drill — different from "Drill before pivoting" above)`;
+
+/**
+ * V3.1 — current live prompt. Surgical patch off V3.0:
+ *   A. inserts the "Drill before pivoting" section before Coverage areas
+ *   B. updates the "2 follow-ups MAX" hard rule to acknowledge the override
+ *   C. renames "Critical signals" → "Capture-only signals" for disambiguation
+ */
+export const V2_SYSTEM_PROMPT = V3_0_SYSTEM_PROMPT.replace(
+  V3_0_HARD_RULE_FOLLOWUPS,
+  V3_1_HARD_RULE_FOLLOWUPS
+)
+  .replace("---\n\n## Coverage areas", `---\n\n${V3_1_DRILL_SECTION}## Coverage areas`)
+  .replace(V3_0_CRITICAL_SIGNALS_HEADER, V3_1_CAPTURE_ONLY_HEADER);
 
 /**
  * V2.0 — Client Onboarding Interview (frozen for migration matching).
