@@ -18,6 +18,7 @@ import insightsRoutes from "./routes/insights.js";
 import authRoutes from "./routes/auth.js";
 import signupRoutes from "./routes/signup.js";
 import superadminRoutes from "./routes/superadmin.js";
+import surveyBuilderRoutes from "./routes/surveyBuilder.js";
 import surveyRoundsRoutes from "./routes/surveyRounds.js";
 import actionsRoutes from "./routes/actions.js";
 import interviewRoutes from "./routes/interview.js";
@@ -111,7 +112,10 @@ app.use("/api/auth", authRoutes);
 // Public signup routes
 app.use("/api/signup", signupRoutes);
 
-// SuperAdmin routes
+// SuperAdmin routes. The surveys router mounts FIRST — Express matches
+// in registration order, and the general superadmin router would
+// otherwise see /surveys/* paths before the dedicated router does.
+app.use("/api/superadmin/surveys", surveyBuilderRoutes);
 app.use("/api/superadmin", superadminRoutes);
 
 // Client Admin routes
