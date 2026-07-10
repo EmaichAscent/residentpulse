@@ -113,26 +113,39 @@ async function one(sql, params = []) {
   return r.rows[0] ?? null;
 }
 
+// Find-or-create with an in-memory cache — the export repeats the same
+// ~100 communities and ~10 people across 700 rows, and every avoided
+// lookup is a network round-trip over the Railway proxy.
+const focCache = new Map();
+
 async function findOrCreate(table, clientId, name) {
   const trimmed = (name || "").trim();
   if (!trimmed) return null;
+  const cacheKey = `${table}|${trimmed}`;
+  if (focCache.has(cacheKey)) return focCache.get(cacheKey);
+
   const existing = await one(
     `SELECT id FROM ${table} WHERE client_id = $1 AND ${table === "communities" ? "community_name" : "name"} = $2 AND is_test = FALSE`,
     [clientId, trimmed]
   );
-  if (existing) return existing.id;
-  if (table === "communities") {
+  let id;
+  if (existing) {
+    id = existing.id;
+  } else if (table === "communities") {
     const created = await one(
       "INSERT INTO communities (client_id, community_name, is_test) VALUES ($1, $2, FALSE) RETURNING id",
       [clientId, trimmed]
     );
-    return created.id;
+    id = created.id;
+  } else {
+    const created = await one(
+      `INSERT INTO ${table} (client_id, name, is_test) VALUES ($1, $2, FALSE) RETURNING id`,
+      [clientId, trimmed]
+    );
+    id = created.id;
   }
-  const created = await one(
-    `INSERT INTO ${table} (client_id, name, is_test) VALUES ($1, $2, FALSE) RETURNING id`,
-    [clientId, trimmed]
-  );
-  return created.id;
+  focCache.set(cacheKey, id);
+  return id;
 }
 
 async function main() {
@@ -212,6 +225,15 @@ async function main() {
     let answers = 0;
     const unknownLabels = new Set();
 
+    // Idempotency set loaded ONCE — one round-trip instead of one per row.
+    const alreadyImported = new Set();
+    const existingRes = await client.query(
+      `SELECT LOWER(email) as email, TO_CHAR(created_at, 'YYYY-MM-DD') as d
+       FROM sessions WHERE client_id = $1 AND import_source = 'zoho'`,
+      [CLIENT_ID]
+    );
+    for (const r of existingRes.rows) alreadyImported.add(`${r.email}|${r.d}`);
+
     for (const row of rows) {
       const email = (row["Email"] || "").trim().toLowerCase();
       const date = parseSubmissionDate(row["Submission Date"]);
@@ -220,12 +242,7 @@ async function main() {
         continue;
       }
 
-      const existing = await one(
-        `SELECT id FROM sessions WHERE client_id = $1 AND LOWER(email) = $2
-           AND import_source = 'zoho' AND DATE(created_at) = $3`,
-        [CLIENT_ID, email, date]
-      );
-      if (existing) {
+      if (alreadyImported.has(`${email}|${date}`)) {
         skipped++;
         continue;
       }
@@ -257,34 +274,33 @@ async function main() {
         ]
       );
 
-      const insertAnswer = (question, fields) =>
-        client.query(
-          `INSERT INTO survey_answers
-             (session_id, question_id, round_id, client_id, entity_type, entity_id,
-              status, value_numeric, value_text, value_json, source, is_test, answered_at)
-           VALUES ($1, $2, $3, $4, $5, $6, 'answered', $7, $8, $9, 'import_zoho', FALSE, $10)`,
-          [
-            session.id,
-            question.id,
-            roundId,
-            CLIENT_ID,
-            question.entity_target,
-            question.entity_target === "manager"
-              ? managerId
-              : question.entity_target === "bookkeeper"
-                ? bookkeeperId
-                : question.entity_target === "community"
-                  ? communityId
-                  : null,
-            fields.numeric ?? null,
-            fields.text ?? null,
-            fields.json ? JSON.stringify(fields.json) : null,
-            `${date}T12:00:00Z`,
-          ]
-        );
+      // Answers batch into ONE multi-row insert per session — ~45
+      // single inserts per row over the proxy is what made the first
+      // run crawl (and hold locks long enough to block a deploy).
+      const answerRows = [];
+      const queueAnswer = (question, fields) => {
+        answerRows.push([
+          session.id,
+          question.id,
+          roundId,
+          CLIENT_ID,
+          question.entity_target,
+          question.entity_target === "manager"
+            ? managerId
+            : question.entity_target === "bookkeeper"
+              ? bookkeeperId
+              : question.entity_target === "community"
+                ? communityId
+                : null,
+          fields.numeric ?? null,
+          fields.text ?? null,
+          fields.json ? JSON.stringify(fields.json) : null,
+          `${date}T12:00:00Z`,
+        ]);
+      };
 
       if (nps !== null) {
-        await insertAnswer(catalog.get("Q001"), { numeric: nps });
+        queueAnswer(catalog.get("Q001"), { numeric: nps });
         answers++;
       }
 
@@ -294,29 +310,45 @@ async function main() {
         if (question.answer_format === "open_text") {
           const text = (raw ?? "").toString().trim();
           if (!text) continue;
-          await insertAnswer(question, { text });
+          queueAnswer(question, { text });
           answers++;
           continue;
         }
         const norm = normalizeRatingValue(raw);
         if (!norm) continue;
         if (norm.kind === "absolute") {
-          await insertAnswer(question, {
+          queueAnswer(question, {
             numeric: norm.numeric,
             json: { zoho_label: norm.label, zoho_kind: "absolute" },
           });
         } else if (norm.kind === "delta") {
-          await insertAnswer(question, {
+          queueAnswer(question, {
             json: { zoho_label: norm.label, zoho_kind: "delta", delta: norm.delta },
           });
         } else {
           unknownLabels.add(norm.label);
-          await insertAnswer(question, {
+          queueAnswer(question, {
             text: norm.label,
             json: { zoho_label: norm.label, zoho_kind: "unknown" },
           });
         }
         answers++;
+      }
+
+      if (answerRows.length > 0) {
+        const placeholders = answerRows
+          .map((_, i) => {
+            const b = i * 10;
+            return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, 'answered', $${b + 7}, $${b + 8}, $${b + 9}, 'import_zoho', FALSE, $${b + 10})`;
+          })
+          .join(", ");
+        await client.query(
+          `INSERT INTO survey_answers
+             (session_id, question_id, round_id, client_id, entity_type, entity_id,
+              status, value_numeric, value_text, value_json, source, is_test, answered_at)
+           VALUES ${placeholders}`,
+          answerRows.flat()
+        );
       }
     }
 
