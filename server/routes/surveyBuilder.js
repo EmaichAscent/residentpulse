@@ -300,7 +300,7 @@ router.get("/templates/:id", async (req, res) => {
             q.answer_format, q.format_config, q.chat_phrasing,
             (SELECT COUNT(DISTINCT a.round_id) FROM survey_answers a
               WHERE a.question_id = q.id
-                AND (? IS NULL OR a.client_id = ?)) as rounds_with_answers
+                AND (?::integer IS NULL OR a.client_id = ?::integer)) as rounds_with_answers
      FROM survey_template_questions tq
      JOIN survey_questions q ON q.id = tq.question_id
      WHERE tq.template_id = ?
@@ -475,7 +475,7 @@ router.delete("/templates/:id/questions/:tqId", async (req, res) => {
     // intercepts this before it happens; the API enforces it.
     const hasAnswers = await db.get(
       `SELECT 1 FROM survey_answers WHERE question_id = ?
-         AND (? IS NULL OR client_id = ?) LIMIT 1`,
+         AND (?::integer IS NULL OR client_id = ?::integer) LIMIT 1`,
       [tq.question_id, tq.client_id, tq.client_id]
     );
     if (hasAnswers) {
