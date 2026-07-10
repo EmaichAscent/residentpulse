@@ -25,6 +25,7 @@ import interviewRoutes from "./routes/interview.js";
 import webhookRoutes from "./routes/webhooks.js";
 import zohoWebhookRoutes from "./routes/zohoWebhooks.js";
 import { startScheduler } from "./scheduler.js";
+import { blockViewerWrites } from "./middleware/auth.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -118,7 +119,9 @@ app.use("/api/signup", signupRoutes);
 app.use("/api/superadmin/surveys", surveyBuilderRoutes);
 app.use("/api/superadmin", superadminRoutes);
 
-// Client Admin routes
+// Client Admin routes. Viewer write-guard first: read-only client
+// logins ('viewer' tier) get 403 on every mutation under /api/admin.
+app.use("/api/admin", blockViewerWrites);
 app.use("/api/admin", adminRoutes);
 app.use("/api/admin/users", userRoutes);
 app.use("/api/admin/insights", insightsRoutes);

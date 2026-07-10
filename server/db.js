@@ -572,6 +572,16 @@ async function initializeSchema() {
       logger.info("Hybrid chat runtime migration skipped (already applied or file not found)");
     }
 
+    // Run viewer role migration (Phase G: read-only client logins)
+    try {
+      const viewerRolePath = join(__dirname, "migrations", "add-viewer-role.sql");
+      const viewerRoleSQL = readFileSync(viewerRolePath, "utf-8");
+      await client.query(viewerRoleSQL);
+      logger.info("Viewer role migration applied successfully");
+    } catch (_migrationErr) {
+      logger.info("Viewer role migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     logger.info("Database schema initialized successfully");
   } catch (err) {
