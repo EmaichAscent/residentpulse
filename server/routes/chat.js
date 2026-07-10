@@ -8,6 +8,7 @@ import logger from "../utils/logger.js";
 // it's a fast classifier; we don't want to swap that for testing.
 import { createMessage } from "../utils/aiRouter.js";
 import { createMessage as anthropicCreateMessage } from "../utils/anthropicClient.js";
+import { getTemplateConfig, recordAnswer } from "../utils/surveyRuntime.js";
 // Programmatic close flow — server-side state machine that takes the
 // closing wrap-up out of the model's hands. V3.0 prompt engineering
 // plateaued (both Grok and Claude consistently violate the closing
@@ -67,6 +68,17 @@ router.post("/", async (req, res) => {
 
   const session = await db.get("SELECT * FROM sessions WHERE id = ?", [Number(session_id)]);
   if (!session) return res.status(404).json({ error: "Session not found" });
+
+  // ── Widget gate (hybrid survey, Phase D1) ───────────────────────
+  // While a required widget is unanswered, the chat accepts only an
+  // answer/skip via POST /api/chat/answer — not free text. The client
+  // locks the composer too; this is the server-side guarantee.
+  if (session.pending_question_id) {
+    return res.status(409).json({
+      error: "answer_required",
+      pending_question_id: session.pending_question_id,
+    });
+  }
 
   // Save user message
   await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'user', ?)", [
@@ -380,6 +392,68 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
   } catch (err) {
     logger.error("Anthropic API error: %s", err.message);
     res.status(500).json({ error: "Failed to get AI response" });
+  }
+});
+
+/**
+ * Structured widget answer (hybrid survey, Phase D1).
+ *
+ * POST /api/chat/answer { session_id, question_id, value } — or
+ * { ..., skip: true } for "Prefer not to answer" (recorded as a real
+ * skipped row: declining is itself signal).
+ *
+ * The question definition comes from the session's frozen template
+ * version config — never the mutable draft tables — so an answer
+ * always matches exactly what was asked.
+ */
+router.post("/answer", async (req, res) => {
+  const { session_id, question_id, value, skip } = req.body;
+  if (!session_id || !question_id) {
+    return res.status(400).json({ error: "session_id and question_id are required" });
+  }
+  if (!skip && value === undefined) {
+    return res.status(400).json({ error: "value is required unless skipping" });
+  }
+
+  if (!checkRateLimit(session_id)) {
+    return res.status(429).json({ error: "Too many messages. Please wait a moment." });
+  }
+
+  try {
+    const session = await db.get("SELECT * FROM sessions WHERE id = ?", [Number(session_id)]);
+    if (!session) return res.status(404).json({ error: "Session not found" });
+    if (session.close_phase === CLOSE_PHASE.DONE) {
+      return res.status(409).json({ error: "This chat has already been closed." });
+    }
+    if (!session.template_version_id) {
+      return res.status(400).json({ error: "This session does not run a survey template" });
+    }
+
+    const config = await getTemplateConfig(session.template_version_id);
+    const question = config?.questions?.find((q) => q.question_id === Number(question_id));
+    if (!question) {
+      return res.status(400).json({ error: "Question is not part of this session's survey" });
+    }
+
+    const already = await db.get(
+      "SELECT id FROM survey_answers WHERE session_id = ? AND question_id = ?",
+      [Number(session_id), Number(question_id)]
+    );
+    if (already) {
+      return res.status(409).json({ error: "This question was already answered" });
+    }
+
+    const { display } = await recordAnswer({
+      session,
+      question,
+      value: skip ? null : value,
+      skipped: !!skip,
+    });
+
+    res.json({ ok: true, display });
+  } catch (err) {
+    logger.error({ err }, "Failed to record survey answer");
+    res.status(500).json({ error: "Failed to record answer" });
   }
 });
 

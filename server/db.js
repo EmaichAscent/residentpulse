@@ -561,6 +561,17 @@ async function initializeSchema() {
       logger.info("Entity promotion backfill skipped (already applied or file not found)");
     }
 
+    // Run hybrid chat runtime migration (session template binding,
+    // widget gate, widget message types — Phase D1).
+    try {
+      const hybridRuntimePath = join(__dirname, "migrations", "add-hybrid-chat-runtime.sql");
+      const hybridRuntimeSQL = readFileSync(hybridRuntimePath, "utf-8");
+      await client.query(hybridRuntimeSQL);
+      logger.info("Hybrid chat runtime migration applied successfully");
+    } catch (_migrationErr) {
+      logger.info("Hybrid chat runtime migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     logger.info("Database schema initialized successfully");
   } catch (err) {
