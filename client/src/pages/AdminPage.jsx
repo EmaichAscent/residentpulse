@@ -106,6 +106,7 @@ export default function AdminPage() {
     { path: "actions", label: "Actions", icon: ActionsIcon },
     { path: "rounds", label: "Rounds", icon: RoundsIcon },
     { path: "trends", label: "Trends", icon: TrendsIcon },
+    { path: "survey-data", label: "Survey data", icon: TrendsIcon },
     { path: "communities", label: "Communities", icon: CommunitiesIcon },
     { path: "members", label: "Members", icon: MembersIcon },
     { path: "account", label: "Account", icon: AccountIcon },

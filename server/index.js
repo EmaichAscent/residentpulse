@@ -20,6 +20,7 @@ import signupRoutes from "./routes/signup.js";
 import superadminRoutes from "./routes/superadmin.js";
 import surveyBuilderRoutes from "./routes/surveyBuilder.js";
 import surveyRoundsRoutes from "./routes/surveyRounds.js";
+import surveyAnalyticsRoutes from "./routes/surveyAnalytics.js";
 import actionsRoutes from "./routes/actions.js";
 import interviewRoutes from "./routes/interview.js";
 import webhookRoutes from "./routes/webhooks.js";
@@ -126,6 +127,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/admin/users", userRoutes);
 app.use("/api/admin/insights", insightsRoutes);
 app.use("/api/admin/survey-rounds", surveyRoundsRoutes);
+app.use("/api/admin/survey-analytics", surveyAnalyticsRoutes);
 app.use("/api/admin/actions", actionsRoutes);
 app.use("/api/admin/interview", interviewRoutes);
 
