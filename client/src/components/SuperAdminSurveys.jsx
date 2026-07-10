@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import SuperAdminQuestionEditor from "./SuperAdminQuestionEditor";
 
 /**
  * SuperAdmin → Surveys: the survey template builder (Zoho parity
@@ -292,6 +293,7 @@ function TemplateEditor({ detail, allQuestions, allTriggers, onChanged, onFlash,
   const [publishing, setPublishing] = useState(false);
   const [retirePrompt, setRetirePrompt] = useState(null); // {tqId, label, rounds}
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showQuestionEditor, setShowQuestionEditor] = useState(false);
   const [editingTriggers, setEditingTriggers] = useState(null); // tqId
   const libraryRef = useRef(null);
 
@@ -519,9 +521,47 @@ function TemplateEditor({ detail, allQuestions, allTriggers, onChanged, onFlash,
                 </span>
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                setShowLibrary(false);
+                setShowQuestionEditor(true);
+              }}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                padding: "9px 10px 4px",
+                borderTop: "1px solid var(--line)",
+                marginTop: 6,
+                border: "none",
+                borderRadius: 0,
+                background: "transparent",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--pulse-deep)",
+              }}
+            >
+              + Create a new question…
+            </button>
           </div>
         )}
       </div>
+
+      {showQuestionEditor && (
+        <SuperAdminQuestionEditor
+          templateId={detail.id}
+          templateName={detail.name}
+          allTriggers={allTriggers}
+          onSaved={(q) => {
+            setShowQuestionEditor(false);
+            onFlash(`"${q.code}" created and added to this template.`);
+            onChanged();
+          }}
+          onCancel={() => setShowQuestionEditor(false)}
+        />
+      )}
 
       {retired.length > 0 && (
         <Section
