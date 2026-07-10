@@ -536,6 +536,19 @@ async function initializeSchema() {
       logger.info("Session close_phase migration skipped (already applied or file not found)");
     }
 
+    // Run Zoho-parity foundation migration (question catalog, templates,
+    // survey_answers, managers/bookkeepers — see docs/ZOHO_PARITY_PLAN.md).
+    // All-additive; carries no behavior until the builder + hybrid chat
+    // runtime phases start writing to these tables.
+    try {
+      const zohoParityPath = join(__dirname, "migrations", "add-zoho-parity-foundation.sql");
+      const zohoParitySQL = readFileSync(zohoParityPath, "utf-8");
+      await client.query(zohoParitySQL);
+      logger.info("Zoho-parity foundation migration applied successfully");
+    } catch (_migrationErr) {
+      logger.info("Zoho-parity foundation migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     logger.info("Database schema initialized successfully");
   } catch (err) {
