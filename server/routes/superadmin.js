@@ -9,6 +9,7 @@ import logger from "../utils/logger.js";
 // covers it alongside board chat. invalidateProviderCache lets the
 // PUT /ai-provider endpoint bust the cache on toggle.
 import { createMessage, invalidateProviderCache } from "../utils/aiRouter.js";
+import { resolveTemplateVersionId } from "../utils/surveyRuntime.js";
 import { getCurrentBlocks, saveNewVersion, getVersionById } from "../utils/promptVersions.js";
 import { blocksToPrompt, normalizeBlock } from "../prompts/blocks.js";
 
@@ -679,8 +680,14 @@ router.post("/clients/:id/impersonate", async (req, res) => {
     return res.status(403).json({ error: "Cannot impersonate inactive client" });
   }
 
-  // Get any admin user for this client (we'll use the first one)
-  const admin = await db.get("SELECT * FROM client_admins WHERE client_id = ? LIMIT 1", [id]);
+  // Get an admin user for this client — prefer a full 'admin' over a
+  // 'viewer' so the operator lands with write access even when the
+  // client's first login happens to be view-only.
+  const admin = await db.get(
+    `SELECT * FROM client_admins WHERE client_id = ?
+     ORDER BY CASE WHEN role = 'viewer' THEN 1 ELSE 0 END, id LIMIT 1`,
+    [id]
+  );
 
   if (!admin) {
     return res.status(404).json({ error: "No admin users found for this client" });
@@ -697,11 +704,14 @@ router.post("/clients/:id/impersonate", async (req, res) => {
   // Store original superadmin session
   req.session.originalUser = req.session.user;
 
-  // Switch to client admin context
+  // Switch to client admin context. admin_role is always 'admin':
+  // impersonation is a CAM-staff operator action, never view-only —
+  // regardless of the tier of the client login being borrowed.
   req.session.user = {
     id: admin.id,
     email: admin.email,
     role: "client_admin",
+    admin_role: "admin",
     client_id: client.id,
     company_name: client.company_name,
     plan_name: sub?.plan_name || "free",
@@ -1844,9 +1854,15 @@ router.post("/clients/:id/mock-session", async (req, res) => {
       sessionCommunityId = null;
     }
 
+    // Mock sessions bind the client's published template exactly like
+    // real sessions do — the test tool must show what residents will
+    // actually get. NULL (no published template) = legacy chat flow,
+    // same as production.
+    const mockTemplateVersionId = await resolveTemplateVersionId(clientId);
+
     const result = await db.run(
-      `INSERT INTO sessions (email, user_id, community_name, management_company, client_id, round_id, community_id, is_mock)
-       VALUES (?, ?, ?, ?, ?, NULL, ?, TRUE)`,
+      `INSERT INTO sessions (email, user_id, community_name, management_company, client_id, round_id, community_id, is_mock, template_version_id)
+       VALUES (?, ?, ?, ?, ?, NULL, ?, TRUE, ?)`,
       [
         sessionEmail,
         sessionUserId,
@@ -1854,6 +1870,7 @@ router.post("/clients/:id/mock-session", async (req, res) => {
         client.company_name,
         clientId,
         sessionCommunityId,
+        mockTemplateVersionId,
       ]
     );
 

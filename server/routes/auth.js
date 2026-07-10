@@ -388,7 +388,11 @@ router.get("/status", async (req, res) => {
       req.session.user.test_mode_feature = process.env.FEATURE_TEST_MODE === "true";
       // Refresh the login tier too, so a role change (or a session
       // created before Phase G) takes effect without re-login.
-      req.session.user.admin_role = admin.admin_role || "admin";
+      // EXCEPT while impersonating: the operator always keeps full
+      // access, even when the borrowed login is a viewer.
+      if (!req.session.user.impersonating) {
+        req.session.user.admin_role = admin.admin_role || "admin";
+      }
     }
   }
 
