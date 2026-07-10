@@ -10,6 +10,7 @@ import {
   buildTemplateConfig,
   validateConfigForPublish,
 } from "../utils/surveyCatalog.js";
+import { classifyMessage, checkOverlaps } from "../utils/triggerClassifier.js";
 
 /**
  * Survey builder API (Zoho parity Phase C1 — docs/ZOHO_PARITY_PLAN.md).
@@ -160,6 +161,56 @@ router.post("/triggers", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "Failed to create trigger");
     res.status(500).json({ error: "Failed to create trigger" });
+  }
+});
+
+// Design-time trigger validation — runs the SAME classifier the chat
+// runtime uses (Phase D3), so what the operator sees in the editor's
+// Test box is exactly what production will do.
+//
+// test:    "would this sample message fire my candidate description —
+//           and which EXISTING triggers would it also fire?"
+// overlap: "which existing triggers semantically overlap my candidate?"
+//          (save-time conflict callout)
+
+router.post("/triggers/test", async (req, res) => {
+  try {
+    const { description, sample } = req.body;
+    if (!description?.trim() || !sample?.trim())
+      return res.status(400).json({ error: "description and sample are required" });
+
+    const existing = await db.all("SELECT id, label, description FROM survey_triggers");
+    const CANDIDATE_ID = -1;
+    const candidates = [
+      { id: CANDIDATE_ID, label: "(candidate)", description: description.trim() },
+      ...existing,
+    ];
+    const matchedIds = await classifyMessage(sample.trim(), candidates);
+
+    const coFiring = existing
+      .filter((t) => matchedIds.includes(t.id))
+      .map((t) => ({ id: t.id, label: t.label }));
+    res.json({ fires: matchedIds.includes(CANDIDATE_ID), co_firing: coFiring });
+  } catch (err) {
+    logger.error({ err }, "Trigger test failed");
+    res.status(500).json({ error: "Trigger test failed" });
+  }
+});
+
+router.post("/triggers/overlap", async (req, res) => {
+  try {
+    const { description } = req.body;
+    if (!description?.trim()) return res.status(400).json({ error: "description is required" });
+
+    const existing = await db.all("SELECT id, label, description FROM survey_triggers");
+    const overlapIds = await checkOverlaps(description.trim(), existing);
+    const overlaps = existing
+      .filter((t) => overlapIds.includes(t.id))
+      .map((t) => ({ id: t.id, label: t.label }));
+    res.json({ overlaps });
+  } catch (err) {
+    logger.error({ err }, "Trigger overlap check failed");
+    res.status(500).json({ error: "Trigger overlap check failed" });
   }
 });
 
