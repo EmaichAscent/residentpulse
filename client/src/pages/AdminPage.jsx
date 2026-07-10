@@ -328,6 +328,23 @@ export default function AdminPage() {
 
         {/* Content canvas */}
         <div className="flex-1 overflow-y-auto" style={{ backgroundColor: "var(--paper)" }}>
+          {user?.admin_role === "viewer" && (
+            <div
+              className="text-center"
+              role="status"
+              style={{
+                padding: "8px 16px",
+                fontSize: 12.5,
+                fontWeight: 500,
+                color: "var(--ink-2)",
+                background: "var(--paper-2)",
+                borderBottom: "1px solid var(--line)",
+              }}
+            >
+              View-only access — you can explore every dashboard and report, but changes are
+              disabled. Ask your account admin to make updates.
+            </div>
+          )}
           <div className="max-w-5xl mx-auto px-8 py-8">
             <Outlet context={{ user, isPaidTier }} />
           </div>

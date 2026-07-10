@@ -26,11 +26,32 @@ export function requireClientAdmin(req, res, next) {
   req.clientId = req.session.user.client_id;
   req.userId = req.session.user.id;
   req.userEmail = req.session.user.email;
+  // Client-login tier: 'admin' (full) or 'viewer' (read-only). Pre-role
+  // sessions default to 'admin' — today's behavior.
+  req.adminRole = req.session.user.admin_role || "admin";
 
   // Test mode: only active when feature flag is enabled AND admin has toggled to test
   const featureEnabled = process.env.FEATURE_TEST_MODE === "true";
   req.isTestMode = featureEnabled && req.session.user.current_mode === "test";
 
+  next();
+}
+
+/**
+ * Viewer write-guard (Zoho parity Phase G). Mounted on /api/admin
+ * BEFORE the admin routers: a 'viewer' client login can GET anything
+ * its client scope allows but every mutation is rejected server-side.
+ * The UI hides mutation affordances too, but this 403 is the actual
+ * guarantee.
+ */
+export function blockViewerWrites(req, res, next) {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
+  const user = req.session?.user;
+  if (user?.role === "client_admin" && (user.admin_role || "admin") === "viewer") {
+    return res.status(403).json({
+      error: "View-only access — ask your account admin to make changes.",
+    });
+  }
   next();
 }
 
