@@ -250,9 +250,46 @@ export const CLOSE_PHASE = Object.freeze({
   // arrive via POST /api/chat/answer, which emits the next widget or
   // fires the playback when the required set is exhausted.
   BASELINE_BATCH: "baseline_batch",
+  // Hybrid promoters (review-enabled clients, score at/above the
+  // threshold): after the required set is done, the server asks for a
+  // Google review instead of the playback. The next user message is
+  // parsed yes/no, recorded on the session, and the templated final
+  // close follows. Server-driven — the legacy model-driven fast-path
+  // ([REVIEW:YES|NO] + [CHAT:END]) remains for non-template sessions.
+  AWAITING_REVIEW_RESPONSE: "awaiting_review_response",
   AWAITING_PLAYBACK_RESPONSE: "awaiting_playback_response",
   DONE: "done",
 });
+
+/**
+ * The server-driven review ask (hybrid promoter close). One sentence,
+ * one question — promoters are time-poor.
+ */
+export function generateReviewAsk(clientName) {
+  return `Quick favor before we wrap — would you be willing to leave ${clientName} a short Google review? It genuinely helps them.`;
+}
+
+/**
+ * Classify the resident's reply to the review ask. Conservative by
+ * design: only a clear yes counts — an ambiguous reply must never
+ * push a review link on someone.
+ */
+export function parseReviewReply(userMessage) {
+  if (typeof userMessage !== "string") return "no";
+  const t = userMessage.trim().toLowerCase();
+  // "why not" is an agreement idiom — resolve it before the negation
+  // check would misread its "not".
+  if (/\bwhy not\b/.test(t)) return "yes";
+  if (/\b(no|nope|nah|not|rather not|don't|dont|won't|wont|pass)\b/.test(t)) return "no";
+  if (
+    /\b(yes|yeah|yep|sure|ok|okay|absolutely|of course|happy to|will do|why not|definitely|certainly|glad to)\b/.test(
+      t
+    )
+  ) {
+    return "yes";
+  }
+  return "no";
+}
 
 /**
  * Strip any model-emitted [CHAT:END] tag from a normal interview
