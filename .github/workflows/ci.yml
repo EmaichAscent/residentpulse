@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, staging]
+    branches: [main, staging, zoho-parity]
   push:
-    branches: [main, staging]
+    branches: [main, staging, zoho-parity]
 
 jobs:
   lint-and-test:

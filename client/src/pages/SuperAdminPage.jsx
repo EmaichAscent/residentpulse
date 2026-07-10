@@ -25,6 +25,7 @@ import { useNavigate, useLocation, Outlet } from "react-router-dom";
 const NAV_OPERATIONS = [
   { path: "dashboard", label: "Dashboard", icon: "grid", badgeKey: "signals" },
   { path: "clients", label: "Clients", icon: "users", badgeKey: "clients" },
+  { path: "surveys", label: "Surveys", icon: "list" },
   { path: "prompts", label: "Prompts", icon: "chat" },
   { path: "settings", label: "Settings", icon: "gear" },
 ];
@@ -438,6 +439,17 @@ function NavIcon({ name }) {
       return (
         <svg {...props}>
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      );
+    case "list":
+      return (
+        <svg {...props}>
+          <line x1="8" y1="6" x2="21" y2="6" />
+          <line x1="8" y1="12" x2="21" y2="12" />
+          <line x1="8" y1="18" x2="21" y2="18" />
+          <line x1="3" y1="6" x2="3.01" y2="6" />
+          <line x1="3" y1="12" x2="3.01" y2="12" />
+          <line x1="3" y1="18" x2="3.01" y2="18" />
         </svg>
       );
     case "gear":

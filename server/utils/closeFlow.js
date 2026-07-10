@@ -245,6 +245,11 @@ export function generateFinalClose({ clientName, conversationText }) {
 
 export const CLOSE_PHASE = Object.freeze({
   INTERVIEW: "interview",
+  // Hybrid survey (Phase D2): the server is walking the resident
+  // through unanswered REQUIRED widgets before the playback. Answers
+  // arrive via POST /api/chat/answer, which emits the next widget or
+  // fires the playback when the required set is exhausted.
+  BASELINE_BATCH: "baseline_batch",
   AWAITING_PLAYBACK_RESPONSE: "awaiting_playback_response",
   DONE: "done",
 });

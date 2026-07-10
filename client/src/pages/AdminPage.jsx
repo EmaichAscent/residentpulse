@@ -106,6 +106,7 @@ export default function AdminPage() {
     { path: "actions", label: "Actions", icon: ActionsIcon },
     { path: "rounds", label: "Rounds", icon: RoundsIcon },
     { path: "trends", label: "Trends", icon: TrendsIcon },
+    { path: "survey-data", label: "Survey data", icon: TrendsIcon },
     { path: "communities", label: "Communities", icon: CommunitiesIcon },
     { path: "members", label: "Members", icon: MembersIcon },
     { path: "account", label: "Account", icon: AccountIcon },
@@ -328,6 +329,23 @@ export default function AdminPage() {
 
         {/* Content canvas */}
         <div className="flex-1 overflow-y-auto" style={{ backgroundColor: "var(--paper)" }}>
+          {user?.admin_role === "viewer" && (
+            <div
+              className="text-center"
+              role="status"
+              style={{
+                padding: "8px 16px",
+                fontSize: 12.5,
+                fontWeight: 500,
+                color: "var(--ink-2)",
+                background: "var(--paper-2)",
+                borderBottom: "1px solid var(--line)",
+              }}
+            >
+              View-only access — you can explore every dashboard and report, but changes are
+              disabled. Ask your account admin to make updates.
+            </div>
+          )}
           <div className="max-w-5xl mx-auto px-8 py-8">
             <Outlet context={{ user, isPaidTier }} />
           </div>

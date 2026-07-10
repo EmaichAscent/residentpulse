@@ -23,6 +23,7 @@ import Actions from "./components/Actions";
 import RoundsLanding from "./components/RoundsLanding";
 import RoundDashboard from "./components/RoundDashboard";
 import TrendsView from "./components/TrendsView";
+import SurveyData from "./components/SurveyData";
 // Communities + Members rebuilt to match the design handoff. The old
 // CommunityManager + UserManager files stay on disk for reference (CSV
 // edge cases + reactivation flows) but are no longer routed.
@@ -33,6 +34,7 @@ import SuperAdminDashboard from "./components/SuperAdminDashboard";
 import SuperAdminClients from "./components/SuperAdminClients";
 import SuperAdminSettings from "./components/SuperAdminSettings";
 import SuperAdminPromptsLibrary from "./components/SuperAdminPromptsLibrary";
+import SuperAdminSurveys from "./components/SuperAdminSurveys";
 
 export default function App() {
   return (
@@ -60,6 +62,7 @@ export default function App() {
             <Route path="dashboard" element={<SuperAdminDashboard />} />
             <Route path="clients" element={<SuperAdminClients />} />
             <Route path="clients/:id" element={<SuperAdminClientDetailPage />} />
+            <Route path="surveys" element={<SuperAdminSurveys />} />
             <Route path="prompts" element={<SuperAdminPromptsLibrary />} />
             <Route path="settings" element={<SuperAdminSettings />} />
           </Route>
@@ -94,6 +97,7 @@ export default function App() {
             <Route path="rounds" element={<RoundsLanding />} />
             <Route path="rounds/:roundId" element={<RoundDashboard />} />
             <Route path="trends" element={<TrendsView />} />
+            <Route path="survey-data" element={<SurveyData />} />
             <Route path="communities" element={<Communities />} />
             <Route path="members" element={<Members />} />
             <Route path="account" element={<AccountSettings />} />

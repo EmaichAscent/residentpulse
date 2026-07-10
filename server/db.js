@@ -536,6 +536,62 @@ async function initializeSchema() {
       logger.info("Session close_phase migration skipped (already applied or file not found)");
     }
 
+    // Run Zoho-parity foundation migration (question catalog, templates,
+    // survey_answers, managers/bookkeepers — see docs/ZOHO_PARITY_PLAN.md).
+    // All-additive; carries no behavior until the builder + hybrid chat
+    // runtime phases start writing to these tables.
+    try {
+      const zohoParityPath = join(__dirname, "migrations", "add-zoho-parity-foundation.sql");
+      const zohoParitySQL = readFileSync(zohoParityPath, "utf-8");
+      await client.query(zohoParitySQL);
+      logger.info("Zoho-parity foundation migration applied successfully");
+    } catch (_migrationErr) {
+      logger.info("Zoho-parity foundation migration skipped (already applied or file not found)");
+    }
+
+    // Run entity-promotion backfill (managers from community_manager_name
+    // strings + FK linking). Idempotent — re-run covers rows created
+    // before the app-layer sync existed.
+    try {
+      const entityBackfillPath = join(__dirname, "migrations", "add-entity-promotion-backfill.sql");
+      const entityBackfillSQL = readFileSync(entityBackfillPath, "utf-8");
+      await client.query(entityBackfillSQL);
+      logger.info("Entity promotion backfill migration applied successfully");
+    } catch (_migrationErr) {
+      logger.info("Entity promotion backfill skipped (already applied or file not found)");
+    }
+
+    // Run hybrid chat runtime migration (session template binding,
+    // widget gate, widget message types — Phase D1).
+    try {
+      const hybridRuntimePath = join(__dirname, "migrations", "add-hybrid-chat-runtime.sql");
+      const hybridRuntimeSQL = readFileSync(hybridRuntimePath, "utf-8");
+      await client.query(hybridRuntimeSQL);
+      logger.info("Hybrid chat runtime migration applied successfully");
+    } catch (_migrationErr) {
+      logger.info("Hybrid chat runtime migration skipped (already applied or file not found)");
+    }
+
+    // Run viewer role migration (Phase G: read-only client logins)
+    try {
+      const viewerRolePath = join(__dirname, "migrations", "add-viewer-role.sql");
+      const viewerRoleSQL = readFileSync(viewerRolePath, "utf-8");
+      await client.query(viewerRoleSQL);
+      logger.info("Viewer role migration applied successfully");
+    } catch (_migrationErr) {
+      logger.info("Viewer role migration skipped (already applied or file not found)");
+    }
+
+    // Run session import-source migration (Phase F: Zoho history)
+    try {
+      const importSourcePath = join(__dirname, "migrations", "add-session-import-source.sql");
+      const importSourceSQL = readFileSync(importSourcePath, "utf-8");
+      await client.query(importSourceSQL);
+      logger.info("Session import-source migration applied successfully");
+    } catch (_migrationErr) {
+      logger.info("Session import-source migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     logger.info("Database schema initialized successfully");
   } catch (err) {

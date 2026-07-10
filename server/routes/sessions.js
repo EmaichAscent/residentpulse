@@ -2,6 +2,7 @@ import { Router } from "express";
 import db from "../db.js";
 import { generateSummary } from "../utils/summaryGenerator.js";
 import { notifyNewResponse, notifyDetractorAlert } from "../utils/emailService.js";
+import { resolveTemplateVersionId } from "../utils/surveyRuntime.js";
 import logger from "../utils/logger.js";
 
 const router = Router();
@@ -34,7 +35,7 @@ router.get("/:id", async (req, res) => {
   if (!session) return res.status(404).json({ error: "Session not found" });
 
   const messages = await db.all(
-    "SELECT role, content, created_at FROM messages WHERE session_id = ? ORDER BY created_at",
+    "SELECT role, content, created_at, message_type, widget_payload FROM messages WHERE session_id = ? ORDER BY created_at",
     [id]
   );
 
@@ -198,8 +199,14 @@ router.post("/", async (req, res) => {
     [user.client_id, userIsTest]
   );
 
+  // Bind the session to the client's published survey template (or the
+  // global default). NULL = no published template anywhere → the
+  // session runs today's pure-chat flow unchanged. This is the hybrid
+  // survey's opt-in switch: publishing a template turns it on.
+  const templateVersionId = await resolveTemplateVersionId(user.client_id);
+
   const result = await db.run(
-    "INSERT INTO sessions (email, user_id, community_name, management_company, client_id, round_id, community_id, is_test) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO sessions (email, user_id, community_name, management_company, client_id, round_id, community_id, is_test, template_version_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     [
       cleanEmail,
       user_id || null,
@@ -209,6 +216,7 @@ router.post("/", async (req, res) => {
       activeRound?.id || null,
       user.community_id || null,
       userIsTest,
+      templateVersionId,
     ]
   );
   const session = await db.get("SELECT * FROM sessions WHERE id = ?", [result.lastInsertRowid]);

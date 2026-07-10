@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import NpsScale from "../components/NpsScale";
+import ChatWidget from "../components/ChatWidget";
 import { buildWelcomeMessage } from "../utils/chatWelcome";
 
 /**
@@ -89,6 +90,12 @@ export default function ChatPage() {
   const [speaking, setSpeaking] = useState(false);
   const [reviewResponse, setReviewResponse] = useState(null);
   const [communityManagerName, setCommunityManagerName] = useState(null);
+  // Hybrid survey (Phase D1): question_ids already answered/skipped
+  // (widgets render inert once recorded) and the question currently
+  // gating the chat — while set, the composer locks and the server
+  // rejects free text with 409 answer_required.
+  const [answeredQuestionIds, setAnsweredQuestionIds] = useState(new Set());
+  const [pendingQuestionId, setPendingQuestionId] = useState(null);
 
   const scrollRef = useRef(null);
   const bottomRef = useRef(null);
@@ -112,13 +119,28 @@ export default function ChatPage() {
           setCommunityManagerName(data.session.community_manager_name);
         }
         if (data.messages && data.messages.length > 0) {
-          setMessages(
-            data.messages.map((m) => ({
-              role: m.role,
-              content: m.content,
-              timestamp: m.created_at,
-            }))
+          const mapped = data.messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+            timestamp: m.created_at,
+            messageType: m.message_type || "text",
+            widgetPayload:
+              typeof m.widget_payload === "string"
+                ? JSON.parse(m.widget_payload)
+                : m.widget_payload || null,
+          }));
+          setMessages(mapped);
+          // Widgets already answered/skipped render inert on resume.
+          setAnsweredQuestionIds(
+            new Set(
+              mapped
+                .filter((m) => m.messageType === "widget_answer" && m.widgetPayload)
+                .map((m) => m.widgetPayload.question_id)
+            )
           );
+        }
+        if (data.session?.pending_question_id) {
+          setPendingQuestionId(data.session.pending_question_id);
         }
         // Resume: if NPS already on file, skip the trust gate entirely
         // and land in the conversation view.
@@ -221,15 +243,41 @@ export default function ChatPage() {
         body: JSON.stringify({ session_id: sessionId, message: text }),
       });
       const data = await res.json();
+      if (res.status === 409 && data.error === "answer_required") {
+        // A required widget is still gating the chat — re-lock the
+        // composer and drop the optimistic user bubble.
+        setPendingQuestionId(data.pending_question_id);
+        setMessages((prev) => prev.slice(0, -1));
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Reply failed");
-      setMessages((prev) => [
-        ...prev,
+      const additions = [
         {
           role: "assistant",
           content: data.message,
           timestamp: data.timestamp || new Date().toISOString(),
+          messageType: data.message_type || "text",
+          widgetPayload: data.widget_payload || null,
         },
-      ]);
+      ];
+      if (data.message_type === "widget" && data.widget_payload?.gate) {
+        setPendingQuestionId(data.widget_payload.question_id);
+      }
+      // Weave-in: a structured widget can ride along after the reply
+      // that nominated it (required questions gate the composer).
+      if (data.widget) {
+        additions.push({
+          role: "assistant",
+          content: data.widget.content,
+          timestamp: new Date().toISOString(),
+          messageType: "widget",
+          widgetPayload: data.widget.widget_payload,
+        });
+        if (data.widget.widget_payload?.gate) {
+          setPendingQuestionId(data.widget.widget_payload.question_id);
+        }
+      }
+      setMessages((prev) => [...prev, ...additions]);
       // Server signaled end-of-chat — kick off the auto-close timer.
       // The user sees the final AI message + a small "ending in 3…"
       // hint, then the chat completes automatically.
@@ -248,6 +296,55 @@ export default function ChatPage() {
     } finally {
       setLoading(false);
       textareaRef.current?.focus();
+    }
+  };
+
+  // ── Structured widget answers (hybrid survey) ──────────────────────
+  // A tap on a widget records the answer server-side (survey_answers +
+  // a widget_answer transcript row) and unlocks the composer if this
+  // question was gating. Skips are real recorded data points.
+  const answerWidget = async (payload, { value, skip } = {}) => {
+    try {
+      const res = await fetch("/api/chat/answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          question_id: payload.question_id,
+          ...(skip ? { skip: true } : { value }),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to record answer");
+      setAnsweredQuestionIds((prev) => new Set([...prev, payload.question_id]));
+      if (pendingQuestionId === payload.question_id) setPendingQuestionId(null);
+      const additions = [
+        {
+          role: "user",
+          content: data.display,
+          timestamp: new Date().toISOString(),
+          messageType: "widget_answer",
+          widgetPayload: { question_id: payload.question_id },
+        },
+      ];
+      // Baseline-batch continuation: the server may follow the answer
+      // with the next required widget (re-gating the chat) or the
+      // playback message once the required set is exhausted.
+      for (const m of data.next || []) {
+        additions.push({
+          role: m.role,
+          content: m.content,
+          timestamp: new Date().toISOString(),
+          messageType: m.message_type || "text",
+          widgetPayload: m.widget_payload || null,
+        });
+        if (m.message_type === "widget" && m.widget_payload?.gate) {
+          setPendingQuestionId(m.widget_payload.question_id);
+        }
+      }
+      setMessages((prev) => [...prev, ...additions]);
+    } catch {
+      // Leave the widget interactive so the resident can retry.
     }
   };
 
@@ -432,12 +529,21 @@ export default function ChatPage() {
 
             {/* Phase 3+ — conversation messages */}
             {messages.map((msg, i) => (
-              <ChatMessage
-                key={i}
-                role={msg.role}
-                content={msg.content}
-                timestamp={msg.timestamp}
-              />
+              <div key={i}>
+                <ChatMessage role={msg.role} content={msg.content} timestamp={msg.timestamp} />
+                {msg.messageType === "widget" &&
+                  msg.widgetPayload &&
+                  !answeredQuestionIds.has(msg.widgetPayload.question_id) && (
+                    <div className="pl-[42px] pr-2 -mt-2 mb-4">
+                      <ChatWidget
+                        payload={msg.widgetPayload}
+                        disabled={loading || completed}
+                        onAnswer={(value) => answerWidget(msg.widgetPayload, { value })}
+                        onSkip={() => answerWidget(msg.widgetPayload, { skip: true })}
+                      />
+                    </div>
+                  )}
+              </div>
             ))}
 
             {loading && <TypingDots />}
@@ -456,6 +562,22 @@ export default function ChatPage() {
           </div>
         </div>
 
+        {npsSubmitted && !completed && pendingQuestionId && (
+          <div
+            className="text-center"
+            style={{
+              padding: "7px 16px",
+              fontSize: 12.5,
+              fontWeight: 500,
+              color: "var(--pulse-deep)",
+              background: "var(--pulse-wash, #E8F5F1)",
+              borderTop: "1px solid var(--line)",
+            }}
+            data-testid="gate-hint"
+          >
+            One quick rating above to continue
+          </div>
+        )}
         {npsSubmitted && !completed && (
           <InputBar
             value={input}
@@ -463,7 +585,7 @@ export default function ChatPage() {
             onKeyDown={handleKeyDown}
             onSubmit={handleSubmit}
             textareaRef={textareaRef}
-            disabled={loading}
+            disabled={loading || !!pendingQuestionId}
             micAvailable={!!SpeechRecognition}
             micActive={listening}
             onToggleMic={toggleListening}
