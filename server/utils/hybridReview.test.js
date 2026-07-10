@@ -63,7 +63,7 @@ describe("chat.js review wiring — structural guards", () => {
 
   it("legacy model-driven fast-path is gated to legacy sessions only", () => {
     expect(source).toMatch(
-      /promptKey === "system_prompt" && session\.nps_score !== null && !session\.google_review_response/
+      /promptKey === "system_prompt" &&\s+session\.nps_score !== null &&\s+!session\.google_review_response/
     );
   });
 

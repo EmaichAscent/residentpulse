@@ -277,6 +277,9 @@ export function generateReviewAsk(clientName) {
 export function parseReviewReply(userMessage) {
   if (typeof userMessage !== "string") return "no";
   const t = userMessage.trim().toLowerCase();
+  // "why not" is an agreement idiom — resolve it before the negation
+  // check would misread its "not".
+  if (/\bwhy not\b/.test(t)) return "yes";
   if (/\b(no|nope|nah|not|rather not|don't|dont|won't|wont|pass)\b/.test(t)) return "no";
   if (
     /\b(yes|yeah|yep|sure|ok|okay|absolutely|of course|happy to|will do|why not|definitely|certainly|glad to)\b/.test(
