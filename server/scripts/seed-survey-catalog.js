@@ -33,6 +33,9 @@ import pg from "pg";
 const { Client } = pg;
 
 const APPLY = process.argv.includes("--apply");
+// Publishing the global default is the switch that flips every
+// template-less client to the hybrid flow — opt-in, never implicit.
+const PUBLISH_DEFAULT = process.argv.includes("--publish-default");
 const DB_URL = process.env.DATABASE_URL;
 if (!DB_URL) {
   console.error("✗ DATABASE_URL not set. Aborting.");
@@ -188,8 +191,18 @@ async function main() {
         `\nDefault template already exists (id=${defaultExists.rows[0].id}) — leaving it alone.`
       );
     } else {
+      // Publishing the GLOBAL default flips every client without a
+      // client-specific template to the hybrid flow at once. On a
+      // production DB with live clients that's a big-bang switch — so
+      // publishing is OPT-IN (--publish-default). Without the flag the
+      // full draft is composed and editable in the builder, but no
+      // session binds it: everyone keeps the legacy flow until it's
+      // deliberately published.
       console.log(
-        `\n  + Default template "Self-Signup Baseline" (${DEFAULT_TEMPLATE_QUESTIONS.length} questions) + publish v1`
+        `\n  + Default template "Self-Signup Baseline" (${DEFAULT_TEMPLATE_QUESTIONS.length} questions)` +
+          (PUBLISH_DEFAULT
+            ? " + publish v1"
+            : " as UNPUBLISHED draft — publish from the builder or re-run with --publish-default")
       );
       if (APPLY) {
         const tRes = await client.query(
@@ -238,11 +251,13 @@ async function main() {
           });
         }
 
-        await client.query(
-          `INSERT INTO survey_template_versions (template_id, version_number, config_jsonb, published_by)
-           VALUES ($1, 1, $2, 'seed-survey-catalog.js')`,
-          [templateId, JSON.stringify({ questions: configQuestions })]
-        );
+        if (PUBLISH_DEFAULT) {
+          await client.query(
+            `INSERT INTO survey_template_versions (template_id, version_number, config_jsonb, published_by)
+             VALUES ($1, 1, $2, 'seed-survey-catalog.js')`,
+            [templateId, JSON.stringify({ questions: configQuestions })]
+          );
+        }
       }
     }
 
