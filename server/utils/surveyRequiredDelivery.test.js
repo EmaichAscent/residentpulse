@@ -112,3 +112,30 @@ describe("chat.js D2 wiring — structural guards", () => {
     expect(source).toMatch(/emitWidgetMessage\(session, weaveInQuestion, \{\s*gate: true/);
   });
 });
+
+describe("required cadence (post-mockup-review fix) — structural guards", () => {
+  let source;
+  beforeAll(async () => {
+    source = await readFile(join(__dirname, "..", "routes", "chat.js"), "utf8");
+  });
+
+  it("from the second AI turn, replies carry the next unanswered required widget", () => {
+    expect(source).toMatch(/aiMessageCount >= 1 && unansweredRequired\.length > 0/);
+    expect(source).toMatch(/emitWidgetMessage\(session, unansweredRequired\[0\], \{\s*gate: true/);
+  });
+
+  it("cadence is LAST in widget priority — weave-in and contextual outrank it", () => {
+    const weaveIdx = source.indexOf("emitWidgetMessage(session, weaveInQuestion");
+    const contextualIdx = source.indexOf("emitWidgetMessage(session, contextualQuestion");
+    const cadenceIdx = source.indexOf("emitWidgetMessage(session, unansweredRequired[0]");
+    expect(weaveIdx).toBeGreaterThan(-1);
+    expect(weaveIdx).toBeLessThan(contextualIdx);
+    expect(contextualIdx).toBeLessThan(cadenceIdx);
+  });
+
+  it("the opener stays pure text (cadence starts at the second turn)", () => {
+    // aiMessageCount >= 1 means the first AI reply (count 0) never
+    // carries a cadence widget.
+    expect(source).toMatch(/aiMessageCount >= 1/);
+  });
+});
