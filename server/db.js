@@ -582,6 +582,16 @@ async function initializeSchema() {
       logger.info("Viewer role migration skipped (already applied or file not found)");
     }
 
+    // Run session import-source migration (Phase F: Zoho history)
+    try {
+      const importSourcePath = join(__dirname, "migrations", "add-session-import-source.sql");
+      const importSourceSQL = readFileSync(importSourcePath, "utf-8");
+      await client.query(importSourceSQL);
+      logger.info("Session import-source migration applied successfully");
+    } catch (_migrationErr) {
+      logger.info("Session import-source migration skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     logger.info("Database schema initialized successfully");
   } catch (err) {
