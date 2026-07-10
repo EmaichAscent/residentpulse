@@ -535,9 +535,16 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
     ]);
 
     // Weave-in widget follows the reply that nominated it. Gated —
-    // required questions always are. When the model wove one in, the
-    // contextual nomination stands down: one widget per turn, and a
-    // required delivery outranks an AI-discretion one.
+    // required questions always are. One widget per turn; priority:
+    //   1. weave-in ([ASK:code] — the model found the perfect moment)
+    //   2. contextual (classifier-nominated depth probe)
+    //   3. REQUIRED CADENCE — deterministic. From the second AI turn,
+    //      every reply carries the next unanswered required widget.
+    //      This is what makes the survey FEEL structured throughout
+    //      (per the approved mockup: question, widget, question,
+    //      widget) instead of "old chat + a form at the end". The
+    //      model's weave-in rarely fires in practice — proven on
+    //      staging — so the server owns the rhythm, as always.
     let widgetOut = null;
     if (weaveInQuestion) {
       const { content, payload } = await emitWidgetMessage(session, weaveInQuestion, {
@@ -549,6 +556,11 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
       if (contextualQuestion) {
         const { content, payload } = await emitWidgetMessage(session, contextualQuestion, {
           gate: false,
+        });
+        widgetOut = { content, payload };
+      } else if (aiMessageCount >= 1 && unansweredRequired.length > 0) {
+        const { content, payload } = await emitWidgetMessage(session, unansweredRequired[0], {
+          gate: true,
         });
         widgetOut = { content, payload };
       }
