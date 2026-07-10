@@ -2,7 +2,11 @@ import { Router } from "express";
 import db from "../db.js";
 import { generateSummary } from "../utils/summaryGenerator.js";
 import { notifyNewResponse, notifyDetractorAlert } from "../utils/emailService.js";
-import { resolveTemplateVersionId } from "../utils/surveyRuntime.js";
+import {
+  resolveTemplateVersionId,
+  getTemplateConfig,
+  recordAnswer,
+} from "../utils/surveyRuntime.js";
 import logger from "../utils/logger.js";
 
 const router = Router();
@@ -235,6 +239,37 @@ router.patch("/:id/nps", async (req, res) => {
   await db.run("UPDATE sessions SET nps_score = ? WHERE id = ?", [nps_score, Number(id)]);
   const session = await db.get("SELECT * FROM sessions WHERE id = ?", [Number(id)]);
   if (!session) return res.status(404).json({ error: "Session not found" });
+
+  // Hybrid bridge: the score arrived via the legacy NPS scale, but for
+  // template sessions it must ALSO count as the template's NPS answer —
+  // otherwise the baseline batch re-asks a question the resident
+  // already answered. transcript:false because the chat already
+  // documents the score ("My NPS score is 6 out of 10."). Failure is
+  // non-fatal: worst case is the old double-ask, never a broken chat.
+  if (session.template_version_id) {
+    try {
+      const config = await getTemplateConfig(session.template_version_id);
+      const npsQuestion = config?.questions?.find((q) => q.answer_format === "nps");
+      if (npsQuestion) {
+        const already = await db.get(
+          "SELECT id FROM survey_answers WHERE session_id = ? AND question_id = ?",
+          [session.id, npsQuestion.question_id]
+        );
+        if (!already) {
+          await recordAnswer({
+            session,
+            question: npsQuestion,
+            value: nps_score,
+            skipped: false,
+            transcript: false,
+          });
+        }
+      }
+    } catch (err) {
+      logger.warn({ err }, "NPS→Q001 bridge failed; baseline batch may re-ask NPS");
+    }
+  }
+
   res.json(session);
 });
 

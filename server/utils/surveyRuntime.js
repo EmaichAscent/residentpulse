@@ -107,7 +107,7 @@ export function formatAnswerLine(question, value, skipped) {
  *
  * Returns { display } — the transcript line.
  */
-export async function recordAnswer({ session, question, value, skipped }) {
+export async function recordAnswer({ session, question, value, skipped, transcript = true }) {
   const entityId = await resolveEntityId(question.entity_target, session);
 
   let valueNumeric = null;
@@ -167,18 +167,23 @@ export async function recordAnswer({ session, question, value, skipped }) {
     skipped
   );
 
-  await db.run(
-    "INSERT INTO messages (session_id, role, content, message_type, widget_payload) VALUES (?, 'user', ?, 'widget_answer', ?)",
-    [
-      session.id,
-      display,
-      JSON.stringify({
-        question_id: question.question_id,
-        status: skipped ? "skipped" : "answered",
-        value: skipped ? null : value,
-      }),
-    ]
-  );
+  // transcript:false is for answers that arrived OUTSIDE a widget tap
+  // (e.g. the legacy NPS scale bridging to Q001) — the conversation
+  // already documents them, so a bracketed line would duplicate.
+  if (transcript) {
+    await db.run(
+      "INSERT INTO messages (session_id, role, content, message_type, widget_payload) VALUES (?, 'user', ?, 'widget_answer', ?)",
+      [
+        session.id,
+        display,
+        JSON.stringify({
+          question_id: question.question_id,
+          status: skipped ? "skipped" : "answered",
+          value: skipped ? null : value,
+        }),
+      ]
+    );
+  }
 
   if (session.pending_question_id === question.question_id) {
     await db.run("UPDATE sessions SET pending_question_id = NULL WHERE id = ?", [session.id]);
