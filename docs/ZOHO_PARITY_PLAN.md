@@ -283,7 +283,7 @@ and bookkeeper dropdowns.
 - **D3:** Contextual nomination classifier + server-side selection +
   per-session cap.
 
-**Phase E — Dashboards (2+ PRs, scoped with Delilah).**
+**Phase E — Dashboards (2+ PRs, scoped with Andrea).**
 - **E1:** Question-level: per-question trend lines (absolute + computed
   delta), skip rates, answer distributions; per-manager and per-
   bookkeeper rollups ("Debbie's book averages 4.2").
@@ -301,7 +301,7 @@ the push-prompt scripts.
 
 **Phase G — Viewer role.** One PR. `client_admins.role`, API gating
 (viewer = GET-only on dashboard endpoints), UI hides all mutation
-affordances. Fleshed out with Delilah before build.
+affordances. Fleshed out with Andrea before build.
 
 **Phase H — Parallel run + cutover.** Operational, no code. One full
 round on both systems for Cadden; wife verifies parity; Zoho off.
@@ -331,7 +331,7 @@ A through D3 are sequential dependencies. E/F/G can interleave after D1.
       way, but Phase F import testing needs an isolated DB.
 - [ ] Rotate the production Postgres password (exposed in a July chat
       session; still pending).
-- [ ] Confirm with Delilah: does she ever need to change a survey
+- [ ] Confirm with Andrea: does she ever need to change a survey
       mid-round? (Plan assumes no; rounds freeze their template.)
 
 ## Open questions (answer during build, none block Phase A)

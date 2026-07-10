@@ -8,6 +8,7 @@ import logger from "../utils/logger.js";
 // it's a fast classifier; we don't want to swap that for testing.
 import { createMessage } from "../utils/aiRouter.js";
 import { createMessage as anthropicCreateMessage } from "../utils/anthropicClient.js";
+import { V4_SYSTEM_PROMPT } from "../prompts/defaults.js";
 import {
   getTemplateConfig,
   recordAnswer,
@@ -95,9 +96,10 @@ router.post("/", async (req, res) => {
     message,
   ]);
 
-  // Get conversation history
+  // Get conversation history (message_type included so the close-flow
+  // turn counting can exclude widget turns — see aiMessageCount below)
   const history = await db.all(
-    "SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at",
+    "SELECT role, content, message_type FROM messages WHERE session_id = ? ORDER BY created_at",
     [Number(session_id)]
   );
 
@@ -166,7 +168,13 @@ router.post("/", async (req, res) => {
 
   // Phase = 'interview'. Decide whether this turn is a normal question
   // or whether the server should now start the wrap-up.
-  const aiMessageCount = history.filter((m) => m.role === "assistant").length;
+  //
+  // Widget turns don't count against the interview budget — a session
+  // that fired three rating scales still deserves its full
+  // conversational depth. Only real AI questions consume turns.
+  const aiMessageCount = history.filter(
+    (m) => m.role === "assistant" && (m.message_type ?? "text") === "text"
+  ).length;
   if (shouldFirePlayback({ aiMessageCount, userMessage: message })) {
     try {
       // Hybrid survey (Phase D2): before the playback, deliver any
@@ -239,16 +247,26 @@ router.post("/", async (req, res) => {
     }
   }
 
-  // Get system prompt (prefer client-specific, fall back to global)
-  const clientSetting = await db.get(
-    "SELECT value FROM settings WHERE key = 'system_prompt' AND client_id = ?",
-    [session.client_id]
-  );
+  // Get system prompt (prefer client-specific, fall back to global).
+  //
+  // Two prompt worlds:
+  //   Template sessions → 'system_prompt_hybrid' (V4 family): the AI
+  //     is the conversational depth layer; widgets own measurement.
+  //     Falls back to the V4 code default when no settings row exists.
+  //   Legacy sessions   → 'system_prompt' (V3.x family), unchanged.
+  const promptKey = session.template_version_id ? "system_prompt_hybrid" : "system_prompt";
+  const clientSetting = await db.get("SELECT value FROM settings WHERE key = ? AND client_id = ?", [
+    promptKey,
+    session.client_id,
+  ]);
   const globalSetting = await db.get(
-    "SELECT value FROM settings WHERE key = 'system_prompt' AND client_id IS NULL"
+    "SELECT value FROM settings WHERE key = ? AND client_id IS NULL",
+    [promptKey]
   );
   let systemPrompt =
-    clientSetting?.value || globalSetting?.value || "You are a helpful NPS survey chatbot.";
+    clientSetting?.value ||
+    globalSetting?.value ||
+    (session.template_version_id ? V4_SYSTEM_PROMPT : "You are a helpful NPS survey chatbot.");
 
   // Append interview prompt supplement if the client has one
   const supplement = await db.get(
@@ -267,7 +285,13 @@ router.post("/", async (req, res) => {
       [session.community_id]
     );
     if (communityMgr?.community_manager_name) {
-      systemPrompt += `\n\nMANAGER CONTEXT: This board member's community (${communityMgr.community_name}) is managed by ${communityMgr.community_manager_name}. During the conversation, naturally ask how they feel about their community manager's performance, communication, and responsiveness. Use their manager's name to personalize the question. This is important feedback for the management company.`;
+      // Hybrid sessions: the M-series widgets measure the manager's
+      // dimensions — the AI just personalizes with the name and drills
+      // stories. Legacy sessions keep the conversational sweep.
+      systemPrompt +=
+        promptKey === "system_prompt_hybrid"
+          ? `\n\nMANAGER CONTEXT: This board member's community (${communityMgr.community_name}) is managed by ${communityMgr.community_manager_name}. Use the manager's name when the conversation touches them. Do NOT run through manager dimensions yourself — the survey's rating scales cover those; your job is the stories behind whatever ratings appear.`
+          : `\n\nMANAGER CONTEXT: This board member's community (${communityMgr.community_name}) is managed by ${communityMgr.community_manager_name}. During the conversation, naturally ask how they feel about their community manager's performance, communication, and responsiveness. Use their manager's name to personalize the question. This is important feedback for the management company.`;
     }
   }
 
