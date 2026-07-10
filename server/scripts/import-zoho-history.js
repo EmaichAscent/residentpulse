@@ -200,8 +200,8 @@ async function main() {
       if (APPLY) {
         const created = await one(
           `INSERT INTO survey_rounds (client_id, round_number, status, scheduled_date, launched_at, concluded_at, is_test)
-           VALUES ($1, $2, 'concluded', $3, $3, $4, FALSE) RETURNING id`,
-          [CLIENT_ID, g, scheduled, concluded]
+           VALUES ($1, $2, 'concluded', $3::date, $4::timestamp, $5::timestamp, FALSE) RETURNING id`,
+          [CLIENT_ID, g, scheduled, scheduled, concluded]
         );
         roundIdByGroup.set(g, created.id);
       }
