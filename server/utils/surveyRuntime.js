@@ -221,21 +221,19 @@ export async function emitWidgetMessage(
 ) {
   const content = phrasingOverride?.trim() || question.chat_phrasing?.trim() || question.label;
 
+  const payload = {
+    question_id: question.question_id,
+    code: question.code,
+    label: question.label,
+    entity_target: question.entity_target,
+    answer_format: question.answer_format,
+    format_config: question.format_config ?? null,
+    gate: !!gate,
+  };
+
   await db.run(
     "INSERT INTO messages (session_id, role, content, message_type, widget_payload) VALUES (?, 'assistant', ?, 'widget', ?)",
-    [
-      session.id,
-      content,
-      JSON.stringify({
-        question_id: question.question_id,
-        code: question.code,
-        label: question.label,
-        entity_target: question.entity_target,
-        answer_format: question.answer_format,
-        format_config: question.format_config ?? null,
-        gate: !!gate,
-      }),
-    ]
+    [session.id, content, JSON.stringify(payload)]
   );
 
   if (gate) {
@@ -245,7 +243,7 @@ export async function emitWidgetMessage(
     ]);
   }
 
-  return { content };
+  return { content, payload };
 }
 
 /**
@@ -257,4 +255,41 @@ export async function answeredQuestionIds(sessionId) {
     sessionId,
   ]);
   return new Set(rows.map((r) => r.question_id));
+}
+
+// ── Required delivery (Phase D2) ─────────────────────────────────────
+
+/**
+ * Required questions this session hasn't answered yet, in template
+ * order. Pure — callers supply the config and the answered set.
+ */
+export function getUnansweredRequired(config, answeredSet) {
+  if (!config?.questions) return [];
+  return config.questions.filter((q) => q.tier === "required" && !answeredSet.has(q.question_id));
+}
+
+/**
+ * Lead-in for the FIRST baseline-batch widget — tells the resident
+ * why structured questions are arriving before the wrap-up.
+ */
+export function baselineIntro(count, question) {
+  const phrasing = question.chat_phrasing?.trim() || question.label;
+  if (count === 1) {
+    return `Before we wrap, one quick baseline rate every board member answers. ${phrasing}`;
+  }
+  return `Before we wrap, ${count} quick baseline rates every board member answers — they keep your response comparable with the rest of your board. First: ${phrasing}`;
+}
+
+/**
+ * System-prompt addendum for weave-in (Phase D2). Lists the required
+ * questions still unanswered and teaches the model the [ASK:code]
+ * signal. The model only NOMINATES the moment — the server intercepts
+ * the tag, strips it, and emits the real widget. Anything never woven
+ * in lands in the baseline batch, so delivery is guaranteed by the
+ * server either way; this is UX polish, not a reliability mechanism.
+ */
+export function buildWeaveInAddendum(unansweredRequired) {
+  if (!unansweredRequired?.length) return "";
+  const list = unansweredRequired.map((q) => `  • [ASK:${q.code}] — ${q.label}`).join("\n");
+  return `\n\nSTRUCTURED RATING QUESTIONS — the survey requires these rated on a fixed scale before the chat ends:\n${list}\n\nWhen the conversation NATURALLY arrives at one of these topics, end your reply with the matching tag (e.g. [ASK:C03]) and the system will present the rating scale for you — do not describe the scale or ask for a number yourself. At most ONE tag per reply, only when the topic genuinely came up. Never mention the tags or the scales to the resident.`;
 }

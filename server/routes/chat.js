@@ -8,7 +8,15 @@ import logger from "../utils/logger.js";
 // it's a fast classifier; we don't want to swap that for testing.
 import { createMessage } from "../utils/aiRouter.js";
 import { createMessage as anthropicCreateMessage } from "../utils/anthropicClient.js";
-import { getTemplateConfig, recordAnswer } from "../utils/surveyRuntime.js";
+import {
+  getTemplateConfig,
+  recordAnswer,
+  emitWidgetMessage,
+  answeredQuestionIds,
+  getUnansweredRequired,
+  baselineIntro,
+  buildWeaveInAddendum,
+} from "../utils/surveyRuntime.js";
 // Programmatic close flow — server-side state machine that takes the
 // closing wrap-up out of the model's hands. V3.0 prompt engineering
 // plateaued (both Grok and Claude consistently violate the closing
@@ -156,35 +164,57 @@ router.post("/", async (req, res) => {
   }
 
   // Phase = 'interview'. Decide whether this turn is a normal question
-  // or whether the server should now fire the playback.
+  // or whether the server should now start the wrap-up.
   const aiMessageCount = history.filter((m) => m.role === "assistant").length;
   if (shouldFirePlayback({ aiMessageCount, userMessage: message })) {
     try {
-      const clientRow = await db.get("SELECT company_name FROM clients WHERE id = ?", [
-        session.client_id,
-      ]);
-      const clientName = clientRow?.company_name || "your management company";
+      // Hybrid survey (Phase D2): before the playback, deliver any
+      // REQUIRED questions the conversation never got to. The server
+      // walks them one gated widget at a time; POST /answer emits the
+      // next widget (or the playback) after each answer.
+      if (session.template_version_id) {
+        const config = await getTemplateConfig(session.template_version_id);
+        const answered = await answeredQuestionIds(Number(session_id));
+        const remaining = getUnansweredRequired(config, answered);
+        if (remaining.length > 0) {
+          const first = remaining[0];
+          const { content, payload } = await emitWidgetMessage(session, first, {
+            gate: true,
+            phrasingOverride: baselineIntro(remaining.length, first),
+          });
+          await db.run("UPDATE sessions SET close_phase = ? WHERE id = ?", [
+            CLOSE_PHASE.BASELINE_BATCH,
+            Number(session_id),
+          ]);
+          logPhaseTransition({
+            sessionId: Number(session_id),
+            from: CLOSE_PHASE.INTERVIEW,
+            to: CLOSE_PHASE.BASELINE_BATCH,
+            reason: `${remaining.length} required question(s) unanswered at close`,
+          });
 
-      const playback = await generatePlayback({ clientName, history });
+          if (!session.is_mock) {
+            const userMsgRow = await db.get(
+              "SELECT id FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at DESC LIMIT 1",
+              [Number(session_id)]
+            );
+            detectCriticalAlert(message, session, userMsgRow?.id).catch((err) =>
+              logger.error("Critical alert detection error: %s", err.message)
+            );
+          }
 
-      await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'assistant', ?)", [
-        Number(session_id),
-        playback,
-      ]);
-      await db.run("UPDATE sessions SET close_phase = ? WHERE id = ?", [
-        CLOSE_PHASE.AWAITING_PLAYBACK_RESPONSE,
-        Number(session_id),
-      ]);
-      logPhaseTransition({
-        sessionId: Number(session_id),
-        from: CLOSE_PHASE.INTERVIEW,
-        to: CLOSE_PHASE.AWAITING_PLAYBACK_RESPONSE,
-        reason: `aiMessageCount=${aiMessageCount}`,
-      });
+          return res.json({
+            message: content,
+            message_type: "widget",
+            widget_payload: payload,
+            chat_end: false,
+          });
+        }
+      }
 
-      const savedMsg = await db.get(
-        "SELECT created_at FROM messages WHERE session_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1",
-        [Number(session_id)]
+      const { playback, timestamp } = await firePlayback(
+        session,
+        `aiMessageCount=${aiMessageCount}`
       );
 
       // Fire critical alert detection on the user message that
@@ -199,7 +229,7 @@ router.post("/", async (req, res) => {
         );
       }
 
-      return res.json({ message: playback, timestamp: savedMsg?.created_at, chat_end: false });
+      return res.json({ message: playback, timestamp, chat_end: false });
     } catch (err) {
       logger.error("Programmatic playback generation failed: %s", err.message);
       // Fall through — if the playback call breaks, let the regular
@@ -308,6 +338,19 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
     systemPrompt += `\n\nPRIOR SESSION CONTEXT — for your private use, NOT for narration:\nThis resident has completed ${priorSessions.length} prior survey(s) at this client. The summaries below are factual context the resident does not know you have. Use them like a reporter who did their homework — invisibly. Pick at most ONE prior thread per turn and ask about it specifically (e.g. "Last December you mentioned the landscaping vendor wasn't being held accountable — has that improved?"). Never list multiple prior threads in one reply. Never say you "see" or "notice" anything from their history.\n\nPrior session summaries:\n${priorContext}`;
   }
 
+  // Hybrid survey weave-in (Phase D2): teach the model the [ASK:code]
+  // signal for required questions still unanswered. The model only
+  // nominates the moment; the server emits the actual widget. Anything
+  // never woven in is guaranteed by the baseline batch at close.
+  let templateConfig = null;
+  let unansweredRequired = [];
+  if (session.template_version_id) {
+    templateConfig = await getTemplateConfig(session.template_version_id);
+    const answered = await answeredQuestionIds(Number(session_id));
+    unansweredRequired = getUnansweredRequired(templateConfig, answered);
+    systemPrompt += buildWeaveInAddendum(unansweredRequired);
+  }
+
   try {
     // V3.0 ship — switched from claude-haiku-4-5-20251001 to Sonnet 4.5
     // for the main board-interview reply. Haiku consistently failed to
@@ -326,6 +369,24 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
     });
 
     let assistantMessage = response.content[0].text;
+
+    // [ASK:code] — the model nominated a natural moment for a required
+    // structured question (weave-in, Phase D2). Strip the tag; if the
+    // code is a valid unanswered required question, emit the real
+    // widget (gated) right after this reply.
+    let weaveInQuestion = null;
+    const askMatch = assistantMessage.match(/\[ASK:\s*([A-Za-z0-9]+)\s*\]/);
+    if (askMatch) {
+      assistantMessage = assistantMessage.replace(/\s*\[ASK:\s*[A-Za-z0-9]+\s*\]\s*/g, " ").trim();
+      const code = askMatch[1].toUpperCase();
+      weaveInQuestion = unansweredRequired.find((q) => q.code === code) || null;
+      if (!weaveInQuestion) {
+        logger.warn(
+          { session_id: Number(session_id), code },
+          "Stripped [ASK] tag for unknown/answered/non-required question"
+        );
+      }
+    }
 
     // [REVIEW:YES|NO] — promoter response to the Google review ask.
     const reviewMatch = assistantMessage.match(/\[REVIEW:\s*(YES|NO)\s*\]/i);
@@ -370,6 +431,16 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
       assistantMessage,
     ]);
 
+    // Weave-in widget follows the reply that nominated it. Gated —
+    // required questions always are.
+    let widgetOut = null;
+    if (weaveInQuestion) {
+      const { content, payload } = await emitWidgetMessage(session, weaveInQuestion, {
+        gate: true,
+      });
+      widgetOut = { content, payload };
+    }
+
     // Get the saved message ID for alert linking
     const savedMsg = await db.get(
       "SELECT id, created_at FROM messages WHERE session_id = ? AND role = 'user' ORDER BY created_at DESC LIMIT 1",
@@ -388,12 +459,58 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
       message: assistantMessage,
       timestamp: savedMsg?.created_at,
       chat_end: chatEnd,
+      ...(widgetOut && {
+        widget: { content: widgetOut.content, widget_payload: widgetOut.payload },
+      }),
     });
   } catch (err) {
     logger.error("Anthropic API error: %s", err.message);
     res.status(500).json({ error: "Failed to get AI response" });
   }
 });
+
+/**
+ * Generate + save the playback and transition to
+ * awaiting_playback_response. Shared by the main chat route (close
+ * triggered by turn count / terminal language) and the /answer
+ * continuation (baseline batch exhausted). Loads history fresh so
+ * widget answers recorded moments ago are part of what gets played
+ * back.
+ */
+async function firePlayback(session, reason) {
+  const clientRow = await db.get("SELECT company_name FROM clients WHERE id = ?", [
+    session.client_id,
+  ]);
+  const clientName = clientRow?.company_name || "your management company";
+
+  const history = await db.all(
+    "SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at",
+    [session.id]
+  );
+
+  const playback = await generatePlayback({ clientName, history });
+
+  await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'assistant', ?)", [
+    session.id,
+    playback,
+  ]);
+  await db.run("UPDATE sessions SET close_phase = ? WHERE id = ?", [
+    CLOSE_PHASE.AWAITING_PLAYBACK_RESPONSE,
+    session.id,
+  ]);
+  logPhaseTransition({
+    sessionId: session.id,
+    from: session.close_phase,
+    to: CLOSE_PHASE.AWAITING_PLAYBACK_RESPONSE,
+    reason,
+  });
+
+  const savedMsg = await db.get(
+    "SELECT created_at FROM messages WHERE session_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1",
+    [session.id]
+  );
+  return { playback, timestamp: savedMsg?.created_at };
+}
 
 /**
  * Structured widget answer (hybrid survey, Phase D1).
@@ -450,7 +567,29 @@ router.post("/answer", async (req, res) => {
       skipped: !!skip,
     });
 
-    res.json({ ok: true, display });
+    // Baseline-batch continuation (Phase D2): the server walks the
+    // required set one gated widget at a time. Each answer emits the
+    // next widget; when the set is exhausted, the playback fires and
+    // the normal close flow takes over.
+    const next = [];
+    if (session.close_phase === CLOSE_PHASE.BASELINE_BATCH) {
+      const answered = await answeredQuestionIds(Number(session_id));
+      const remaining = getUnansweredRequired(config, answered);
+      if (remaining.length > 0) {
+        const { content, payload } = await emitWidgetMessage(session, remaining[0], {
+          gate: true,
+        });
+        next.push({ role: "assistant", content, message_type: "widget", widget_payload: payload });
+      } else {
+        const { playback } = await firePlayback(
+          { ...session, pending_question_id: null },
+          "baseline batch complete"
+        );
+        next.push({ role: "assistant", content: playback, message_type: "text" });
+      }
+    }
+
+    res.json({ ok: true, display, next });
   } catch (err) {
     logger.error({ err }, "Failed to record survey answer");
     res.status(500).json({ error: "Failed to record answer" });

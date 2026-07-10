@@ -251,14 +251,33 @@ export default function ChatPage() {
         return;
       }
       if (!res.ok) throw new Error(data.error || "Reply failed");
-      setMessages((prev) => [
-        ...prev,
+      const additions = [
         {
           role: "assistant",
           content: data.message,
           timestamp: data.timestamp || new Date().toISOString(),
+          messageType: data.message_type || "text",
+          widgetPayload: data.widget_payload || null,
         },
-      ]);
+      ];
+      if (data.message_type === "widget" && data.widget_payload?.gate) {
+        setPendingQuestionId(data.widget_payload.question_id);
+      }
+      // Weave-in: a structured widget can ride along after the reply
+      // that nominated it (required questions gate the composer).
+      if (data.widget) {
+        additions.push({
+          role: "assistant",
+          content: data.widget.content,
+          timestamp: new Date().toISOString(),
+          messageType: "widget",
+          widgetPayload: data.widget.widget_payload,
+        });
+        if (data.widget.widget_payload?.gate) {
+          setPendingQuestionId(data.widget.widget_payload.question_id);
+        }
+      }
+      setMessages((prev) => [...prev, ...additions]);
       // Server signaled end-of-chat — kick off the auto-close timer.
       // The user sees the final AI message + a small "ending in 3…"
       // hint, then the chat completes automatically.
@@ -299,8 +318,7 @@ export default function ChatPage() {
       if (!res.ok) throw new Error(data.error || "Failed to record answer");
       setAnsweredQuestionIds((prev) => new Set([...prev, payload.question_id]));
       if (pendingQuestionId === payload.question_id) setPendingQuestionId(null);
-      setMessages((prev) => [
-        ...prev,
+      const additions = [
         {
           role: "user",
           content: data.display,
@@ -308,7 +326,23 @@ export default function ChatPage() {
           messageType: "widget_answer",
           widgetPayload: { question_id: payload.question_id },
         },
-      ]);
+      ];
+      // Baseline-batch continuation: the server may follow the answer
+      // with the next required widget (re-gating the chat) or the
+      // playback message once the required set is exhausted.
+      for (const m of data.next || []) {
+        additions.push({
+          role: m.role,
+          content: m.content,
+          timestamp: new Date().toISOString(),
+          messageType: m.message_type || "text",
+          widgetPayload: m.widget_payload || null,
+        });
+        if (m.message_type === "widget" && m.widget_payload?.gate) {
+          setPendingQuestionId(m.widget_payload.question_id);
+        }
+      }
+      setMessages((prev) => [...prev, ...additions]);
     } catch {
       // Leave the widget interactive so the resident can retry.
     }
