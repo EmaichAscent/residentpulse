@@ -139,3 +139,38 @@ describe("required cadence (post-mockup-review fix) — structural guards", () =
     expect(source).toMatch(/aiMessageCount >= 1/);
   });
 });
+
+describe("buildWidgetPhrasing — grammatically safe lead-ins for unauthored questions", () => {
+  it("varies the likert connector by entity, never embedding the label", () => {
+    const phrase = (entity) =>
+      runtime.buildWidgetPhrasing({
+        answer_format: "likert5",
+        entity_target: entity,
+        label: "Responsive",
+      });
+    expect(phrase("manager")).toMatch(/your manager/);
+    expect(phrase("bookkeeper")).toMatch(/financial side/);
+    expect(phrase("community")).toMatch(/your community/);
+    expect(phrase("company")).toMatch(/Quick rating/);
+    // The label NEVER appears in the lead-in — it renders as the
+    // widget's caption client-side. "Responsive" as bubble text was
+    // the staging complaint this fixes.
+    for (const e of ["manager", "bookkeeper", "community", "company"]) {
+      expect(phrase(e)).not.toMatch(/Responsive/);
+    }
+  });
+
+  it("format-specific lead-ins for the non-likert widgets", () => {
+    expect(runtime.buildWidgetPhrasing({ answer_format: "nps" })).toMatch(/0–10/);
+    expect(runtime.buildWidgetPhrasing({ answer_format: "multi_select" })).toMatch(/Tap any/);
+    expect(runtime.buildWidgetPhrasing({ answer_format: "open_text" })).toMatch(/your own words/);
+  });
+
+  it("authored chat_phrasing always outranks the generated lead-in", async () => {
+    // emitWidgetMessage precedence: override > chat_phrasing > generated
+    const src = await readFile(join(__dirname, "surveyRuntime.js"), "utf8");
+    expect(src).toMatch(
+      /phrasingOverride\?\.trim\(\) \|\| question\.chat_phrasing\?\.trim\(\) \|\| buildWidgetPhrasing\(question\)/
+    );
+  });
+});

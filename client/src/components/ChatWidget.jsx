@@ -52,6 +52,19 @@ export default function ChatWidget({ payload, disabled, onAnswer, onSkip }) {
 
   return (
     <div style={{ marginTop: 8 }} data-testid={`chat-widget-${payload.code}`}>
+      {/* The question label is the widget's caption — the bubble text
+          above is a conversational lead-in that never embeds the label
+          (labels are noun phrases; embedding them reads robotic). */}
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: "var(--ink)",
+          marginBottom: 6,
+        }}
+      >
+        {payload.label}
+      </div>
       {payload.answer_format === "nps" && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(11, 1fr)", gap: 3 }}>
