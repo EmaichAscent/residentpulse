@@ -30,6 +30,8 @@ import {
   shouldFirePlayback,
   generatePlayback,
   generateFinalClose,
+  generateReviewAsk,
+  parseReviewReply,
   stripChatEndTag,
   logPhaseTransition,
 } from "../utils/closeFlow.js";
@@ -127,6 +129,56 @@ router.post("/", async (req, res) => {
     return res.status(409).json({ error: "This chat has already been closed." });
   }
 
+  // Hybrid promoter close (server-driven review ask): the resident
+  // just answered "would you leave a review?". Parse conservatively,
+  // record, and emit the templated final close — the CompletionCard
+  // reveals the review link when the answer was yes.
+  if (session.close_phase === CLOSE_PHASE.AWAITING_REVIEW_RESPONSE) {
+    try {
+      const reviewResponse = parseReviewReply(message);
+      await db.run("UPDATE sessions SET google_review_response = ? WHERE id = ?", [
+        reviewResponse,
+        Number(session_id),
+      ]);
+
+      const clientRow = await db.get("SELECT company_name FROM clients WHERE id = ?", [
+        session.client_id,
+      ]);
+      const clientName = clientRow?.company_name || "your management company";
+      const conversationText = history.map((m) => m.content || "").join(" ");
+      const prefix =
+        reviewResponse === "yes"
+          ? "Wonderful — the review link will appear as soon as this chat wraps."
+          : "No problem at all.";
+      const finalCloseMessage = `${prefix} ${generateFinalClose({ clientName, conversationText })}`;
+
+      await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'assistant', ?)", [
+        Number(session_id),
+        finalCloseMessage,
+      ]);
+      await db.run("UPDATE sessions SET close_phase = ? WHERE id = ?", [
+        CLOSE_PHASE.DONE,
+        Number(session_id),
+      ]);
+      logPhaseTransition({
+        sessionId: Number(session_id),
+        from: CLOSE_PHASE.AWAITING_REVIEW_RESPONSE,
+        to: CLOSE_PHASE.DONE,
+        reason: `review response: ${reviewResponse}`,
+      });
+
+      const display = stripChatEndTag(finalCloseMessage);
+      const savedMsg = await db.get(
+        "SELECT created_at FROM messages WHERE session_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1",
+        [Number(session_id)]
+      );
+      return res.json({ message: display, timestamp: savedMsg?.created_at, chat_end: true });
+    } catch (err) {
+      logger.error("Review-response close failed: %s", err.message);
+      return res.status(500).json({ error: "Failed to close chat" });
+    }
+  }
+
   if (session.close_phase === CLOSE_PHASE.AWAITING_PLAYBACK_RESPONSE) {
     try {
       const clientRow = await db.get("SELECT company_name FROM clients WHERE id = ?", [
@@ -221,6 +273,14 @@ router.post("/", async (req, res) => {
         }
       }
 
+      // Hybrid promoters get the server-driven review ask instead of
+      // the playback (required questions are already covered — the
+      // baseline-batch branch above would have caught any leftovers).
+      if (session.template_version_id && (await sessionQualifiesForReview(session))) {
+        const { ask } = await fireReviewAsk(session, "close reached, promoter qualifies");
+        return res.json({ message: ask, chat_end: false });
+      }
+
       const { playback, timestamp } = await firePlayback(
         session,
         `aiMessageCount=${aiMessageCount}`
@@ -295,13 +355,18 @@ router.post("/", async (req, res) => {
     }
   }
 
-  // Google review fast-path for qualifying scores. Threshold is per-client
-  // (default 9). When a resident qualifies AND reviews are enabled, the
-  // standard 5-7 question budget is replaced with a tight 3-4 turn flow:
-  // one quick "what's working" probe, one quick "anything to improve"
-  // probe, then the review ask. Promoters are time-poor — get the ask
-  // in before they tab away.
-  if (session.nps_score !== null && !session.google_review_response) {
+  // Google review fast-path for qualifying scores — LEGACY sessions
+  // only. The model runs a tight 3-4 turn flow ending in
+  // [REVIEW:YES|NO] + [CHAT:END]. Hybrid sessions get the SERVER-
+  // driven review ask instead (fireReviewAsk, after the baseline
+  // batch guarantees the required questions) — a model-driven
+  // [CHAT:END] would end the chat before required delivery, and V4
+  // forbids the model from announcing wrap-ups.
+  if (
+    promptKey === "system_prompt" &&
+    session.nps_score !== null &&
+    !session.google_review_response
+  ) {
     const reviewEnabled = await db.get(
       "SELECT value FROM settings WHERE key = 'google_review_enabled' AND client_id = ?",
       [session.client_id]
@@ -518,6 +583,57 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
 });
 
 /**
+ * Does this session qualify for the Google review ask? Reviews
+ * enabled for the client, score at/above the per-client threshold
+ * (default 9), and no response captured yet.
+ */
+async function sessionQualifiesForReview(session) {
+  if (session.nps_score === null || session.google_review_response) return false;
+  const reviewEnabled = await db.get(
+    "SELECT value FROM settings WHERE key = 'google_review_enabled' AND client_id = ?",
+    [session.client_id]
+  );
+  if (reviewEnabled?.value !== "true") return false;
+  const thresholdSetting = await db.get(
+    "SELECT value FROM settings WHERE key = 'google_review_threshold' AND client_id = ?",
+    [session.client_id]
+  );
+  const threshold = thresholdSetting ? Number(thresholdSetting.value) : 9;
+  return session.nps_score >= threshold;
+}
+
+/**
+ * Server-driven review ask (hybrid promoter close). Emits the ask,
+ * flips to awaiting_review_response. The next user message is parsed
+ * yes/no and the templated final close follows — promoters skip the
+ * playback entirely (they're time-poor; mirrors the legacy fast-path's
+ * brevity, but the required baseline is already guaranteed by then).
+ */
+async function fireReviewAsk(session, reason) {
+  const clientRow = await db.get("SELECT company_name FROM clients WHERE id = ?", [
+    session.client_id,
+  ]);
+  const clientName = clientRow?.company_name || "your management company";
+  const ask = generateReviewAsk(clientName);
+
+  await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'assistant', ?)", [
+    session.id,
+    ask,
+  ]);
+  await db.run("UPDATE sessions SET close_phase = ? WHERE id = ?", [
+    CLOSE_PHASE.AWAITING_REVIEW_RESPONSE,
+    session.id,
+  ]);
+  logPhaseTransition({
+    sessionId: session.id,
+    from: session.close_phase,
+    to: CLOSE_PHASE.AWAITING_REVIEW_RESPONSE,
+    reason,
+  });
+  return { ask };
+}
+
+/**
  * Generate + save the playback and transition to
  * awaiting_playback_response. Shared by the main chat route (close
  * triggered by turn count / terminal language) and the /answer
@@ -628,6 +744,16 @@ router.post("/answer", async (req, res) => {
           gate: true,
         });
         next.push({ role: "assistant", content, message_type: "widget", widget_payload: payload });
+      } else if (
+        await sessionQualifiesForReview(
+          // Refresh: the answer just recorded may have BEEN the NPS
+          // widget, updating nps_score after `session` was loaded.
+          (await db.get("SELECT * FROM sessions WHERE id = ?", [Number(session_id)])) || session
+        )
+      ) {
+        // Hybrid promoter: review ask instead of the playback.
+        const { ask } = await fireReviewAsk(session, "baseline batch complete, promoter qualifies");
+        next.push({ role: "assistant", content: ask, message_type: "text" });
       } else {
         const { playback } = await firePlayback(
           { ...session, pending_question_id: null },
