@@ -225,7 +225,8 @@ export async function emitWidgetMessage(
   question,
   { gate = false, phrasingOverride } = {}
 ) {
-  const content = phrasingOverride?.trim() || question.chat_phrasing?.trim() || question.label;
+  const content =
+    phrasingOverride?.trim() || question.chat_phrasing?.trim() || buildWidgetPhrasing(question);
 
   const payload = {
     question_id: question.question_id,
@@ -279,11 +280,44 @@ export function getUnansweredRequired(config, answeredSet) {
  * why structured questions are arriving before the wrap-up.
  */
 export function baselineIntro(count, question) {
-  const phrasing = question.chat_phrasing?.trim() || question.label;
+  const phrasing = question.chat_phrasing?.trim() || buildWidgetPhrasing(question);
   if (count === 1) {
     return `Before we wrap, one quick baseline rate every board member answers. ${phrasing}`;
   }
   return `Before we wrap, ${count} quick baseline rates every board member answers — they keep your response comparable with the rest of your board. First: ${phrasing}`;
+}
+
+/**
+ * Conversational lead-in when a question has no authored chat_phrasing.
+ * Deterministic, entity-aware, and grammatically safe for ANY label —
+ * the label itself renders as the widget's caption client-side, so the
+ * lead-in never has to embed it (bare labels like "Responsive" made
+ * widget bubbles read like form fields, not conversation).
+ */
+export function buildWidgetPhrasing(question) {
+  switch (question.answer_format) {
+    case "nps":
+      return "On a scale of 0–10, how likely are you to recommend them to another board?";
+    case "multi_select":
+      return "Which of these have you run into? Tap any that apply.";
+    case "yes_no":
+      return "Quick yes-or-no while we're at it:";
+    case "open_text":
+      return "In your own words:";
+    default: {
+      // likert5 — vary the connector by what's being rated.
+      switch (question.entity_target) {
+        case "manager":
+          return "While we're on it, a quick read on your manager:";
+        case "bookkeeper":
+          return "And on the financial side, a quick read:";
+        case "community":
+          return "Thinking about your community specifically:";
+        default:
+          return "Quick rating while we're at it:";
+      }
+    }
+  }
 }
 
 /**
