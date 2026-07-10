@@ -6,6 +6,7 @@ import { hashPassword, generatePassword, comparePassword } from "../utils/passwo
 import { sendInvitation, sendNewAdminEmail } from "../utils/emailService.js";
 import { logActivity } from "../utils/activityLog.js";
 import { generateSummary } from "../utils/summaryGenerator.js";
+import { resolveManagerId, resolveBookkeeperId } from "../utils/people.js";
 import {
   isZohoConfigured,
   createCheckoutSession,
@@ -1967,17 +1968,122 @@ router.delete("/locations/:id", async (req, res) => {
   }
 });
 
+// --- People rosters (managers / bookkeepers) ---
+// First-class entities behind the free-text names on communities
+// (Zoho parity Phase B). The rosters back per-person dashboard
+// rollups and the survey engine's entity_id on manager/bookkeeper-
+// targeted answers. Rows are auto-created by resolveManagerId /
+// resolveBookkeeperId whenever a community is saved with a new name;
+// these endpoints let operators tidy the roster (rename typos, add
+// emails, retire departed staff).
+
+function personRoutes(table, communityFkColumn) {
+  const listPath = `/${table}`;
+
+  router.get(listPath, async (req, res) => {
+    const rows = await db.all(
+      `SELECT p.id, p.name, p.email, p.status, p.location_id, l.name as location_name,
+              COUNT(c.id) as community_count
+       FROM ${table} p
+       LEFT JOIN locations l ON l.id = p.location_id
+       LEFT JOIN communities c ON c.${communityFkColumn} = p.id AND c.status = 'active'
+       WHERE p.client_id = ? AND p.is_test = ?
+       GROUP BY p.id, l.name
+       ORDER BY p.status ASC, p.name`,
+      [req.clientId, req.isTestMode]
+    );
+    res.json(rows);
+  });
+
+  router.post(listPath, async (req, res) => {
+    try {
+      const { name, email, location_id } = req.body;
+      if (!name?.trim()) return res.status(400).json({ error: "Name is required" });
+
+      const existing = await db.get(
+        `SELECT id FROM ${table} WHERE client_id = ? AND name = ? AND is_test = ?`,
+        [req.clientId, name.trim(), req.isTestMode]
+      );
+      if (existing) return res.status(409).json({ error: "Already exists", id: existing.id });
+
+      const result = await db.run(
+        `INSERT INTO ${table} (client_id, name, email, location_id, is_test) VALUES (?, ?, ?, ?, ?)`,
+        [req.clientId, name.trim(), email?.trim() || null, location_id || null, req.isTestMode]
+      );
+      res.json({ id: result.lastInsertRowid, name: name.trim() });
+    } catch (err) {
+      logger.error({ err }, `Failed to create ${table} entry`);
+      res.status(500).json({ error: "Failed to create" });
+    }
+  });
+
+  router.put(`${listPath}/:id`, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const person = await db.get(`SELECT id, name FROM ${table} WHERE id = ? AND client_id = ?`, [
+        id,
+        req.clientId,
+      ]);
+      if (!person) return res.status(404).json({ error: "Not found" });
+
+      const { name, email, status, location_id } = req.body;
+
+      if (name !== undefined && name?.trim()) {
+        await db.run(`UPDATE ${table} SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [
+          name.trim(),
+          id,
+        ]);
+        // A roster rename is a correction ("Debby" → "Debbie"), so the
+        // denormalized name on managed communities follows it.
+        if (table === "managers") {
+          await db.run(
+            `UPDATE communities SET community_manager_name = ?, updated_at = CURRENT_TIMESTAMP WHERE manager_id = ? AND client_id = ?`,
+            [name.trim(), id, req.clientId]
+          );
+        }
+      }
+      if (email !== undefined) {
+        await db.run(`UPDATE ${table} SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [
+          email?.trim() || null,
+          id,
+        ]);
+      }
+      if (location_id !== undefined) {
+        await db.run(
+          `UPDATE ${table} SET location_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+          [location_id || null, id]
+        );
+      }
+      if (status !== undefined && ["active", "inactive"].includes(status)) {
+        await db.run(
+          `UPDATE ${table} SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+          [status, id]
+        );
+      }
+
+      res.json({ ok: true });
+    } catch (err) {
+      logger.error({ err }, `Failed to update ${table} entry`);
+      res.status(500).json({ error: "Failed to update" });
+    }
+  });
+}
+
+personRoutes("managers", "manager_id");
+personRoutes("bookkeepers", "bookkeeper_id");
+
 // --- Communities ---
 
 // Get all communities for this client
 router.get("/communities", async (req, res) => {
   let communities = await db.all(
-    `SELECT c.*, l.name as location_name, COUNT(u.id) as member_count
+    `SELECT c.*, l.name as location_name, b.name as bookkeeper_name, COUNT(u.id) as member_count
      FROM communities c
      LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
      LEFT JOIN locations l ON l.id = c.location_id
+     LEFT JOIN bookkeepers b ON b.id = c.bookkeeper_id
      WHERE c.client_id = ? AND c.is_test = ?
-     GROUP BY c.id, l.name
+     GROUP BY c.id, l.name, b.name
      ORDER BY c.status ASC, c.community_name`,
     [req.clientId, req.isTestMode]
   );
@@ -2003,12 +2109,13 @@ router.get("/communities", async (req, res) => {
 
         // Re-fetch with member counts
         communities = await db.all(
-          `SELECT c.*, l.name as location_name, COUNT(u.id) as member_count
+          `SELECT c.*, l.name as location_name, b.name as bookkeeper_name, COUNT(u.id) as member_count
            FROM communities c
            LEFT JOIN users u ON u.community_id = c.id AND u.active = TRUE
            LEFT JOIN locations l ON l.id = c.location_id
+           LEFT JOIN bookkeepers b ON b.id = c.bookkeeper_id
            WHERE c.client_id = ? AND c.is_test = ?
-           GROUP BY c.id, l.name
+           GROUP BY c.id, l.name, b.name
            ORDER BY c.status ASC, c.community_name`,
           [req.clientId, req.isTestMode]
         );
@@ -2078,6 +2185,7 @@ router.post("/communities", async (req, res) => {
       community_name,
       contract_value,
       community_manager_name,
+      bookkeeper_name,
       property_type,
       number_of_units,
       contract_renewal_date,
@@ -2113,14 +2221,21 @@ router.post("/communities", async (req, res) => {
       }
     }
 
+    // Keep the first-class people FKs in sync with the free-text names
+    // (find-or-create by trimmed name — see utils/people.js).
+    const managerId = await resolveManagerId(req.clientId, community_manager_name, req.isTestMode);
+    const bookkeeperId = await resolveBookkeeperId(req.clientId, bookkeeper_name, req.isTestMode);
+
     await db.run(
-      `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, contract_renewal_date, contract_month_to_month, location_id, is_test)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, manager_id, bookkeeper_id, property_type, number_of_units, contract_renewal_date, contract_month_to_month, location_id, is_test)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.clientId,
         community_name.trim(),
         contract_value || null,
         community_manager_name || null,
+        managerId,
+        bookkeeperId,
         propType,
         number_of_units || null,
         contract_renewal_date || null,
@@ -2131,7 +2246,7 @@ router.post("/communities", async (req, res) => {
     );
 
     const created = await db.get(
-      "SELECT c.*, l.name as location_name FROM communities c LEFT JOIN locations l ON c.location_id = l.id WHERE c.client_id = ? AND LOWER(TRIM(c.community_name)) = ? AND c.is_test = ?",
+      "SELECT c.*, l.name as location_name, b.name as bookkeeper_name FROM communities c LEFT JOIN locations l ON c.location_id = l.id LEFT JOIN bookkeepers b ON b.id = c.bookkeeper_id WHERE c.client_id = ? AND LOWER(TRIM(c.community_name)) = ? AND c.is_test = ?",
       [req.clientId, community_name.toLowerCase().trim(), req.isTestMode]
     );
 
@@ -2301,12 +2416,20 @@ router.post("/communities/import", async (req, res) => {
           }
         }
 
+        // Keep the manager FK in sync with the imported name.
+        const importManagerId = await resolveManagerId(
+          req.clientId,
+          row.community_manager_name,
+          req.isTestMode
+        );
+
         if (existing) {
           await db.run(
-            `UPDATE communities SET contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?${locationId ? ", location_id = " + locationId : ""}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?`,
+            `UPDATE communities SET contract_value = ?, community_manager_name = ?, manager_id = ?, property_type = ?, number_of_units = ?${locationId ? ", location_id = " + locationId : ""}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?`,
             [
               row.contract_value,
               row.community_manager_name,
+              importManagerId,
               propType,
               row.number_of_units,
               existing.id,
@@ -2320,13 +2443,14 @@ router.post("/communities/import", async (req, res) => {
             continue;
           }
           await db.run(
-            `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, property_type, number_of_units, location_id, is_test)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO communities (client_id, community_name, contract_value, community_manager_name, manager_id, property_type, number_of_units, location_id, is_test)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               req.clientId,
               finalName,
               row.contract_value,
               row.community_manager_name,
+              importManagerId,
               propType,
               row.number_of_units,
               locationId,
@@ -2368,6 +2492,7 @@ router.put("/communities/:id", async (req, res) => {
     community_name,
     contract_value,
     community_manager_name,
+    bookkeeper_name,
     property_type,
     number_of_units,
     contract_renewal_date,
@@ -2377,12 +2502,18 @@ router.put("/communities/:id", async (req, res) => {
   const validTypes = ["condo", "townhome", "single_family", "mixed", "other"];
   const propType = validTypes.includes(property_type) ? property_type : null;
 
+  // Keep the first-class people FKs in sync with the free-text names.
+  const managerId = await resolveManagerId(req.clientId, community_manager_name, req.isTestMode);
+  const bookkeeperId = await resolveBookkeeperId(req.clientId, bookkeeper_name, req.isTestMode);
+
   await db.run(
-    `UPDATE communities SET community_name = ?, contract_value = ?, community_manager_name = ?, property_type = ?, number_of_units = ?, contract_renewal_date = ?, contract_month_to_month = ?, location_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?`,
+    `UPDATE communities SET community_name = ?, contract_value = ?, community_manager_name = ?, manager_id = ?, bookkeeper_id = ?, property_type = ?, number_of_units = ?, contract_renewal_date = ?, contract_month_to_month = ?, location_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_test = ?`,
     [
       community_name,
       contract_value || null,
       community_manager_name || null,
+      managerId,
+      bookkeeperId,
       propType,
       number_of_units || null,
       contract_renewal_date || null,
@@ -2394,7 +2525,7 @@ router.put("/communities/:id", async (req, res) => {
   );
 
   const updated = await db.get(
-    "SELECT c.*, l.name as location_name FROM communities c LEFT JOIN locations l ON c.location_id = l.id WHERE c.id = ?",
+    "SELECT c.*, l.name as location_name, b.name as bookkeeper_name FROM communities c LEFT JOIN locations l ON c.location_id = l.id LEFT JOIN bookkeepers b ON b.id = c.bookkeeper_id WHERE c.id = ?",
     [id]
   );
   res.json(updated);

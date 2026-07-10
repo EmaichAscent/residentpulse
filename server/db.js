@@ -549,6 +549,18 @@ async function initializeSchema() {
       logger.info("Zoho-parity foundation migration skipped (already applied or file not found)");
     }
 
+    // Run entity-promotion backfill (managers from community_manager_name
+    // strings + FK linking). Idempotent — re-run covers rows created
+    // before the app-layer sync existed.
+    try {
+      const entityBackfillPath = join(__dirname, "migrations", "add-entity-promotion-backfill.sql");
+      const entityBackfillSQL = readFileSync(entityBackfillPath, "utf-8");
+      await client.query(entityBackfillSQL);
+      logger.info("Entity promotion backfill migration applied successfully");
+    } catch (_migrationErr) {
+      logger.info("Entity promotion backfill skipped (already applied or file not found)");
+    }
+
     await client.query("COMMIT");
     logger.info("Database schema initialized successfully");
   } catch (err) {
