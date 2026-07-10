@@ -692,6 +692,7 @@ function CommunityRow({
 function CommunityEditRow({ community, locations, isLast, onCancel, onSave }) {
   const [name, setName] = useState(community.community_name || "");
   const [manager, setManager] = useState(community.community_manager_name || "");
+  const [bookkeeper, setBookkeeper] = useState(community.bookkeeper_name || "");
   const [type, setType] = useState(community.property_type || "");
   const [units, setUnits] = useState(community.number_of_units || "");
   const [contractValue, setContractValue] = useState(community.contract_value || "");
@@ -712,10 +713,11 @@ function CommunityEditRow({ community, locations, isLast, onCancel, onSave }) {
       {/* Row 1: identity */}
       <div
         className="grid gap-3 items-end"
-        style={{ gridTemplateColumns: "1.6fr 1.2fr 1fr 1.2fr" }}
+        style={{ gridTemplateColumns: "1.5fr 1fr 1fr 0.9fr 1.1fr" }}
       >
         <FieldInput label="Community name" value={name} onChange={setName} />
         <FieldInput label="Manager" value={manager} onChange={setManager} />
+        <FieldInput label="Bookkeeper" value={bookkeeper} onChange={setBookkeeper} />
         <PropertyTypeSelect value={type} onChange={setType} />
         <LocationSelect locations={locations} value={locationId} onChange={setLocationId} />
       </div>
@@ -744,6 +746,7 @@ function CommunityEditRow({ community, locations, isLast, onCancel, onSave }) {
               onSave({
                 community_name: name.trim(),
                 community_manager_name: manager.trim() || null,
+                bookkeeper_name: bookkeeper.trim() || null,
                 property_type: type || null,
                 number_of_units: units ? Number(units) : null,
                 contract_value: contractValue ? Number(contractValue) : null,
@@ -771,6 +774,7 @@ function CommunityEditRow({ community, locations, isLast, onCancel, onSave }) {
 function CommunityModal({ locations, onCancel, onSave }) {
   const [name, setName] = useState("");
   const [manager, setManager] = useState("");
+  const [bookkeeper, setBookkeeper] = useState("");
   const [type, setType] = useState("");
   const [units, setUnits] = useState("");
   const [locationId, setLocationId] = useState("");
@@ -798,7 +802,11 @@ function CommunityModal({ locations, onCancel, onSave }) {
         <FieldInput label="Community name" value={name} onChange={setName} />
         <div className="grid grid-cols-2 gap-3">
           <FieldInput label="Manager" value={manager} onChange={setManager} />
+          <FieldInput label="Bookkeeper" value={bookkeeper} onChange={setBookkeeper} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <LocationSelect locations={locations} value={locationId} onChange={setLocationId} />
+          <div />
         </div>
         <div className="grid grid-cols-3 gap-3">
           <PropertyTypeSelect value={type} onChange={setType} />
@@ -832,6 +840,7 @@ function CommunityModal({ locations, onCancel, onSave }) {
               onSave({
                 community_name: name.trim(),
                 community_manager_name: manager.trim() || null,
+                bookkeeper_name: bookkeeper.trim() || null,
                 property_type: type || null,
                 number_of_units: units ? Number(units) : null,
                 contract_value: contractValue ? Number(contractValue) : null,
