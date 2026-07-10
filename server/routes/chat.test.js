@@ -61,8 +61,11 @@ describe("chat route — structural guards", () => {
     expect(source).toMatch(/UPDATE sessions SET google_review_response/);
   });
 
-  it("system prompt is scoped by client_id (per-client override)", () => {
-    expect(source).toMatch(/system_prompt'\s*AND client_id = \?/);
+  it("system prompt is scoped by client_id (per-client override), key chosen per session", () => {
+    // V4 hybrid ship: template sessions read 'system_prompt_hybrid',
+    // legacy sessions 'system_prompt' — both still client-scoped first.
+    expect(source).toMatch(/"system_prompt_hybrid" : "system_prompt"/);
+    expect(source).toMatch(/WHERE key = \? AND client_id = \?/);
   });
 
   it("interview_prompt_supplement is appended when present (per-client brief)", () => {
