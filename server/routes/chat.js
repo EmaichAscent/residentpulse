@@ -16,6 +16,7 @@ import {
   getUnansweredRequired,
   baselineIntro,
   buildWeaveInAddendum,
+  selectContextualForSession,
 } from "../utils/surveyRuntime.js";
 // Programmatic close flow — server-side state machine that takes the
 // closing wrap-up out of the model's hands. V3.0 prompt engineering
@@ -352,6 +353,19 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
   }
 
   try {
+    // Contextual nomination (Phase D3) runs CONCURRENTLY with the
+    // interview reply — the Haiku trigger classifier finishes well
+    // inside the reply's latency envelope, so contextual widgets add
+    // no wall-clock cost. The classifier only nominates; selection
+    // (one per turn, template order, NPS band, per-session cap, no
+    // repeats) is decided in code (surveyRuntime.js).
+    const contextualPromise = templateConfig
+      ? selectContextualForSession(session, templateConfig, message).catch((err) => {
+          logger.warn({ err }, "Contextual nomination failed — turn continues without it");
+          return null;
+        })
+      : Promise.resolve(null);
+
     // V3.0 ship — switched from claude-haiku-4-5-20251001 to Sonnet 4.5
     // for the main board-interview reply. Haiku consistently failed to
     // follow the V2.x prompt's long Never list (sycophantic openers,
@@ -432,13 +446,23 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
     ]);
 
     // Weave-in widget follows the reply that nominated it. Gated —
-    // required questions always are.
+    // required questions always are. When the model wove one in, the
+    // contextual nomination stands down: one widget per turn, and a
+    // required delivery outranks an AI-discretion one.
     let widgetOut = null;
     if (weaveInQuestion) {
       const { content, payload } = await emitWidgetMessage(session, weaveInQuestion, {
         gate: true,
       });
       widgetOut = { content, payload };
+    } else {
+      const contextualQuestion = await contextualPromise;
+      if (contextualQuestion) {
+        const { content, payload } = await emitWidgetMessage(session, contextualQuestion, {
+          gate: false,
+        });
+        widgetOut = { content, payload };
+      }
     }
 
     // Get the saved message ID for alert linking

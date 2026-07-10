@@ -1,5 +1,6 @@
 import db from "../db.js";
 import logger from "./logger.js";
+import { classifyMessage } from "./triggerClassifier.js";
 
 /**
  * Hybrid chat runtime helpers (Zoho parity Phase D —
@@ -292,4 +293,104 @@ export function buildWeaveInAddendum(unansweredRequired) {
   if (!unansweredRequired?.length) return "";
   const list = unansweredRequired.map((q) => `  • [ASK:${q.code}] — ${q.label}`).join("\n");
   return `\n\nSTRUCTURED RATING QUESTIONS — the survey requires these rated on a fixed scale before the chat ends:\n${list}\n\nWhen the conversation NATURALLY arrives at one of these topics, end your reply with the matching tag (e.g. [ASK:C03]) and the system will present the rating scale for you — do not describe the scale or ask for a number yourself. At most ONE tag per reply, only when the topic genuinely came up. Never mention the tags or the scales to the resident.`;
+}
+
+// ── Contextual nomination (Phase D3) ─────────────────────────────────
+
+// Hard cap on AI-discretion widgets per session. Contextual depth is
+// the hybrid's value-add, but past a handful of scales the chat starts
+// feeling like a form — the exact failure the hybrid design avoids.
+export const MAX_CONTEXTUAL_PER_SESSION = 4;
+
+/**
+ * Pure selection: which contextual question (if any) should fire for
+ * this turn, given the classifier's matched trigger ids.
+ *
+ * Rules (in order):
+ *   • never re-fire a question already emitted this session
+ *   • respect the per-session contextual cap
+ *   • respect the question's NPS band (only fire when the session's
+ *     score is at or below nps_band_max; unset band = any score, and
+ *     a band can't pass while the score is still unknown)
+ *   • template order (sort_order) is the tiebreak — max ONE per turn
+ */
+export function pickContextualQuestion({
+  config,
+  matchedTriggerIds,
+  emittedQuestionIds,
+  contextualFiredCount,
+  npsScore,
+}) {
+  if (!config?.questions || !matchedTriggerIds?.length) return null;
+  if (contextualFiredCount >= MAX_CONTEXTUAL_PER_SESSION) return null;
+
+  const matched = new Set(matchedTriggerIds);
+  const eligible = config.questions
+    .filter((q) => q.tier === "contextual")
+    .filter((q) => !emittedQuestionIds.has(q.question_id))
+    .filter((q) => (q.triggers || []).some((t) => matched.has(t.id)))
+    .filter((q) => {
+      if (q.nps_band_max == null) return true;
+      if (npsScore == null) return false;
+      return npsScore <= q.nps_band_max;
+    })
+    .sort((a, b) => a.sort_order - b.sort_order);
+
+  return eligible[0] ?? null;
+}
+
+/**
+ * Full contextual-nomination pass for one resident message. Collects
+ * the DISTINCT triggers armed on this template's contextual questions,
+ * runs the classifier once, and applies the selection rules above.
+ * Designed to run CONCURRENTLY with the interview model call — Haiku
+ * classification finishes well inside the reply's latency envelope.
+ *
+ * The classifier only nominates; everything that decides whether a
+ * widget actually ships is in code.
+ */
+export async function selectContextualForSession(session, config, message) {
+  if (!config?.questions) return null;
+
+  const contextual = config.questions.filter((q) => q.tier === "contextual");
+  if (!contextual.length) return null;
+
+  // What has this session already seen? Answered questions AND widgets
+  // already emitted (even if unanswered) both count as "fired".
+  const widgetRows = await db.all(
+    "SELECT widget_payload FROM messages WHERE session_id = ? AND message_type = 'widget'",
+    [session.id]
+  );
+  const emittedQuestionIds = new Set();
+  let contextualFiredCount = 0;
+  const contextualIds = new Set(contextual.map((q) => q.question_id));
+  for (const row of widgetRows) {
+    const payload =
+      typeof row.widget_payload === "string" ? JSON.parse(row.widget_payload) : row.widget_payload;
+    if (!payload?.question_id) continue;
+    emittedQuestionIds.add(payload.question_id);
+    if (contextualIds.has(payload.question_id)) contextualFiredCount++;
+  }
+  for (const qid of await answeredQuestionIds(session.id)) emittedQuestionIds.add(qid);
+
+  if (contextualFiredCount >= MAX_CONTEXTUAL_PER_SESSION) return null;
+
+  // Distinct triggers across the not-yet-fired contextual questions —
+  // no point classifying against triggers that can't select anything.
+  const triggerById = new Map();
+  for (const q of contextual) {
+    if (emittedQuestionIds.has(q.question_id)) continue;
+    for (const t of q.triggers || []) triggerById.set(t.id, t);
+  }
+  if (!triggerById.size) return null;
+
+  const matchedTriggerIds = await classifyMessage(message, [...triggerById.values()]);
+
+  return pickContextualQuestion({
+    config,
+    matchedTriggerIds,
+    emittedQuestionIds,
+    contextualFiredCount,
+    npsScore: session.nps_score,
+  });
 }
