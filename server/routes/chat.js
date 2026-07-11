@@ -16,7 +16,6 @@ import {
   answeredQuestionIds,
   getUnansweredRequired,
   baselineIntro,
-  buildWeaveInAddendum,
   selectContextualForSession,
   generateRatingReaction,
 } from "../utils/surveyRuntime.js";
@@ -429,58 +428,62 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
     systemPrompt += `\n\nPRIOR SESSION CONTEXT — for your private use, NOT for narration:\nThis resident has completed ${priorSessions.length} prior survey(s) at this client. The summaries below are factual context the resident does not know you have. Use them like a reporter who did their homework — invisibly. Pick at most ONE prior thread per turn and ask about it specifically (e.g. "Last December you mentioned the landscaping vendor wasn't being held accountable — has that improved?"). Never list multiple prior threads in one reply. Never say you "see" or "notice" anything from their history.\n\nPrior session summaries:\n${priorContext}`;
   }
 
-  // Hybrid survey weave-in (Phase D2): teach the model the [ASK:code]
-  // signal for required questions still unanswered. The model only
-  // nominates the moment; the server emits the actual widget. Anything
-  // never woven in is guaranteed by the baseline batch at close.
+  // Hybrid survey (Phases D2+D3 unified): ONE question per turn,
+  // survey or otherwise. Every interview turn is either a TALK turn
+  // (pure conversation, no widget) or a WIDGET turn (the AI's reply is
+  // a short bridge and the tap-scale below it IS the turn's question).
+  // Earlier designs let widgets ride along on talk turns — the model
+  // asked an open question AND a scale appeared, competing for the
+  // resident's one answer while the gate locked the composer. Staging
+  // proved that reads abrupt, twice. The server owns the rhythm end to
+  // end: required questions first (template order), then classifier-
+  // nominated contextual probes once the required set is exhausted.
+  // Anything never delivered mid-interview is still guaranteed by the
+  // baseline batch at close.
   let templateConfig = null;
   let unansweredRequired = [];
   if (session.template_version_id) {
     templateConfig = await getTemplateConfig(session.template_version_id);
     const answered = await answeredQuestionIds(Number(session_id));
     unansweredRequired = getUnansweredRequired(templateConfig, answered);
-    systemPrompt += buildWeaveInAddendum(unansweredRequired);
   }
 
-  // Widget-turn scheduling (mockup rhythm, round 2). A required rating
-  // gets its OWN turn every couple of conversational beats: the AI's
-  // reply becomes a one-sentence bridge INTO the rating (per-turn
-  // directive below) instead of competing with it — the earlier
-  // ride-along cadence put an open question and a gated scale on
-  // screen simultaneously, which read abrupt and locked the composer
-  // against the very question the AI had just asked.
+  // Widget-turn scheduling: every couple of conversational beats
+  // (never the opener), the turn belongs to a scale. The subject must
+  // be known BEFORE the reply is generated — its topic feeds the
+  // bridge directive — so contextual nomination (fast Haiku
+  // classifier) is awaited serially on the turns that need it. Talk
+  // turns never call the classifier and never emit widgets.
   const assistantMsgs = history.filter((m) => m.role === "assistant");
   let msgsSinceLastWidget = 0;
   for (let i = assistantMsgs.length - 1; i >= 0; i--) {
     if ((assistantMsgs[i].message_type ?? "text") === "widget") break;
     msgsSinceLastWidget++;
   }
-  const isRequiredWidgetTurn =
-    !!templateConfig &&
-    unansweredRequired.length > 0 &&
-    aiMessageCount >= 1 &&
-    msgsSinceLastWidget >= 2;
+  let widgetTurnQuestion = null;
+  if (templateConfig && aiMessageCount >= 1 && msgsSinceLastWidget >= 2) {
+    if (unansweredRequired.length > 0) {
+      widgetTurnQuestion = unansweredRequired[0];
+    } else {
+      // Required set done — contextual probes keep the rhythm alive,
+      // but only when the classifier finds a genuine hook in what the
+      // resident just said (selection rules live in surveyRuntime.js:
+      // one per turn, NPS band, per-session cap, no repeats).
+      widgetTurnQuestion = await selectContextualForSession(session, templateConfig, message).catch(
+        (err) => {
+          logger.warn({ err }, "Contextual nomination failed — turn continues without it");
+          return null;
+        }
+      );
+    }
+  }
 
-  if (isRequiredWidgetTurn) {
-    systemPrompt += `\n\nTHIS TURN ONLY: the system will attach a quick rating scale for "${unansweredRequired[0].label}" directly below your reply. Your reply must be ONE short sentence that acknowledges what the resident just said and bridges naturally toward that topic. Do NOT ask any open question this turn — the rating scale IS this turn's question. Do NOT mention scales, ratings, or numbers.`;
+  if (widgetTurnQuestion) {
+    const topic = widgetTurnQuestion.chat_phrasing?.trim() || widgetTurnQuestion.label;
+    systemPrompt += `\n\nTHIS TURN ONLY: after your reply, the system will show a quick tap-scale covering "${topic}" — that scale IS this turn's question, so do not ask the resident anything yourself. Write your reply as a natural bridge: first respond with genuine substance to what the resident just said (pick up their specific words — the detail, the implication, or the feeling in them), then turn the conversation toward that topic so the scale lands as the obvious next beat. Two short sentences maximum. Never mention scales, ratings, numbers, or a "next question."`;
   }
 
   try {
-    // Contextual nomination (Phase D3) runs CONCURRENTLY with the
-    // interview reply — the Haiku trigger classifier finishes well
-    // inside the reply's latency envelope, so contextual widgets add
-    // no wall-clock cost. The classifier only nominates; selection
-    // (one per turn, template order, NPS band, per-session cap, no
-    // repeats) is decided in code (surveyRuntime.js). Skipped on
-    // widget turns — that turn's widget is already decided.
-    const contextualPromise =
-      templateConfig && !isRequiredWidgetTurn
-        ? selectContextualForSession(session, templateConfig, message).catch((err) => {
-            logger.warn({ err }, "Contextual nomination failed — turn continues without it");
-            return null;
-          })
-        : Promise.resolve(null);
-
     // V3.0 ship — switched from claude-haiku-4-5-20251001 to Sonnet 4.5
     // for the main board-interview reply. Haiku consistently failed to
     // follow the V2.x prompt's long Never list (sycophantic openers,
@@ -499,22 +502,13 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
 
     let assistantMessage = response.content[0].text;
 
-    // [ASK:code] — the model nominated a natural moment for a required
-    // structured question (weave-in, Phase D2). Strip the tag; if the
-    // code is a valid unanswered required question, emit the real
-    // widget (gated) right after this reply.
-    let weaveInQuestion = null;
-    const askMatch = assistantMessage.match(/\[ASK:\s*([A-Za-z0-9]+)\s*\]/);
-    if (askMatch) {
-      assistantMessage = assistantMessage.replace(/\s*\[ASK:\s*[A-Za-z0-9]+\s*\]\s*/g, " ").trim();
-      const code = askMatch[1].toUpperCase();
-      weaveInQuestion = unansweredRequired.find((q) => q.code === code) || null;
-      if (!weaveInQuestion) {
-        logger.warn(
-          { session_id: Number(session_id), code },
-          "Stripped [ASK] tag for unknown/answered/non-required question"
-        );
-      }
+    // Defensive: Phase D2 taught the model an [ASK:code] weave-in tag.
+    // The deterministic widget-turn rhythm replaced model nomination
+    // and the prompt no longer advertises tags — but strip any stray
+    // one so it can never leak to a resident.
+    if (/\[ASK:/i.test(assistantMessage)) {
+      assistantMessage = assistantMessage.replace(/\s*\[ASK:\s*[A-Za-z0-9]+\s*\]\s*/gi, " ").trim();
+      logger.warn({ session_id: Number(session_id) }, "Stripped stray [ASK] tag from reply");
     }
 
     // [REVIEW:YES|NO] — promoter response to the Google review ask.
@@ -560,40 +554,19 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
       assistantMessage,
     ]);
 
-    // Weave-in widget follows the reply that nominated it. Gated —
-    // required questions always are. One widget per turn; priority:
-    //   1. weave-in ([ASK:code] — the model found the perfect moment)
-    //   2. contextual (classifier-nominated depth probe)
-    //   3. REQUIRED CADENCE — deterministic. From the second AI turn,
-    //      every reply carries the next unanswered required widget.
-    //      This is what makes the survey FEEL structured throughout
-    //      (per the approved mockup: question, widget, question,
-    //      widget) instead of "old chat + a form at the end". The
-    //      model's weave-in rarely fires in practice — proven on
-    //      staging — so the server owns the rhythm, as always.
+    // The widget turn's scale — bare (the AI reply above IS its
+    // lead-in; no second bubble competing) and gated (the scale is the
+    // turn's one question, and answering it is what draws the reaction
+    // in POST /answer that keeps the conversation moving — ungated
+    // widgets left the resident tapping into dead air). Talk turns
+    // emit nothing: one question per turn, survey or otherwise.
     let widgetOut = null;
-    if (weaveInQuestion) {
-      const { content, payload } = await emitWidgetMessage(session, weaveInQuestion, {
+    if (widgetTurnQuestion) {
+      const { content, payload } = await emitWidgetMessage(session, widgetTurnQuestion, {
         gate: true,
         bare: true,
       });
       widgetOut = { content, payload };
-    } else if (isRequiredWidgetTurn) {
-      // The AI's reply above IS the lead-in (per-turn directive), so
-      // the widget itself is bare — no second bubble competing.
-      const { content, payload } = await emitWidgetMessage(session, unansweredRequired[0], {
-        gate: true,
-        bare: true,
-      });
-      widgetOut = { content, payload };
-    } else {
-      const contextualQuestion = await contextualPromise;
-      if (contextualQuestion) {
-        const { content, payload } = await emitWidgetMessage(session, contextualQuestion, {
-          gate: false,
-        });
-        widgetOut = { content, payload };
-      }
     }
 
     // Get the saved message ID for alert linking
