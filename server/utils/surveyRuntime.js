@@ -1,6 +1,7 @@
 import db from "../db.js";
 import logger from "./logger.js";
 import { classifyMessage } from "./triggerClassifier.js";
+import { createMessage } from "./aiRouter.js";
 
 /**
  * Hybrid chat runtime helpers (Zoho parity Phase D —
@@ -223,10 +224,14 @@ function normalizeForDisplay(question, value) {
 export async function emitWidgetMessage(
   session,
   question,
-  { gate = false, phrasingOverride } = {}
+  { gate = false, phrasingOverride, bare = false } = {}
 ) {
-  const content =
-    phrasingOverride?.trim() || question.chat_phrasing?.trim() || buildWidgetPhrasing(question);
+  // bare: the assistant reply immediately above is already the lead-in
+  // (widget-turn directive / weave-in) — an empty bubble body means
+  // the client renders only the captioned scale, no second bubble.
+  const content = bare
+    ? ""
+    : phrasingOverride?.trim() || question.chat_phrasing?.trim() || buildWidgetPhrasing(question);
 
   const payload = {
     question_id: question.question_id,
@@ -432,4 +437,46 @@ export async function selectContextualForSession(session, config, message) {
     contextualFiredCount,
     npsScore: session.nps_score,
   });
+}
+
+// ── Widget-turn conversation mechanics (post-mockup-review round 2) ──
+
+/**
+ * Scoped follow-up after the resident taps a rating mid-interview.
+ * The mockup's rhythm: lead-in → tap → the AI RESPONDS to the rating
+ * and moves the conversation forward. Without this, a tapped widget
+ * leaves the resident staring at a scale with nothing to answer.
+ *
+ * Single-purpose call (playback pattern): react to ONE rating, ask
+ * ONE question. Falls back to a safe static line on any failure —
+ * a broken reaction must never stall the chat.
+ */
+export async function generateRatingReaction({ clientName, question, display, history }) {
+  const recent = history
+    .slice(-6)
+    .map((m) => `${m.role === "user" ? "Board member" : "Interviewer"}: ${m.content}`)
+    .join("\n");
+
+  try {
+    const response = await createMessage({
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 150,
+      system: `You are continuing a board-member interview about ${clientName}. The resident just answered a structured rating — shown as the last line of the transcript. Reply with AT MOST 2 short sentences and exactly ONE question:
+  • Rating 1–2: ask ONE specific question about what happened with "${question.label}" — concrete, not abstract.
+  • Rating 3: one brief acknowledgment clause, then ask what would move it up.
+  • Rating 4–5 (or a skip): do NOT dwell — pivot to a fresh open question about something not yet discussed.
+Never mention scales, numbers, or the rating system. Never re-ask rated topics. No "thanks", no "great", no praise of their answer.`,
+      messages: [
+        {
+          role: "user",
+          content: `Recent transcript:\n\n${recent}\n\nBoard member's rating just now: ${display}\n\nProduce your reply.`,
+        },
+      ],
+    });
+    const text = (response.content?.[0]?.text || "").replace(/\s*\[CHAT:END\]\s*/gi, "").trim();
+    if (text) return text;
+  } catch (err) {
+    logger.warn({ err }, "Rating reaction generation failed — using fallback");
+  }
+  return "Noted. What else should be on their radar from your board's perspective?";
 }
