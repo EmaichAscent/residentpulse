@@ -155,7 +155,7 @@ describe("chat.js D3 wiring (one-question-per-turn) — structural guards", () =
     source = await readFile(join(__dirname, "..", "routes", "chat.js"), "utf8");
   });
 
-  it("nomination is awaited BEFORE the reply — its topic feeds the bridge directive", () => {
+  it("nomination is awaited BEFORE the reply — its topic feeds the scoped bridge call", () => {
     const nominationIdx = source.indexOf("selectContextualForSession(");
     const replyIdx = source.indexOf('model: "claude-sonnet-4-5-20250929"');
     expect(nominationIdx).toBeGreaterThan(-1);

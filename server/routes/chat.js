@@ -18,6 +18,7 @@ import {
   baselineIntro,
   selectContextualForSession,
   generateRatingReaction,
+  generateWidgetBridge,
 } from "../utils/surveyRuntime.js";
 // Programmatic close flow — server-side state machine that takes the
 // closing wrap-up out of the model's hands. V3.0 prompt engineering
@@ -451,7 +452,7 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
   // Widget-turn scheduling: every couple of conversational beats
   // (never the opener), the turn belongs to a scale. The subject must
   // be known BEFORE the reply is generated — its topic feeds the
-  // bridge directive — so contextual nomination (fast Haiku
+  // scoped bridge call below — so contextual nomination (fast Haiku
   // classifier) is awaited serially on the turns that need it. Talk
   // turns never call the classifier and never emit widgets.
   const assistantMsgs = history.filter((m) => m.role === "assistant");
@@ -478,81 +479,104 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
     }
   }
 
-  if (widgetTurnQuestion) {
-    const topic = widgetTurnQuestion.chat_phrasing?.trim() || widgetTurnQuestion.label;
-    systemPrompt += `\n\nTHIS TURN ONLY: after your reply, the system will show a quick tap-scale covering "${topic}" — that scale IS this turn's question, so do not ask the resident anything yourself. Write your reply as a natural bridge: first respond with genuine substance to what the resident just said (pick up their specific words — the detail, the implication, or the feeling in them), then turn the conversation toward that topic so the scale lands as the obvious next beat. Two short sentences maximum. Never mention scales, ratings, numbers, or a "next question."`;
-  }
-
   try {
-    // V3.0 ship — switched from claude-haiku-4-5-20251001 to Sonnet 4.5
-    // for the main board-interview reply. Haiku consistently failed to
-    // follow the V2.x prompt's long Never list (sycophantic openers,
-    // re-opening closed topics, drilling past 3 questions). Sonnet
-    // tracks long instruction lists better. Cost delta is small now
-    // that V3.0 is ~5× shorter than V2.8.
-    //
-    // The async critical-alert detector below stays on Haiku — it's a
-    // simple classification call, doesn't need Sonnet's reasoning.
-    const response = await createMessage({
-      model: "claude-sonnet-4-5-20250929",
-      max_tokens: 300,
-      system: systemPrompt,
-      messages: history.map((m) => ({ role: m.role, content: m.content })),
-    });
+    let assistantMessage;
+    let chatEnd = false;
 
-    let assistantMessage = response.content[0].text;
+    if (widgetTurnQuestion) {
+      // WIDGET TURN — the main interview model is not consulted.
+      // Staging proved a trailing "this turn only" prompt directive
+      // can't reliably stop it from drilling: it asked "how long are
+      // you typically waiting?" while the scale below asked about
+      // value for services. The scoped bridge call (playback pattern)
+      // has one job — respond to the resident, hand off INTO the
+      // scale's topic — and surveyRuntime enforces no-question in
+      // code (any "?" → safe fallback). message_type 'bridge' keeps
+      // these out of the close-flow turn budget, like reactions.
+      const clientRow = await db.get("SELECT company_name FROM clients WHERE id = ?", [
+        session.client_id,
+      ]);
+      assistantMessage = await generateWidgetBridge({
+        clientName: clientRow?.company_name || "the management company",
+        question: widgetTurnQuestion,
+        history,
+      });
+      await db.run(
+        "INSERT INTO messages (session_id, role, content, message_type) VALUES (?, 'assistant', ?, 'bridge')",
+        [Number(session_id), assistantMessage]
+      );
+    } else {
+      // TALK TURN — the regular interview reply.
+      //
+      // V3.0 ship — switched from claude-haiku-4-5-20251001 to Sonnet
+      // 4.5 for the main board-interview reply. Haiku consistently
+      // failed to follow the V2.x prompt's long Never list
+      // (sycophantic openers, re-opening closed topics, drilling past
+      // 3 questions). Sonnet tracks long instruction lists better.
+      //
+      // The async critical-alert detector below stays on Haiku — it's
+      // a simple classification call, doesn't need Sonnet's reasoning.
+      const response = await createMessage({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 300,
+        system: systemPrompt,
+        messages: history.map((m) => ({ role: m.role, content: m.content })),
+      });
 
-    // Defensive: Phase D2 taught the model an [ASK:code] weave-in tag.
-    // The deterministic widget-turn rhythm replaced model nomination
-    // and the prompt no longer advertises tags — but strip any stray
-    // one so it can never leak to a resident.
-    if (/\[ASK:/i.test(assistantMessage)) {
-      assistantMessage = assistantMessage.replace(/\s*\[ASK:\s*[A-Za-z0-9]+\s*\]\s*/gi, " ").trim();
-      logger.warn({ session_id: Number(session_id) }, "Stripped stray [ASK] tag from reply");
-    }
+      assistantMessage = response.content[0].text;
 
-    // [REVIEW:YES|NO] — promoter response to the Google review ask.
-    const reviewMatch = assistantMessage.match(/\[REVIEW:\s*(YES|NO)\s*\]/i);
-    if (reviewMatch) {
-      assistantMessage = assistantMessage.replace(/\s*\[REVIEW:\s*(YES|NO)\s*\]\s*/gi, "").trim();
-      const reviewResponse = reviewMatch[1].toLowerCase();
-      await db.run("UPDATE sessions SET google_review_response = ? WHERE id = ?", [
-        reviewResponse,
+      // Defensive: Phase D2 taught the model an [ASK:code] weave-in
+      // tag. The deterministic widget-turn rhythm replaced model
+      // nomination and the prompt no longer advertises tags — but
+      // strip any stray one so it can never leak to a resident.
+      if (/\[ASK:/i.test(assistantMessage)) {
+        assistantMessage = assistantMessage
+          .replace(/\s*\[ASK:\s*[A-Za-z0-9]+\s*\]\s*/gi, " ")
+          .trim();
+        logger.warn({ session_id: Number(session_id) }, "Stripped stray [ASK] tag from reply");
+      }
+
+      // [REVIEW:YES|NO] — promoter response to the Google review ask.
+      const reviewMatch = assistantMessage.match(/\[REVIEW:\s*(YES|NO)\s*\]/i);
+      if (reviewMatch) {
+        assistantMessage = assistantMessage.replace(/\s*\[REVIEW:\s*(YES|NO)\s*\]\s*/gi, "").trim();
+        const reviewResponse = reviewMatch[1].toLowerCase();
+        await db.run("UPDATE sessions SET google_review_response = ? WHERE id = ?", [
+          reviewResponse,
+          Number(session_id),
+        ]);
+      }
+
+      // [CHAT:END] handling. The Google review fast-path is the ONLY
+      // remaining model-driven close — when a promoter scored at/above
+      // threshold and the review prompt fires, the model can
+      // legitimately emit [CHAT:END] on its final reply. For all other
+      // interviews, the close is now server-driven (closeFlow.js + the
+      // gate above this block), so any model-emitted [CHAT:END] in
+      // normal interview turns is a bug and must be stripped silently.
+      if (/\[CHAT:\s*END\s*\]/i.test(assistantMessage)) {
+        assistantMessage = assistantMessage.replace(/\s*\[CHAT:\s*END\s*\]\s*/gi, "").trim();
+        // Honor the [CHAT:END] only when this is a promoter-fast-path
+        // close. We detect that by the [REVIEW:YES|NO] tag appearing
+        // in the same turn (already handled and stripped above) — if a
+        // review tag fired, we know this is the fast-path's final
+        // wrap. Otherwise we strip silently and treat the turn as a
+        // normal ongoing interview reply.
+        if (reviewMatch) {
+          chatEnd = true;
+        } else {
+          logger.warn(
+            { session_id: Number(session_id) },
+            "Stripped stray model-emitted [CHAT:END] from interview turn"
+          );
+        }
+      }
+
+      await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'assistant', ?)", [
         Number(session_id),
+        assistantMessage,
       ]);
     }
-
-    // [CHAT:END] handling. The Google review fast-path is the ONLY
-    // remaining model-driven close — when a promoter scored at/above
-    // threshold and the review prompt fires, the model can legitimately
-    // emit [CHAT:END] on its final reply. For all other interviews,
-    // the close is now server-driven (closeFlow.js + the gate above
-    // this block), so any model-emitted [CHAT:END] in normal interview
-    // turns is a bug and must be stripped silently.
-    let chatEnd = false;
-    if (/\[CHAT:\s*END\s*\]/i.test(assistantMessage)) {
-      assistantMessage = assistantMessage.replace(/\s*\[CHAT:\s*END\s*\]\s*/gi, "").trim();
-      // Honor the [CHAT:END] only when this is a promoter-fast-path
-      // close. We detect that by the [REVIEW:YES|NO] tag appearing in
-      // the same turn (already handled and stripped above) — if a
-      // review tag fired, we know this is the fast-path's final wrap.
-      // Otherwise we strip silently and treat the turn as a normal
-      // ongoing interview reply.
-      if (reviewMatch) {
-        chatEnd = true;
-      } else {
-        logger.warn(
-          { session_id: Number(session_id) },
-          "Stripped stray model-emitted [CHAT:END] from interview turn"
-        );
-      }
-    }
-
-    // Save assistant message
-    await db.run("INSERT INTO messages (session_id, role, content) VALUES (?, 'assistant', ?)", [
-      Number(session_id),
-      assistantMessage,
-    ]);
 
     // The widget turn's scale — bare (the AI reply above IS its
     // lead-in; no second bubble competing) and gated (the scale is the
