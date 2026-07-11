@@ -18,6 +18,7 @@ import {
   baselineIntro,
   buildWeaveInAddendum,
   selectContextualForSession,
+  generateRatingReaction,
 } from "../utils/surveyRuntime.js";
 // Programmatic close flow — server-side state machine that takes the
 // closing wrap-up out of the model's hands. V3.0 prompt engineering
@@ -441,19 +442,44 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
     systemPrompt += buildWeaveInAddendum(unansweredRequired);
   }
 
+  // Widget-turn scheduling (mockup rhythm, round 2). A required rating
+  // gets its OWN turn every couple of conversational beats: the AI's
+  // reply becomes a one-sentence bridge INTO the rating (per-turn
+  // directive below) instead of competing with it — the earlier
+  // ride-along cadence put an open question and a gated scale on
+  // screen simultaneously, which read abrupt and locked the composer
+  // against the very question the AI had just asked.
+  const assistantMsgs = history.filter((m) => m.role === "assistant");
+  let msgsSinceLastWidget = 0;
+  for (let i = assistantMsgs.length - 1; i >= 0; i--) {
+    if ((assistantMsgs[i].message_type ?? "text") === "widget") break;
+    msgsSinceLastWidget++;
+  }
+  const isRequiredWidgetTurn =
+    !!templateConfig &&
+    unansweredRequired.length > 0 &&
+    aiMessageCount >= 1 &&
+    msgsSinceLastWidget >= 2;
+
+  if (isRequiredWidgetTurn) {
+    systemPrompt += `\n\nTHIS TURN ONLY: the system will attach a quick rating scale for "${unansweredRequired[0].label}" directly below your reply. Your reply must be ONE short sentence that acknowledges what the resident just said and bridges naturally toward that topic. Do NOT ask any open question this turn — the rating scale IS this turn's question. Do NOT mention scales, ratings, or numbers.`;
+  }
+
   try {
     // Contextual nomination (Phase D3) runs CONCURRENTLY with the
     // interview reply — the Haiku trigger classifier finishes well
     // inside the reply's latency envelope, so contextual widgets add
     // no wall-clock cost. The classifier only nominates; selection
     // (one per turn, template order, NPS band, per-session cap, no
-    // repeats) is decided in code (surveyRuntime.js).
-    const contextualPromise = templateConfig
-      ? selectContextualForSession(session, templateConfig, message).catch((err) => {
-          logger.warn({ err }, "Contextual nomination failed — turn continues without it");
-          return null;
-        })
-      : Promise.resolve(null);
+    // repeats) is decided in code (surveyRuntime.js). Skipped on
+    // widget turns — that turn's widget is already decided.
+    const contextualPromise =
+      templateConfig && !isRequiredWidgetTurn
+        ? selectContextualForSession(session, templateConfig, message).catch((err) => {
+            logger.warn({ err }, "Contextual nomination failed — turn continues without it");
+            return null;
+          })
+        : Promise.resolve(null);
 
     // V3.0 ship — switched from claude-haiku-4-5-20251001 to Sonnet 4.5
     // for the main board-interview reply. Haiku consistently failed to
@@ -549,6 +575,15 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
     if (weaveInQuestion) {
       const { content, payload } = await emitWidgetMessage(session, weaveInQuestion, {
         gate: true,
+        bare: true,
+      });
+      widgetOut = { content, payload };
+    } else if (isRequiredWidgetTurn) {
+      // The AI's reply above IS the lead-in (per-turn directive), so
+      // the widget itself is bare — no second bubble competing.
+      const { content, payload } = await emitWidgetMessage(session, unansweredRequired[0], {
+        gate: true,
+        bare: true,
       });
       widgetOut = { content, payload };
     } else {
@@ -556,11 +591,6 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
       if (contextualQuestion) {
         const { content, payload } = await emitWidgetMessage(session, contextualQuestion, {
           gate: false,
-        });
-        widgetOut = { content, payload };
-      } else if (aiMessageCount >= 1 && unansweredRequired.length > 0) {
-        const { content, payload } = await emitWidgetMessage(session, unansweredRequired[0], {
-          gate: true,
         });
         widgetOut = { content, payload };
       }
@@ -748,7 +778,35 @@ router.post("/answer", async (req, res) => {
     // next widget; when the set is exhausted, the playback fires and
     // the normal close flow takes over.
     const next = [];
-    if (session.close_phase === CLOSE_PHASE.BASELINE_BATCH) {
+    if (
+      session.close_phase === CLOSE_PHASE.INTERVIEW &&
+      session.pending_question_id === Number(question_id)
+    ) {
+      // Mid-interview gated widget (widget-turn cadence): after the
+      // tap, the AI RESPONDS to the rating — low scores get a "what
+      // happened?", good scores pivot to fresh ground — so the
+      // conversation continues instead of stalling on a tapped scale.
+      // message_type 'reaction' keeps these out of the close-flow turn
+      // budget while staying in the model's context.
+      const clientRow = await db.get("SELECT company_name FROM clients WHERE id = ?", [
+        session.client_id,
+      ]);
+      const reactionHistory = await db.all(
+        "SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at",
+        [Number(session_id)]
+      );
+      const reaction = await generateRatingReaction({
+        clientName: clientRow?.company_name || "the management company",
+        question,
+        display,
+        history: reactionHistory,
+      });
+      await db.run(
+        "INSERT INTO messages (session_id, role, content, message_type) VALUES (?, 'assistant', ?, 'reaction')",
+        [Number(session_id), reaction]
+      );
+      next.push({ role: "assistant", content: reaction, message_type: "reaction" });
+    } else if (session.close_phase === CLOSE_PHASE.BASELINE_BATCH) {
       const answered = await answeredQuestionIds(Number(session_id));
       const remaining = getUnansweredRequired(config, answered);
       if (remaining.length > 0) {

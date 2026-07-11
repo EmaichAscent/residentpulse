@@ -530,7 +530,11 @@ export default function ChatPage() {
             {/* Phase 3+ — conversation messages */}
             {messages.map((msg, i) => (
               <div key={i}>
-                <ChatMessage role={msg.role} content={msg.content} timestamp={msg.timestamp} />
+                {/* Bare widget messages (empty content) render only the
+                    captioned scale — the AI's reply above is the lead-in. */}
+                {!(msg.messageType === "widget" && !msg.content) && (
+                  <ChatMessage role={msg.role} content={msg.content} timestamp={msg.timestamp} />
+                )}
                 {msg.messageType === "widget" &&
                   msg.widgetPayload &&
                   !answeredQuestionIds.has(msg.widgetPayload.question_id) && (
