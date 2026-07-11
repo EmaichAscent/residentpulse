@@ -214,12 +214,15 @@ function normalizeForDisplay(question, value) {
 
 /**
  * Emit a widget into the transcript: an assistant message carrying the
- * structured question. `gate` locks the chat until answered/skipped
- * (required-tier delivery); contextual widgets don't gate.
+ * structured question. `gate` locks the chat until answered/skipped —
+ * every interview widget-turn scale gates (the scale IS that turn's
+ * one question, and answering it is what draws the reaction that
+ * moves the conversation on).
  *
- * `phrasingOverride` lets the caller (D2 weave-in / baseline batch)
- * supply lead-in text; otherwise the question's chat_phrasing or the
- * plain label is used.
+ * `phrasingOverride` lets the caller (baseline batch) supply lead-in
+ * text; otherwise the question's chat_phrasing or the generated
+ * lead-in is used. Widget-turn scales pass `bare` instead — the AI
+ * reply above them is the lead-in.
  */
 export async function emitWidgetMessage(
   session,
@@ -323,20 +326,6 @@ export function buildWidgetPhrasing(question) {
       }
     }
   }
-}
-
-/**
- * System-prompt addendum for weave-in (Phase D2). Lists the required
- * questions still unanswered and teaches the model the [ASK:code]
- * signal. The model only NOMINATES the moment — the server intercepts
- * the tag, strips it, and emits the real widget. Anything never woven
- * in lands in the baseline batch, so delivery is guaranteed by the
- * server either way; this is UX polish, not a reliability mechanism.
- */
-export function buildWeaveInAddendum(unansweredRequired) {
-  if (!unansweredRequired?.length) return "";
-  const list = unansweredRequired.map((q) => `  • [ASK:${q.code}] — ${q.label}`).join("\n");
-  return `\n\nSTRUCTURED RATING QUESTIONS — the survey requires these rated on a fixed scale before the chat ends:\n${list}\n\nWhen the conversation NATURALLY arrives at one of these topics, end your reply with the matching tag (e.g. [ASK:C03]) and the system will present the rating scale for you — do not describe the scale or ask for a number yourself. At most ONE tag per reply, only when the topic genuinely came up. Never mention the tags or the scales to the resident.`;
 }
 
 // ── Contextual nomination (Phase D3) ─────────────────────────────────
@@ -461,15 +450,16 @@ export async function generateRatingReaction({ clientName, question, display, hi
     const response = await createMessage({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 150,
-      system: `You are continuing a board-member interview about ${clientName}. The resident just answered a structured rating — shown as the last line of the transcript. Reply with AT MOST 2 short sentences and exactly ONE question:
-  • Rating 1–2: ask ONE specific question about what happened with "${question.label}" — concrete, not abstract.
-  • Rating 3: one brief acknowledgment clause, then ask what would move it up.
-  • Rating 4–5 (or a skip): do NOT dwell — pivot to a fresh open question about something not yet discussed.
-Never mention scales, numbers, or the rating system. Never re-ask rated topics. No "thanks", no "great", no praise of their answer.`,
+      system: `You are continuing a board-member interview about ${clientName}. The resident just answered a structured survey question — their answer is the last line below. Reply with AT MOST 2 short sentences and exactly ONE question:
+  • Low rating (1–2 of 5, or 0–6 of 10): ask ONE specific question about what happened with "${question.label}" — concrete, not abstract.
+  • Middling rating (3 of 5, or 7–8 of 10): one brief acknowledgment clause, then ask what would move it up.
+  • Good rating (4–5 of 5, or 9–10 of 10) or a skip: do NOT dwell — pivot to a fresh open question about something not yet discussed.
+  • A yes/no or a list of selections: read its substance — if it flags a problem, ask ONE concrete question about that; otherwise pivot to fresh ground.
+Never mention scales, numbers, or the rating system. Never re-ask answered topics. No "thanks", no "great", no praise of their answer.`,
       messages: [
         {
           role: "user",
-          content: `Recent transcript:\n\n${recent}\n\nBoard member's rating just now: ${display}\n\nProduce your reply.`,
+          content: `Recent transcript:\n\n${recent}\n\nBoard member's answer just now: ${display}\n\nProduce your reply.`,
         },
       ],
     });
