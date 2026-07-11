@@ -470,3 +470,49 @@ Never mention scales, numbers, or the rating system. Never re-ask answered topic
   }
   return "Noted. What else should be on their radar from your board's perspective?";
 }
+
+/**
+ * Scoped bridge reply for a widget turn. The main interview model is
+ * NOT consulted on widget turns — staging proved a trailing prompt
+ * directive can't reliably stop it from drilling (it asked "how long
+ * are you typically waiting?" while the scale below asked about value
+ * for services). A single-purpose call has exactly one job: respond
+ * to what the resident just said, then hand off INTO the scale's
+ * topic so the bubble reads as the scale's own lead-in.
+ *
+ * The no-question rule is enforced in code, not prompt: any "?" in
+ * the output (or any failure) falls back to a safe static line — a
+ * widget turn can never carry a competing question.
+ */
+export async function generateWidgetBridge({ clientName, question, history }) {
+  const recent = history
+    .slice(-6)
+    .map((m) => `${m.role === "user" ? "Board member" : "Interviewer"}: ${m.content}`)
+    .join("\n");
+  const topic = question.chat_phrasing?.trim() || question.label;
+
+  try {
+    const response = await createMessage({
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 120,
+      system: `You are mid-interview with an HOA board member about ${clientName}. Directly below your reply, the system will show a quick tap-scale asking about: "${topic}". Your ONLY job is the hand-off into it. Write AT MOST 2 short sentences: first respond with genuine substance to the resident's last message (their specific words — the detail, the implication, the feeling), then steer directly into that topic so the scale underneath is the obvious next beat — e.g. "...so help me pin down your read on the value you're getting for those fees." The steer must name the scale's actual topic in plain words. Absolutely NO questions — the scale asks this turn's question, not you. Never mention scales, ratings, numbers, tapping, or that a question is coming.`,
+      messages: [
+        {
+          role: "user",
+          content: `Recent transcript:\n\n${recent}\n\nWrite the bridge reply.`,
+        },
+      ],
+    });
+    const text = (response.content?.[0]?.text || "").trim();
+    if (text && !text.includes("?")) return text;
+    if (text) {
+      logger.warn(
+        { question: question.code },
+        "Widget bridge contained a question — using fallback"
+      );
+    }
+  } catch (err) {
+    logger.warn({ err }, "Widget bridge generation failed — using fallback");
+  }
+  return "That's useful context — noted. While we're here, give me your quick read on this:";
+}

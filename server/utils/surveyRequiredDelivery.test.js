@@ -9,6 +9,10 @@ vi.mock("../db.js", () => ({
   default: { get: vi.fn(), run: vi.fn(), all: vi.fn() },
 }));
 
+vi.mock("./aiRouter.js", () => ({
+  createMessage: vi.fn(),
+}));
+
 let runtime;
 let closeFlow;
 
@@ -108,10 +112,17 @@ describe("widget turns — ONE question per turn, survey or otherwise", () => {
     );
   });
 
-  it("on widget turns the AI's reply is directed to be a substantive bridge, no open question", () => {
-    expect(source).toMatch(/THIS TURN ONLY/);
-    expect(source).toMatch(/that scale IS this turn's question/);
-    expect(source).toMatch(/pick up their specific words/);
+  it("widget turns bypass the interview model — a scoped bridge call writes the reply", () => {
+    // A trailing prompt directive proved unreliable on staging (the
+    // model kept drilling while the scale asked something else). The
+    // bridge is a single-purpose call whose no-question rule is
+    // enforced in code, not prompt.
+    expect(source).toMatch(/assistantMessage = await generateWidgetBridge\(\{/);
+    expect(source).not.toMatch(/THIS TURN ONLY/);
+  });
+
+  it("bridge replies are typed 'bridge' — outside the close-flow turn budget", () => {
+    expect(source).toMatch(/'assistant', \?, 'bridge'/);
   });
 
   it("exactly ONE emission site in the interview turn: gated + bare", () => {
@@ -129,6 +140,69 @@ describe("widget turns — ONE question per turn, survey or otherwise", () => {
     expect(source).toMatch(/'assistant', \?, 'reaction'/);
     expect(source).toMatch(
       /session\.close_phase === CLOSE_PHASE\.INTERVIEW &&\s+session\.pending_question_id === Number\(question_id\)/
+    );
+  });
+});
+
+describe("generateWidgetBridge — the no-question rule is enforced in code, not prompt", () => {
+  const QUESTION = { code: "S02", label: "Value for services", chat_phrasing: null };
+
+  it("passes the model's bridge through when it contains no question", async () => {
+    const { createMessage } = await import("./aiRouter.js");
+    createMessage.mockResolvedValueOnce({
+      content: [
+        {
+          text: "A manager still ramping up makes the fee question sharper, not softer. So let's pin down the value you feel you're getting for those fees.",
+        },
+      ],
+    });
+    const text = await runtime.generateWidgetBridge({
+      clientName: "Zee Best Management",
+      question: QUESTION,
+      history: [],
+    });
+    expect(text).toMatch(/value/i);
+    // The scale's topic reaches the scoped call — the bubble must
+    // lead directly into what the scale actually asks.
+    expect(createMessage.mock.lastCall[0].system).toContain("Value for services");
+  });
+
+  it("any '?' in the output → fallback: a widget turn can never carry a competing question", async () => {
+    const { createMessage } = await import("./aiRouter.js");
+    createMessage.mockResolvedValueOnce({
+      content: [{ text: "How long are you typically waiting now?" }],
+    });
+    const text = await runtime.generateWidgetBridge({
+      clientName: "Zee Best Management",
+      question: QUESTION,
+      history: [],
+    });
+    expect(text).not.toContain("?");
+    expect(text.length).toBeGreaterThan(10);
+  });
+
+  it("API failure → fallback, never a stalled chat", async () => {
+    const { createMessage } = await import("./aiRouter.js");
+    createMessage.mockRejectedValueOnce(new Error("boom"));
+    const text = await runtime.generateWidgetBridge({
+      clientName: "Zee Best Management",
+      question: QUESTION,
+      history: [],
+    });
+    expect(text).not.toContain("?");
+    expect(text.length).toBeGreaterThan(10);
+  });
+
+  it("authored chat_phrasing outranks the label as the scale's topic", async () => {
+    const { createMessage } = await import("./aiRouter.js");
+    createMessage.mockResolvedValueOnce({ content: [{ text: "Noted. On to value." }] });
+    await runtime.generateWidgetBridge({
+      clientName: "Zee Best Management",
+      question: { ...QUESTION, chat_phrasing: "How well do we deliver value for your fees?" },
+      history: [],
+    });
+    expect(createMessage.mock.lastCall[0].system).toContain(
+      "How well do we deliver value for your fees?"
     );
   });
 });
