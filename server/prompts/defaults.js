@@ -2567,9 +2567,9 @@ export const V2_PROMPT_GENERATION_BLOCKS = parsePromptToBlocks(V2_PROMPT_GENERAT
 //     server-driven since the programmatic close flow shipped, and the
 //     baseline batch + playback + templated close happen outside the
 //     model's control. Dead instructions removed rather than carried.
-//   • The [ASK:code] weave-in instructions are NOT here — chat.js
-//     appends buildWeaveInAddendum() at runtime with the live list of
-//     unanswered required questions.
+//   • No widget instructions here — chat.js appends a per-turn
+//     "THIS TURN ONLY" bridge directive on widget turns; every other
+//     turn is pure conversation (one question per turn, always).
 //
 // Runtime selection (chat.js): template session → client-specific
 // 'system_prompt_hybrid' setting → global 'system_prompt_hybrid'

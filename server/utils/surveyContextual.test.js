@@ -149,28 +149,38 @@ describe("selectContextualForSession — full nomination pass", () => {
   });
 });
 
-describe("chat.js D3 wiring — structural guards", () => {
+describe("chat.js D3 wiring (one-question-per-turn) — structural guards", () => {
   let source;
   beforeAll(async () => {
     source = await readFile(join(__dirname, "..", "routes", "chat.js"), "utf8");
   });
 
-  it("nomination runs concurrently with the interview reply", () => {
-    const nominationIdx = source.indexOf("selectContextualForSession(session, templateConfig");
+  it("nomination is awaited BEFORE the reply — its topic feeds the bridge directive", () => {
+    const nominationIdx = source.indexOf("selectContextualForSession(");
     const replyIdx = source.indexOf('model: "claude-sonnet-4-5-20250929"');
     expect(nominationIdx).toBeGreaterThan(-1);
     expect(nominationIdx).toBeLessThan(replyIdx);
+    expect(source).toMatch(/widgetTurnQuestion = await selectContextualForSession\(/);
   });
 
   it("nomination failure never breaks the turn", () => {
     expect(source).toMatch(/Contextual nomination failed — turn continues without it/);
   });
 
-  it("weave-in outranks contextual — one widget per turn", () => {
-    expect(source).toMatch(/if \(weaveInQuestion\)[\s\S]*?\} else \{[\s\S]*?contextualPromise/);
+  it("contextual only fills widget turns AFTER the required set is exhausted", () => {
+    expect(source).toMatch(
+      /if \(unansweredRequired\.length > 0\) \{\s*widgetTurnQuestion = unansweredRequired\[0\];\s*\} else \{/
+    );
   });
 
-  it("contextual widgets never gate", () => {
-    expect(source).toMatch(/emitWidgetMessage\(session, contextualQuestion, \{\s*gate: false/);
+  it("contextual rides on the shared widget-turn path — gated and bare, no ride-alongs", () => {
+    // The old gate:false ride-along let a tap fall into dead air (no
+    // pending_question_id → no reaction) while an open AI question
+    // competed on the same turn. One emission site, always gated+bare.
+    expect(source).not.toMatch(/gate: false/);
+    expect(source).not.toMatch(/contextualPromise/);
+    expect(source).toMatch(
+      /emitWidgetMessage\(session, widgetTurnQuestion, \{\s*gate: true,\s*bare: true/
+    );
   });
 });
