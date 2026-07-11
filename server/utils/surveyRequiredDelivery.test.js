@@ -113,30 +113,38 @@ describe("chat.js D2 wiring — structural guards", () => {
   });
 });
 
-describe("required cadence (post-mockup-review fix) — structural guards", () => {
+describe("widget turns (mockup rhythm, round 2) — structural guards", () => {
   let source;
   beforeAll(async () => {
     source = await readFile(join(__dirname, "..", "routes", "chat.js"), "utf8");
   });
 
-  it("from the second AI turn, replies carry the next unanswered required widget", () => {
-    expect(source).toMatch(/aiMessageCount >= 1 && unansweredRequired\.length > 0/);
-    expect(source).toMatch(/emitWidgetMessage\(session, unansweredRequired\[0\], \{\s*gate: true/);
+  it("a required rating gets its OWN turn every ~2 conversational beats", () => {
+    expect(source).toMatch(/msgsSinceLastWidget >= 2/);
+    expect(source).toMatch(/aiMessageCount >= 1/); // opener stays pure text
   });
 
-  it("cadence is LAST in widget priority — weave-in and contextual outrank it", () => {
-    const weaveIdx = source.indexOf("emitWidgetMessage(session, weaveInQuestion");
-    const contextualIdx = source.indexOf("emitWidgetMessage(session, contextualQuestion");
-    const cadenceIdx = source.indexOf("emitWidgetMessage(session, unansweredRequired[0]");
-    expect(weaveIdx).toBeGreaterThan(-1);
-    expect(weaveIdx).toBeLessThan(contextualIdx);
-    expect(contextualIdx).toBeLessThan(cadenceIdx);
+  it("on widget turns the AI's reply is directed to be a one-sentence bridge, no open question", () => {
+    expect(source).toMatch(/THIS TURN ONLY/);
+    expect(source).toMatch(/the rating scale IS this turn's question/);
   });
 
-  it("the opener stays pure text (cadence starts at the second turn)", () => {
-    // aiMessageCount >= 1 means the first AI reply (count 0) never
-    // carries a cadence widget.
-    expect(source).toMatch(/aiMessageCount >= 1/);
+  it("widget-turn widgets are bare — the AI reply is the lead-in, no second bubble", () => {
+    expect(source).toMatch(
+      /emitWidgetMessage\(session, unansweredRequired\[0\], \{\s*gate: true,\s*bare: true/
+    );
+  });
+
+  it("after a mid-interview tap, the AI reacts (message_type 'reaction', outside the turn budget)", () => {
+    expect(source).toMatch(/generateRatingReaction\(\{/);
+    expect(source).toMatch(/'assistant', \?, 'reaction'/);
+    expect(source).toMatch(
+      /session\.close_phase === CLOSE_PHASE\.INTERVIEW &&\s+session\.pending_question_id === Number\(question_id\)/
+    );
+  });
+
+  it("contextual nomination stands down on widget turns", () => {
+    expect(source).toMatch(/templateConfig && !isRequiredWidgetTurn/);
   });
 });
 
