@@ -443,10 +443,17 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
   // baseline batch at close.
   let templateConfig = null;
   let unansweredRequired = [];
+  let coveredLabels = [];
   if (session.template_version_id) {
     templateConfig = await getTemplateConfig(session.template_version_id);
     const answered = await answeredQuestionIds(Number(session_id));
     unansweredRequired = getUnansweredRequired(templateConfig, answered);
+    // Already-rated topics, by label — the bridge call fences these
+    // off so it can't steer the conversation back toward a scale the
+    // resident already tapped.
+    coveredLabels = templateConfig.questions
+      .filter((q) => answered.has(q.question_id))
+      .map((q) => q.label);
   }
 
   // Widget-turn scheduling: every couple of conversational beats
@@ -510,6 +517,7 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
         clientName,
         question: widgetTurnQuestion,
         history,
+        coveredLabels,
       });
       await db.run(
         "INSERT INTO messages (session_id, role, content, message_type) VALUES (?, 'assistant', ?, 'bridge')",
