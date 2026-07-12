@@ -84,4 +84,13 @@ describe("chat.js hybrid selection — structural guards", () => {
   it("hybrid manager context stops instructing a conversational dimension sweep", () => {
     expect(source).toMatch(/Do NOT run through manager dimensions yourself/);
   });
+
+  it("[CLIENT_NAME] is substituted with the real company name before any model call", () => {
+    // Without this the model is told it works for a literal
+    // "[CLIENT_NAME]" and invents a company when it needs one —
+    // staging watched it confidently call the client "Oakmont".
+    expect(source).toMatch(
+      /systemPrompt = systemPrompt\.replaceAll\("\[CLIENT_NAME\]", clientName\)/
+    );
+  });
 });
