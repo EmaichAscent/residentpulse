@@ -479,6 +479,19 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
     }
   }
 
+  // The prompts refer to the client as [CLIENT_NAME] — substitute the
+  // real company name before ANY model call. Without this, the model
+  // is told it works for a literal "[CLIENT_NAME]" and improvises a
+  // plausible-sounding company when it needs one mid-conversation
+  // (staging: it confidently called Zee Best "Oakmont"). The scoped
+  // calls (bridge/reaction/playback) were never affected — they get
+  // clientName passed in — which is why only talk turns hallucinated.
+  const clientRow = await db.get("SELECT company_name FROM clients WHERE id = ?", [
+    session.client_id,
+  ]);
+  const clientName = clientRow?.company_name || "the management company";
+  systemPrompt = systemPrompt.replaceAll("[CLIENT_NAME]", clientName);
+
   try {
     let assistantMessage;
     let chatEnd = false;
@@ -493,11 +506,8 @@ Do NOT drag this out. Do NOT do a multi-thread sweep. Promoters happily answer b
       // scale's topic — and surveyRuntime enforces no-question in
       // code (any "?" → safe fallback). message_type 'bridge' keeps
       // these out of the close-flow turn budget, like reactions.
-      const clientRow = await db.get("SELECT company_name FROM clients WHERE id = ?", [
-        session.client_id,
-      ]);
       assistantMessage = await generateWidgetBridge({
-        clientName: clientRow?.company_name || "the management company",
+        clientName,
         question: widgetTurnQuestion,
         history,
       });
