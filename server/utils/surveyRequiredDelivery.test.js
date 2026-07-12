@@ -167,7 +167,22 @@ describe("generateWidgetBridge — the no-question rule is enforced in code, not
     expect(createMessage.mock.lastCall[0].system).toContain("Value for services");
   });
 
-  it("any '?' in the output → fallback: a widget turn can never carry a competing question", async () => {
+  it("question sentences are stripped, the declarative acknowledgment survives", async () => {
+    const { createMessage } = await import("./aiRouter.js");
+    createMessage.mockResolvedValueOnce({
+      content: [
+        { text: "Half a meeting lost to cleanup is real money. How long has that been going on?" },
+      ],
+    });
+    const text = await runtime.generateWidgetBridge({
+      clientName: "Zee Best Management",
+      question: QUESTION,
+      history: [],
+    });
+    expect(text).toBe("Half a meeting lost to cleanup is real money.");
+  });
+
+  it("output that is ALL questions → fallback: a widget turn can never carry a competing question", async () => {
     const { createMessage } = await import("./aiRouter.js");
     createMessage.mockResolvedValueOnce({
       content: [{ text: "How long are you typically waiting now?" }],
@@ -179,6 +194,25 @@ describe("generateWidgetBridge — the no-question rule is enforced in code, not
     });
     expect(text).not.toContain("?");
     expect(text.length).toBeGreaterThan(10);
+  });
+
+  it("already-rated topics are fenced off — the steer can't drift backwards", async () => {
+    // Staging: the bridge for Manager overall performance steered
+    // toward value-for-services (already rated) because a worked
+    // example in the prompt mentioned fees. The example is gone and
+    // covered labels are passed as explicit exclusions.
+    const { createMessage } = await import("./aiRouter.js");
+    createMessage.mockResolvedValueOnce({ content: [{ text: "Noted." }] });
+    await runtime.generateWidgetBridge({
+      clientName: "Zee Best Management",
+      question: { code: "M01", label: "Manager overall performance", chat_phrasing: null },
+      history: [],
+      coveredLabels: ["Value for services", "Overall communication"],
+    });
+    const system = createMessage.mock.lastCall[0].system;
+    expect(system).toContain("do not steer toward any of them: Value for services");
+    expect(system).toContain('steer directly into "Manager overall performance"');
+    expect(system).not.toContain("the value you're getting for those fees");
   });
 
   it("API failure → fallback, never a stalled chat", async () => {
