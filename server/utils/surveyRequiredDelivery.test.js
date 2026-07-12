@@ -167,7 +167,7 @@ describe("generateWidgetBridge — the no-question rule is enforced in code, not
     expect(createMessage.mock.lastCall[0].system).toContain("Value for services");
   });
 
-  it("question sentences are stripped, the declarative acknowledgment survives", async () => {
+  it("question sentences are stripped AND the lost steer is rebuilt from the lead-in", async () => {
     const { createMessage } = await import("./aiRouter.js");
     createMessage.mockResolvedValueOnce({
       content: [
@@ -179,10 +179,15 @@ describe("generateWidgetBridge — the no-question rule is enforced in code, not
       question: QUESTION,
       history: [],
     });
-    expect(text).toBe("Half a meeting lost to cleanup is real money.");
+    // The stripped remainder never mentions the topic, so the
+    // deterministic lead-in is appended — the bubble always connects
+    // to the scale below it.
+    expect(text).toBe(
+      "Half a meeting lost to cleanup is real money. Quick rating while we're at it:"
+    );
   });
 
-  it("output that is ALL questions → fallback: a widget turn can never carry a competing question", async () => {
+  it("output that is ALL questions → topic-aware fallback, never a competing question", async () => {
     const { createMessage } = await import("./aiRouter.js");
     createMessage.mockResolvedValueOnce({
       content: [{ text: "How long are you typically waiting now?" }],
@@ -193,7 +198,40 @@ describe("generateWidgetBridge — the no-question rule is enforced in code, not
       history: [],
     });
     expect(text).not.toContain("?");
-    expect(text.length).toBeGreaterThan(10);
+    expect(text).toContain("Quick rating while we're at it:");
+  });
+
+  it("an acknowledgment-only bridge gets the entity-aware steer appended (staging round 5)", async () => {
+    // "That confusion around maintenance coordination clearly left a
+    // mark" floated above a Value-for-services scale with zero
+    // connective tissue. The steer is guaranteed now.
+    const { createMessage } = await import("./aiRouter.js");
+    createMessage.mockResolvedValueOnce({
+      content: [
+        {
+          text: "That confusion around maintenance coordination clearly left a mark — when roles aren't clear, things stall.",
+        },
+      ],
+    });
+    const text = await runtime.generateWidgetBridge({
+      clientName: "Zee Best Management",
+      question: { code: "M01", label: "Manager overall performance", entity_target: "manager" },
+      history: [],
+    });
+    expect(text).toMatch(/While we're on it, a quick read on your manager:$/);
+  });
+
+  it("a bridge that already steers into the topic is passed through untouched", async () => {
+    const { createMessage } = await import("./aiRouter.js");
+    const bridge =
+      "Cleanup eating half a board meeting is a real cost. So let's pin down the value you feel you're getting for those fees.";
+    createMessage.mockResolvedValueOnce({ content: [{ text: bridge }] });
+    const text = await runtime.generateWidgetBridge({
+      clientName: "Zee Best Management",
+      question: QUESTION,
+      history: [],
+    });
+    expect(text).toBe(bridge); // "value" stems-match the label — no append
   });
 
   it("already-rated topics are fenced off — the steer can't drift backwards", async () => {
@@ -211,7 +249,7 @@ describe("generateWidgetBridge — the no-question rule is enforced in code, not
     });
     const system = createMessage.mock.lastCall[0].system;
     expect(system).toContain("do not steer toward any of them: Value for services");
-    expect(system).toContain('steer directly into "Manager overall performance"');
+    expect(system).toContain('pivot INTO "Manager overall performance"');
     expect(system).not.toContain("the value you're getting for those fees");
   });
 
