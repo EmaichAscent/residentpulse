@@ -343,8 +343,13 @@ export default function ChatPage() {
         }
       }
       setMessages((prev) => [...prev, ...additions]);
+      return true;
     } catch {
-      // Leave the widget interactive so the resident can retry.
+      // Leave the widget interactive so the resident can retry. The
+      // explicit false tells ChatWidget to clear its tapped-choice
+      // highlight — a lit cell over a failed submit would read as
+      // "answer recorded" when it wasn't.
+      return false;
     }
   };
 

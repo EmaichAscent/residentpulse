@@ -13,18 +13,28 @@ import { useState } from "react";
  * recorded data point, and it beats abandonment.
  */
 
+const SKIP = "__skip__";
+
 export default function ChatWidget({ payload, disabled, onAnswer, onSkip }) {
   const [selections, setSelections] = useState([]); // multi_select
   const [text, setText] = useState(""); // open_text
   const [submitting, setSubmitting] = useState(false);
+  // The tapped value, highlighted the INSTANT it's tapped — the answer
+  // round-trip (record + AI reaction) takes a second or two, and
+  // without an immediate cue residents re-tap because they can't tell
+  // it went through. Cleared only if the submit explicitly failed
+  // (onAnswer/onSkip return false) so they know to try again.
+  const [selected, setSelected] = useState(null);
 
   const cfg = payload.format_config || {};
 
   const submit = async (value) => {
     if (submitting || disabled) return;
+    setSelected(value);
     setSubmitting(true);
     try {
-      await onAnswer(value);
+      const ok = await onAnswer(value);
+      if (ok === false) setSelected(null);
     } finally {
       setSubmitting(false);
     }
@@ -32,9 +42,11 @@ export default function ChatWidget({ payload, disabled, onAnswer, onSkip }) {
 
   const skip = async () => {
     if (submitting || disabled) return;
+    setSelected(SKIP);
     setSubmitting(true);
     try {
-      await onSkip();
+      const ok = await onSkip();
+      if (ok === false) setSelected(null);
     } finally {
       setSubmitting(false);
     }
@@ -47,8 +59,17 @@ export default function ChatWidget({ payload, disabled, onAnswer, onSkip }) {
     border: "1px solid var(--line)",
     background: "white",
     color: "var(--ink)",
-    transition: "border-color 120ms ease, background 120ms ease",
+    transition: "border-color 120ms ease, background 120ms ease, opacity 120ms ease",
   };
+
+  // The tapped cell fills solid and holds full strength while the rest
+  // of the scale recedes — one glance says "your tap landed".
+  const choiceStyle = (value) =>
+    selected !== null && selected === value
+      ? { background: "var(--pulse)", borderColor: "var(--pulse)", color: "white", opacity: 1 }
+      : selected !== null
+        ? { opacity: 0.35 }
+        : {};
 
   return (
     <div style={{ marginTop: 8 }} data-testid={`chat-widget-${payload.code}`}>
@@ -75,12 +96,14 @@ export default function ChatWidget({ payload, disabled, onAnswer, onSkip }) {
                 disabled={submitting || disabled}
                 onClick={() => submit(i)}
                 aria-label={`Score ${i}`}
+                aria-pressed={selected === i}
                 style={{
                   ...btnBase,
                   aspectRatio: "1",
                   borderRadius: 8,
                   fontSize: 13,
                   fontWeight: 600,
+                  ...choiceStyle(i),
                 }}
               >
                 {i}
@@ -106,6 +129,7 @@ export default function ChatWidget({ payload, disabled, onAnswer, onSkip }) {
               disabled={submitting || disabled}
               onClick={() => submit(n)}
               aria-label={`Rate ${n} of 5`}
+              aria-pressed={selected === n}
               style={{
                 ...btnBase,
                 borderRadius: 10,
@@ -114,10 +138,17 @@ export default function ChatWidget({ payload, disabled, onAnswer, onSkip }) {
                 flexDirection: "column",
                 alignItems: "center",
                 gap: 3,
+                ...choiceStyle(n),
               }}
             >
               <span style={{ fontSize: 15, fontWeight: 700 }}>{n}</span>
-              <span style={{ fontSize: 9.5, color: "var(--ink-3)", minHeight: 12 }}>
+              <span
+                style={{
+                  fontSize: 9.5,
+                  color: selected === n ? "rgba(255,255,255,0.85)" : "var(--ink-3)",
+                  minHeight: 12,
+                }}
+              >
                 {n === 1 ? cfg.low || "" : n === 5 ? cfg.high || "" : ""}
               </span>
             </button>
@@ -161,7 +192,11 @@ export default function ChatWidget({ payload, disabled, onAnswer, onSkip }) {
             className="btn-pulse-sm"
             style={{ marginTop: 8 }}
           >
-            {selections.length ? `Submit ${selections.length} selected` : "None of these"}
+            {submitting
+              ? "Sending…"
+              : selections.length
+                ? `Submit ${selections.length} selected`
+                : "None of these"}
           </button>
         </>
       )}
@@ -177,6 +212,7 @@ export default function ChatWidget({ payload, disabled, onAnswer, onSkip }) {
               type="button"
               disabled={submitting || disabled}
               onClick={() => submit(o.value)}
+              aria-pressed={selected === o.value}
               style={{
                 ...btnBase,
                 borderRadius: 10,
@@ -184,6 +220,7 @@ export default function ChatWidget({ payload, disabled, onAnswer, onSkip }) {
                 fontSize: 13.5,
                 fontWeight: 600,
                 textAlign: "center",
+                ...choiceStyle(o.value),
               }}
             >
               {o.label}
@@ -217,7 +254,7 @@ export default function ChatWidget({ payload, disabled, onAnswer, onSkip }) {
             onClick={() => submit(text.trim())}
             style={{ marginTop: 6 }}
           >
-            Submit
+            {submitting ? "Sending…" : "Submit"}
           </button>
         </div>
       )}
@@ -234,13 +271,14 @@ export default function ChatWidget({ payload, disabled, onAnswer, onSkip }) {
             padding: 0,
             fontFamily: "inherit",
             fontSize: 12,
-            color: "var(--ink-3)",
+            color: selected === SKIP ? "var(--ink)" : "var(--ink-3)",
+            fontWeight: selected === SKIP ? 600 : 400,
             textDecoration: "underline",
             textUnderlineOffset: 2,
             cursor: submitting || disabled ? "default" : "pointer",
           }}
         >
-          Prefer not to answer
+          {selected === SKIP && submitting ? "Skipping…" : "Prefer not to answer"}
         </button>
       </div>
     </div>
