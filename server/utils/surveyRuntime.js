@@ -484,6 +484,43 @@ Never mention scales, numbers, or the rating system. Never re-ask answered topic
  * the output (or any failure) falls back to a safe static line — a
  * widget turn can never carry a competing question.
  */
+// Words too generic to prove a bridge actually steered into its
+// scale's topic ("overall" appears in half the catalog's labels AND
+// in ordinary conversation).
+const GENERIC_TOPIC_WORDS = new Set([
+  "overall",
+  "general",
+  "your",
+  "their",
+  "with",
+  "this",
+  "that",
+  "how",
+  "what",
+  "well",
+  "does",
+  "have",
+  "from",
+]);
+
+/**
+ * Does the bridge text plausibly reference the scale's topic? Stem
+ * match (first 6 chars) on the content words of the label +
+ * chat_phrasing, so "communication" matches "communicates" and
+ * "performance" matches "performing". Nothing checkable → trust it.
+ */
+function bridgeSteersToTopic(text, question) {
+  const stems = `${question.label} ${question.chat_phrasing || ""}`
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !GENERIC_TOPIC_WORDS.has(w))
+    .map((w) => w.slice(0, 6));
+  if (!stems.length) return true;
+  const lower = text.toLowerCase();
+  return stems.some((s) => lower.includes(s));
+}
+
 export async function generateWidgetBridge({ clientName, question, history, coveredLabels = [] }) {
   const recent = history
     .slice(-6)
@@ -505,7 +542,10 @@ export async function generateWidgetBridge({ clientName, question, history, cove
     const response = await createMessage({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 120,
-      system: `You are mid-interview with an HOA board member about ${clientName}. Directly below your reply, the system will show a quick tap-scale asking about: "${topic}". Your ONLY job is the hand-off into it. Write AT MOST 2 short sentences: first respond with genuine substance to the resident's last message (their specific words — the detail, the implication, the feeling), then steer directly into "${topic}" — your final clause must name that topic in plain words, because the scale under your reply asks about exactly that and nothing else.${covered} Absolutely NO questions — the scale asks this turn's question, not you. Never mention scales, ratings, numbers, tapping, or that a question is coming.`,
+      system: `You are mid-interview with an HOA board member about ${clientName}. Directly below your reply, the system will show a quick tap-scale asking about: "${topic}". Your reply is the hand-off into it — exactly TWO short sentences:
+1. React with genuine substance to the resident's last message — their specific words, the detail or the feeling in them.
+2. REQUIRED: pivot INTO "${topic}", naming that topic in plain words. Without this sentence the scale below appears out of nowhere — this pivot is the reason your reply exists.${covered}
+Absolutely NO questions — the scale asks this turn's question, not you. Never mention scales, ratings, numbers, tapping, or that a question is coming.`,
       messages: [
         {
           role: "user",
@@ -516,9 +556,8 @@ export async function generateWidgetBridge({ clientName, question, history, cove
     let text = (response.content?.[0]?.text || "").trim();
     if (text.includes("?")) {
       // Strip the offending sentence(s) rather than discarding the
-      // whole bridge — the acknowledgment half is usually fine, and
-      // the scale's caption still carries the topic. Fallback only
-      // when nothing declarative survives.
+      // whole bridge — the acknowledgment half is usually fine.
+      // Fallback only when nothing declarative survives.
       text = text
         .split(/(?<=[.!?])\s+/)
         .filter((s) => !s.includes("?"))
@@ -526,9 +565,24 @@ export async function generateWidgetBridge({ clientName, question, history, cove
         .trim();
       logger.warn({ question: question.code }, "Widget bridge asked a question — stripped");
     }
-    if (text) return text;
+    if (text) {
+      // The steer into the scale's topic is GUARANTEED, not hoped
+      // for. If the surviving text never references the topic (the
+      // model skipped its required pivot, or the stripper ate it),
+      // append the entity-aware lead-in — an acknowledgment floating
+      // above an unannounced scale reads disconnected (staging,
+      // round 5).
+      if (!bridgeSteersToTopic(text, question)) {
+        text = `${text} ${buildWidgetPhrasing(question)}`;
+        logger.warn(
+          { question: question.code },
+          "Widget bridge missed its steer — appended lead-in"
+        );
+      }
+      return text;
+    }
   } catch (err) {
     logger.warn({ err }, "Widget bridge generation failed — using fallback");
   }
-  return "That's useful context — noted. While we're here, give me your quick read on this:";
+  return `That's useful context — noted. ${buildWidgetPhrasing(question)}`;
 }
