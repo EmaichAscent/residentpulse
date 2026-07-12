@@ -84,4 +84,52 @@ describe("ChatWidget", () => {
     fireEvent.click(screen.getByLabelText("Rate 3 of 5"));
     expect(onAnswer).not.toHaveBeenCalled();
   });
+
+  it("the tapped score highlights INSTANTLY, before the answer round-trip resolves", async () => {
+    // The record + AI-reaction round-trip takes a second or two;
+    // without an immediate cue residents re-tap because they can't
+    // tell the first tap landed.
+    let resolveAnswer;
+    const onAnswer = vi.fn(() => new Promise((r) => (resolveAnswer = r)));
+    render(<ChatWidget payload={LIKERT} onAnswer={onAnswer} onSkip={vi.fn()} />);
+    const cell = screen.getByLabelText("Rate 3 of 5");
+    fireEvent.click(cell);
+    // Highlight is synchronous with the tap — the promise is still pending
+    expect(cell).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Rate 2 of 5")).toHaveAttribute("aria-pressed", "false");
+    resolveAnswer(true);
+    await waitFor(() => expect(onAnswer).toHaveBeenCalledWith(3));
+    // Success: the highlight stays as the record of what they chose
+    expect(cell).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("a failed submit clears the highlight so the resident knows to retry", async () => {
+    const onAnswer = vi.fn().mockResolvedValue(false); // answerWidget's failure signal
+    render(<ChatWidget payload={LIKERT} onAnswer={onAnswer} onSkip={vi.fn()} />);
+    const cell = screen.getByLabelText("Rate 4 of 5");
+    fireEvent.click(cell);
+    expect(cell).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(cell).toHaveAttribute("aria-pressed", "false"));
+  });
+
+  it("a second tap during the round-trip is ignored — no double submits", async () => {
+    let resolveAnswer;
+    const onAnswer = vi.fn(() => new Promise((r) => (resolveAnswer = r)));
+    render(<ChatWidget payload={LIKERT} onAnswer={onAnswer} onSkip={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText("Rate 3 of 5"));
+    fireEvent.click(screen.getByLabelText("Rate 3 of 5"));
+    fireEvent.click(screen.getByLabelText("Rate 5 of 5"));
+    resolveAnswer(true);
+    await waitFor(() => expect(onAnswer).toHaveBeenCalledTimes(1));
+  });
+
+  it("the skip link shows its own in-flight state", async () => {
+    let resolveSkip;
+    const onSkip = vi.fn(() => new Promise((r) => (resolveSkip = r)));
+    render(<ChatWidget payload={LIKERT} onAnswer={vi.fn()} onSkip={onSkip} />);
+    fireEvent.click(screen.getByText("Prefer not to answer"));
+    expect(screen.getByText("Skipping…")).toBeInTheDocument();
+    resolveSkip(true);
+    await waitFor(() => expect(onSkip).toHaveBeenCalled());
+  });
 });
