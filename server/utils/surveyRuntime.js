@@ -484,18 +484,28 @@ Never mention scales, numbers, or the rating system. Never re-ask answered topic
  * the output (or any failure) falls back to a safe static line — a
  * widget turn can never carry a competing question.
  */
-export async function generateWidgetBridge({ clientName, question, history }) {
+export async function generateWidgetBridge({ clientName, question, history, coveredLabels = [] }) {
   const recent = history
     .slice(-6)
     .map((m) => `${m.role === "user" ? "Board member" : "Interviewer"}: ${m.content}`)
     .join("\n");
   const topic = question.chat_phrasing?.trim() || question.label;
+  // No worked example in this prompt, deliberately: an earlier version
+  // included one ("...the value you're getting for those fees") and
+  // the model copied the EXAMPLE's topic into bridges for other
+  // scales — a value-for-services steer sat above the manager-
+  // performance scale. The topic is stated, required in the final
+  // clause, and the already-rated list fences off where the model
+  // drifted last time.
+  const covered = coveredLabels.length
+    ? ` These topics are already rated and OFF the table — do not steer toward any of them: ${coveredLabels.join(", ")}.`
+    : "";
 
   try {
     const response = await createMessage({
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 120,
-      system: `You are mid-interview with an HOA board member about ${clientName}. Directly below your reply, the system will show a quick tap-scale asking about: "${topic}". Your ONLY job is the hand-off into it. Write AT MOST 2 short sentences: first respond with genuine substance to the resident's last message (their specific words — the detail, the implication, the feeling), then steer directly into that topic so the scale underneath is the obvious next beat — e.g. "...so help me pin down your read on the value you're getting for those fees." The steer must name the scale's actual topic in plain words. Absolutely NO questions — the scale asks this turn's question, not you. Never mention scales, ratings, numbers, tapping, or that a question is coming.`,
+      system: `You are mid-interview with an HOA board member about ${clientName}. Directly below your reply, the system will show a quick tap-scale asking about: "${topic}". Your ONLY job is the hand-off into it. Write AT MOST 2 short sentences: first respond with genuine substance to the resident's last message (their specific words — the detail, the implication, the feeling), then steer directly into "${topic}" — your final clause must name that topic in plain words, because the scale under your reply asks about exactly that and nothing else.${covered} Absolutely NO questions — the scale asks this turn's question, not you. Never mention scales, ratings, numbers, tapping, or that a question is coming.`,
       messages: [
         {
           role: "user",
@@ -503,14 +513,20 @@ export async function generateWidgetBridge({ clientName, question, history }) {
         },
       ],
     });
-    const text = (response.content?.[0]?.text || "").trim();
-    if (text && !text.includes("?")) return text;
-    if (text) {
-      logger.warn(
-        { question: question.code },
-        "Widget bridge contained a question — using fallback"
-      );
+    let text = (response.content?.[0]?.text || "").trim();
+    if (text.includes("?")) {
+      // Strip the offending sentence(s) rather than discarding the
+      // whole bridge — the acknowledgment half is usually fine, and
+      // the scale's caption still carries the topic. Fallback only
+      // when nothing declarative survives.
+      text = text
+        .split(/(?<=[.!?])\s+/)
+        .filter((s) => !s.includes("?"))
+        .join(" ")
+        .trim();
+      logger.warn({ question: question.code }, "Widget bridge asked a question — stripped");
     }
+    if (text) return text;
   } catch (err) {
     logger.warn({ err }, "Widget bridge generation failed — using fallback");
   }
